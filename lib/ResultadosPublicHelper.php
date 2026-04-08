@@ -1,6 +1,7 @@
 <?php
 declare(strict_types=1);
 
+require_once __DIR__ . '/PartiresulEstatusSql.php';
 require_once __DIR__ . '/ResultadosReporteData.php';
 require_once __DIR__ . '/InscritosHelper.php';
 
@@ -27,11 +28,12 @@ class ResultadosPublicHelper
 
             $stmt = $pdo->query("SHOW TABLES LIKE 'partiresul'");
             if ($stmt->rowCount() > 0) {
+                $wReg = PartiresulEstatusSql::whereRegistradoUno('');
                 $stmt = $pdo->prepare("
                     SELECT 
                         COUNT(DISTINCT partida) as total_rondas_ejecutadas,
                         COUNT(*) as total_partidas,
-                        SUM(CASE WHEN registrado = 1 THEN 1 ELSE 0 END) as partidas_registradas
+                        SUM(CASE WHEN {$wReg} THEN 1 ELSE 0 END) as partidas_registradas
                     FROM partiresul
                     WHERE id_torneo = ? AND partida > 0
                 ");
@@ -62,10 +64,12 @@ class ResultadosPublicHelper
             $st = $pdo->query("SHOW TABLES LIKE 'partiresul'");
             if ($st && $st->rowCount() > 0) $tienePartiresul = true;
 
+            $gffSub = PartiresulEstatusSql::sqlSubqueryCountGffPorUsuarioTorneo();
+            $wRegBye = PartiresulEstatusSql::whereRegistradoUno('pr_bye');
             $sql = "SELECT i.*, COALESCE(u.nombre, u.username) as nombre_completo, u.sexo, c.nombre as club_nombre";
             if ($tienePartiresul) {
-                $sql .= ", (SELECT COUNT(*) FROM partiresul WHERE id_usuario = i.id_usuario AND id_torneo = ? AND ff = 1) as ganadas_por_forfait";
-                $sql .= ", (SELECT COUNT(*) FROM partiresul WHERE id_usuario = i.id_usuario AND id_torneo = ? AND registrado = 1 AND mesa = 0 AND resultado1 > resultado2) as partidas_bye";
+                $sql .= ", {$gffSub} as ganadas_por_forfait";
+                $sql .= ", (SELECT COUNT(*) FROM partiresul pr_bye WHERE pr_bye.id_usuario = i.id_usuario AND pr_bye.id_torneo = ? AND {$wRegBye} AND pr_bye.mesa = 0 AND pr_bye.resultado1 > pr_bye.resultado2) as partidas_bye";
             } else {
                 $sql .= ", 0 as ganadas_por_forfait, 0 as partidas_bye";
             }
@@ -259,7 +263,7 @@ class ResultadosPublicHelper
         foreach ($equipos as &$eq) {
             $cod = $eq['codigo_equipo'];
             $stmt = $pdo->prepare("
-                SELECT i.id_usuario, u.nombre as nombre_completo, i.posicion, i.ganados, i.perdidos, i.efectividad, i.puntos, i.ptosrnk, " . \ResultadosReporteData::SQL_GFF_SUBQUERY . " AS gff, i.sancion, i.tarjeta
+                SELECT i.id_usuario, u.nombre as nombre_completo, i.posicion, i.ganados, i.perdidos, i.efectividad, i.puntos, i.ptosrnk, " . \ResultadosReporteData::sqlGffSubquery() . " AS gff, i.sancion, i.tarjeta
                 FROM inscritos i
                 INNER JOIN usuarios u ON i.id_usuario = u.id
                 WHERE i.torneo_id = ? AND i.codigo_equipo = ? AND (i.estatus IS NULL OR (i.estatus != 4 AND i.estatus != 'retirado'))

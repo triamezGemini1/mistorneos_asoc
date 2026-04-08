@@ -110,9 +110,15 @@ final class PartiresulEstatusSql
      *
      * @param string $alias Alias de tabla (ej. pr, pr1) o vacío para columna suelta
      */
+    /** Alias de tabla MySQL (ASCII o UTF-8, p. ej. pr_compañero). */
+    private static function aliasTablaValido(string $alias): bool
+    {
+        return $alias !== '' && preg_match('/^[\p{L}_][\p{L}\p{N}_]*$/u', $alias) === 1;
+    }
+
     public static function whereRegistradoUno(string $alias = ''): string
     {
-        if ($alias !== '' && !preg_match('/^[a-zA-Z_][a-zA-Z0-9_]*$/', $alias)) {
+        if ($alias !== '' && !self::aliasTablaValido($alias)) {
             throw new InvalidArgumentException('whereRegistradoUno: alias inválido');
         }
         $c = $alias === '' ? 'registrado' : $alias . '.registrado';
@@ -127,7 +133,7 @@ final class PartiresulEstatusSql
      */
     public static function whereRegistradoNoCompleto(string $alias = ''): string
     {
-        if ($alias !== '' && !preg_match('/^[a-zA-Z_][a-zA-Z0-9_]*$/', $alias)) {
+        if ($alias !== '' && !self::aliasTablaValido($alias)) {
             throw new InvalidArgumentException('whereRegistradoNoCompleto: alias inválido');
         }
         $c = $alias === '' ? 'registrado' : $alias . '.registrado';
@@ -142,10 +148,31 @@ final class PartiresulEstatusSql
      */
     public static function whereFfCero(string $alias = 'pr1'): string
     {
-        if (!preg_match('/^[a-zA-Z_][a-zA-Z0-9_]*$/', $alias)) {
+        if (!self::aliasTablaValido($alias)) {
             throw new InvalidArgumentException('whereFfCero: alias inválido');
         }
 
         return "TRIM(CAST({$alias}.ff AS CHAR)) = '0'";
+    }
+
+    /**
+     * Comparación segura ff = 1 (evita 1292 si ff es VARCHAR con texto como 'pendiente').
+     */
+    public static function whereFfUno(string $alias = 'pr1'): string
+    {
+        if (!self::aliasTablaValido($alias)) {
+            throw new InvalidArgumentException('whereFfUno: alias inválido');
+        }
+
+        return "TRIM(CAST({$alias}.ff AS CHAR)) = '1'";
+    }
+
+    /**
+     * Subconsulta COUNT de partidas con forfait (ff = 1) por jugador/torneo (SELECT exterior con alias i).
+     */
+    public static function sqlSubqueryCountGffPorUsuarioTorneo(): string
+    {
+        return '(SELECT COUNT(*) FROM partiresul pr_gff WHERE pr_gff.id_usuario = i.id_usuario AND pr_gff.id_torneo = i.torneo_id AND '
+            . self::whereFfUno('pr_gff') . ')';
     }
 }

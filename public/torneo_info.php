@@ -11,8 +11,11 @@
 require_once __DIR__ . '/../config/bootstrap.php';
 require_once __DIR__ . '/../config/db_config.php';
 require_once __DIR__ . '/../lib/app_helpers.php';
+require_once __DIR__ . '/../lib/PartiresulEstatusSql.php';
 
 $pdo = DB::pdo();
+$wRegPInc = PartiresulEstatusSql::whereRegistradoUno('p');
+$wFfPInc = PartiresulEstatusSql::whereFfUno('p');
 $base_url = app_base_url();
 
 // Obtener parámetros
@@ -149,8 +152,8 @@ if ($tabla_partiresul_existe) {
                     p.partida as ronda,
                     p.mesa,
                     COUNT(*) as total_partidas,
-                    COUNT(CASE WHEN p.registrado = 1 THEN 1 END) as partidas_registradas,
-                    COUNT(CASE WHEN p.ff = 1 THEN 1 END) as forfaits
+                    COUNT(CASE WHEN {$wRegPInc} THEN 1 END) as partidas_registradas,
+                    COUNT(CASE WHEN {$wFfPInc} THEN 1 END) as forfaits
                 FROM partiresul p
                 WHERE p.id_torneo = ? AND p.partida = ?
                 GROUP BY p.partida, p.mesa

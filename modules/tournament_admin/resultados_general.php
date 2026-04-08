@@ -6,6 +6,7 @@
  */
 
 require_once __DIR__ . '/../../lib/app_helpers.php';
+require_once __DIR__ . '/../../lib/PartiresulEstatusSql.php';
 require_once __DIR__ . '/../../lib/ResultadosReporteData.php';
 require_once __DIR__ . '/../../lib/Tournament/Services/PaginationService.php';
 
@@ -143,10 +144,10 @@ try {
             i.efectividad,
             i.puntos,
             i.ptosrnk,
-            " . \ResultadosReporteData::SQL_GFF_SUBQUERY . " AS gff,
+            " . \ResultadosReporteData::sqlGffSubquery() . " AS gff,
             i.sancion,
             i.tarjeta,
-            (SELECT COUNT(*) FROM partiresul WHERE id_usuario = i.id_usuario AND id_torneo = i.torneo_id AND registrado = 1 AND mesa = 0 AND resultado1 > resultado2) as partidas_bye,
+            (SELECT COUNT(*) FROM partiresul pr_bye WHERE pr_bye.id_usuario = i.id_usuario AND pr_bye.id_torneo = i.torneo_id AND " . \PartiresulEstatusSql::whereRegistradoUno('pr_bye') . ' AND pr_bye.mesa = 0 AND pr_bye.resultado1 > pr_bye.resultado2) as partidas_bye,
             u.nombre as nombre_completo,
             u.username,
             u.sexo,

@@ -2593,6 +2593,13 @@ function obtenerDatosPosiciones($torneo_id) {
         error_log("obtenerDatosPosiciones: Error al actualizar estadísticas para torneo $torneo_id: " . $e->getMessage());
         // Continuar mostrando lo que haya en inscritos
     }
+
+    $wRegPr1 = PartiresulEstatusSql::whereRegistradoUno('pr1');
+    $wFf0Pr1 = PartiresulEstatusSql::whereFfCero('pr1');
+    $wFfOpp = PartiresulEstatusSql::whereFfUno('pr_oponente');
+    $wFfComp = PartiresulEstatusSql::whereFfUno('pr_compañero');
+    $wRegPbye = PartiresulEstatusSql::whereRegistradoUno('pbye');
+    $wRegPrTar = PartiresulEstatusSql::whereRegistradoUno('pr');
     
     // Obtener TODOS los jugadores individuales con estadísticas completas (ya actualizadas en inscritos)
     $sql = "SELECT 
@@ -2625,16 +2632,13 @@ function obtenerDatosPosiciones($torneo_id) {
                         )
                     WHERE pr1.id_usuario = i.id_usuario
                         AND pr1.id_torneo = ?
-                        AND pr1.registrado = 1
-                        AND pr1.ff = 0
+                        AND {$wRegPr1}
+                        AND {$wFf0Pr1}
                         AND pr1.resultado1 = 200
                         AND pr1.efectividad = 100
                         AND pr1.resultado1 > pr1.resultado2
                         AND (
-                            -- Caso 1: Oponente tiene forfait
-                            pr_oponente.ff = 1 OR
-                            -- Caso 2: Compañero tiene forfait (el jugador ganó por forfait de su compañero)
-                            pr_compañero.ff = 1
+                            ({$wFfOpp}) OR ({$wFfComp})
                         )
                 ) as ganadas_por_forfait,
                 (
@@ -2642,13 +2646,13 @@ function obtenerDatosPosiciones($torneo_id) {
                     FROM partiresul pbye
                     WHERE pbye.id_usuario = i.id_usuario
                         AND pbye.id_torneo = ?
-                        AND pbye.registrado = 1
+                        AND {$wRegPbye}
                         AND pbye.mesa = 0
                         AND pbye.resultado1 > pbye.resultado2
                 ) as partidas_bye,
                 COALESCE(
                     (SELECT MAX(pr.tarjeta) FROM partiresul pr
-                     WHERE pr.id_torneo = i.torneo_id AND pr.id_usuario = i.id_usuario AND pr.registrado = 1),
+                     WHERE pr.id_torneo = i.torneo_id AND pr.id_usuario = i.id_usuario AND ({$wRegPrTar})),
                     i.tarjeta,
                     0
                 ) AS tarjeta

@@ -5,6 +5,7 @@
 declare(strict_types=1);
 
 require_once __DIR__ . '/InscritosHelper.php';
+require_once __DIR__ . '/PartiresulEstatusSql.php';
 
 if (!function_exists('obtenerTopJugadoresPorClub')) {
     function obtenerTopJugadoresPorClub($pdo, $torneo_id, $topN)
@@ -12,6 +13,10 @@ if (!function_exists('obtenerTopJugadoresPorClub')) {
         $ig = InscritosHelper::sqlExprColumnaNumerica('i.ganados');
         $ie = InscritosHelper::sqlExprColumnaNumerica('i.efectividad');
         $ip = InscritosHelper::sqlExprColumnaNumerica('i.puntos');
+        $wRegPr1 = PartiresulEstatusSql::whereRegistradoUno('pr1');
+        $wFf0Pr1 = PartiresulEstatusSql::whereFfCero('pr1');
+        $wFfOpp = PartiresulEstatusSql::whereFfUno('pr_oponente');
+        $wFfComp = PartiresulEstatusSql::whereFfUno('pr_compañero');
         $sql = "SELECT 
                 i.*,
                 i.id_club as codigo_club,
@@ -43,14 +48,13 @@ if (!function_exists('obtenerTopJugadoresPorClub')) {
                         )
                     WHERE pr1.id_usuario = i.id_usuario
                         AND pr1.id_torneo = ?
-                        AND pr1.registrado = 1
-                        AND pr1.ff = 0
+                        AND {$wRegPr1}
+                        AND {$wFf0Pr1}
                         AND pr1.resultado1 = 200
                         AND pr1.efectividad = 100
                         AND pr1.resultado1 > pr1.resultado2
                         AND (
-                            pr_oponente.ff = 1 OR
-                            pr_compañero.ff = 1
+                            ({$wFfOpp}) OR ({$wFfComp})
                         )
                 ) as ganadas_por_forfait
             FROM inscritos i

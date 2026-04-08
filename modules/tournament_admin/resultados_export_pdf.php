@@ -139,7 +139,7 @@ if ($tipo === 'clubes_resumido') {
     $lista = $eqs->fetchAll(PDO::FETCH_ASSOC);
     echo '<h1>Equipos — Detallado — ' . $nombreTorneo . '</h1>';
     echo '<div class="meta">Letter · ' . $esc($fechaGen) . '</div>';
-    $gffSql = ResultadosReporteData::SQL_GFF_SUBQUERY;
+    $gffSql = ResultadosReporteData::sqlGffSubquery();
     foreach ($lista as $e) {
         echo '<div class="club-block"><h2>[' . $esc($e['codigo_equipo']) . '] ' . $esc($e['nombre_equipo'] ?? '') . ' — ' . $esc($e['club_nombre'] ?? '') . '</h2>';
         echo '<div class="meta">G ' . (int)($e['ganados'] ?? 0) . ' P ' . (int)($e['perdidos'] ?? 0) . ' Ef ' . (int)($e['efectividad'] ?? 0) . ' Pts ' . (int)($e['puntos'] ?? 0) . '</div>';

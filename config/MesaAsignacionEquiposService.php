@@ -735,7 +735,7 @@ class MesaAsignacionEquiposService
                        u.cedula, u.nombre, u.id as usuario_id, u.numfvd, u.sexo,
                        eq.id AS id_equipo, eq.id_club,
                        i.puntos, i.ganados, i.perdidos, i.efectividad, i.posicion, i.numero,
-                       (SELECT COUNT(*) FROM partiresul pr_gff WHERE pr_gff.id_usuario = i.id_usuario AND pr_gff.id_torneo = i.torneo_id AND pr_gff.ff = 1) AS gff, i.sancion, i.tarjeta
+                       " . PartiresulEstatusSql::sqlSubqueryCountGffPorUsuarioTorneo() . " AS gff, i.sancion, i.tarjeta
                 FROM inscritos i
                 INNER JOIN equipos eq ON eq.id_torneo = i.torneo_id AND eq.codigo_equipo = i.codigo_equipo AND eq.estatus = 0
                 " . $this->sqlJoinUsuarioInscritoEquipo() . "
@@ -897,7 +897,7 @@ class MesaAsignacionEquiposService
                        eq.id AS id_equipo,
                        u.cedula, u.nombre, u.id as usuario_id, u.sexo,
                        i.puntos, i.ganados, i.perdidos, i.efectividad, i.posicion, i.numero,
-                       (SELECT COUNT(*) FROM partiresul pr_gff WHERE pr_gff.id_usuario = i.id_usuario AND pr_gff.id_torneo = i.torneo_id AND pr_gff.ff = 1) AS gff, i.sancion, i.tarjeta
+                       " . PartiresulEstatusSql::sqlSubqueryCountGffPorUsuarioTorneo() . " AS gff, i.sancion, i.tarjeta
                 FROM inscritos i
                 INNER JOIN equipos eq ON eq.id_torneo = i.torneo_id AND eq.codigo_equipo = i.codigo_equipo AND eq.estatus = 0
                 " . $this->sqlJoinUsuarioInscritoEquipo() . "
@@ -962,7 +962,7 @@ class MesaAsignacionEquiposService
                        eq.id AS id_equipo,
                        u.cedula, u.nombre, u.id as usuario_id, u.sexo,
                        i.puntos, i.ganados, i.perdidos, i.efectividad, i.posicion, i.numero,
-                       (SELECT COUNT(*) FROM partiresul pr_gff WHERE pr_gff.id_usuario = i.id_usuario AND pr_gff.id_torneo = i.torneo_id AND pr_gff.ff = 1) AS gff, i.sancion, i.tarjeta
+                       " . PartiresulEstatusSql::sqlSubqueryCountGffPorUsuarioTorneo() . " AS gff, i.sancion, i.tarjeta
                 FROM inscritos i
                 INNER JOIN equipos eq ON eq.id_torneo = i.torneo_id AND eq.codigo_equipo = i.codigo_equipo AND eq.estatus = 0
                 " . $this->sqlJoinUsuarioInscritoEquipo() . "

@@ -138,7 +138,7 @@ if ($tipo === 'clubes_resumido') {
     }
     echo '</table>';
 } elseif ($tipo === 'equipos_detallado') {
-    $gffSql = ResultadosReporteData::SQL_GFF_SUBQUERY;
+    $gffSql = ResultadosReporteData::sqlGffSubquery();
     $sqlEq = "SELECT e.codigo_equipo, e.nombre_equipo, c.nombre AS club_nombre, e.ganados, e.perdidos, e.efectividad, e.puntos, e.sancion FROM equipos e LEFT JOIN clubes c ON e.id_club = c.id WHERE e.id_torneo = ? AND e.estatus = 0 AND e.codigo_equipo != '' ORDER BY e.ganados DESC, e.efectividad DESC, e.puntos DESC";
     $eqs = $pdo->prepare($sqlEq);
     $eqs->execute([$torneo_id]);

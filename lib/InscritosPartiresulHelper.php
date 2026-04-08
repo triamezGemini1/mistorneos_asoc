@@ -266,13 +266,14 @@ class InscritosPartiresulHelper {
      */
     public static function obtenerClasificacion(int $torneo_id, int $limit = 0): array {
         $pdo = DB::pdo();
-        
+        $wFfUnoP = PartiresulEstatusSql::whereFfUno('p');
+
         $sql = "
             SELECT 
                 i.*,
                 MAX(c.nombre) AS club_nombre,
                 COUNT(DISTINCT p.id) as total_partidas,
-                COUNT(DISTINCT CASE WHEN p.ff = 1 THEN p.id END) as total_forfaits
+                COUNT(DISTINCT CASE WHEN {$wFfUnoP} THEN p.id END) as total_forfaits
             FROM inscritos i
             LEFT JOIN clubes c ON i.id_club = c.id
             LEFT JOIN partiresul p ON i.id_usuario = p.id_usuario AND i.torneo_id = p.id_torneo

@@ -7,6 +7,8 @@ namespace Tournament\Handlers;
 use Exception;
 use TorneoMesaAsignacionResolver;
 
+require_once __DIR__ . '/../../PartiresulEstatusSql.php';
+
 /**
  * Gestión de rondas: comprobación de mesas pendientes y generación de la siguiente ronda.
  */
@@ -40,10 +42,10 @@ final class RoundManagerHandler
     {
         $pdo = \DB::pdo();
 
-        $sql = "SELECT COUNT(DISTINCT pr.mesa) as mesas_incompletas
+        $sql = 'SELECT COUNT(DISTINCT pr.mesa) as mesas_incompletas
             FROM partiresul pr
             WHERE pr.id_torneo = ? AND pr.partida = ? AND pr.mesa > 0
-            AND COALESCE(pr.registrado, 0) = 0";
+            AND ' . \PartiresulEstatusSql::whereRegistradoNoCompleto('pr');
 
         $stmt = $pdo->prepare($sql);
         $stmt->execute([$torneoId, $ronda]);

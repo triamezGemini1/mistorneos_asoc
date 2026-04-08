@@ -5,6 +5,13 @@
  */
 
 require_once __DIR__ . '/../../lib/app_helpers.php';
+require_once __DIR__ . '/../../lib/PartiresulEstatusSql.php';
+
+$wRegPr1Pod = \PartiresulEstatusSql::whereRegistradoUno('pr1');
+$wFf0Pr1Pod = \PartiresulEstatusSql::whereFfCero('pr1');
+$wFfOppPod = \PartiresulEstatusSql::whereFfUno('pr_oponente');
+$wFfCompPod = \PartiresulEstatusSql::whereFfUno('pr_compañero');
+$wRegPrTarPod = \PartiresulEstatusSql::whereRegistradoUno('pr');
 
 // Asegurar que las posiciones estén actualizadas
 if (function_exists('recalcularPosiciones')) {
@@ -67,21 +74,18 @@ try {
                         )
                     WHERE pr1.id_usuario = i.id_usuario
                         AND pr1.id_torneo = ?
-                        AND pr1.registrado = 1
-                        AND pr1.ff = 0
+                        AND {$wRegPr1Pod}
+                        AND {$wFf0Pr1Pod}
                         AND pr1.resultado1 = 200
                         AND pr1.efectividad = 100
                         AND pr1.resultado1 > pr1.resultado2
                         AND (
-                            -- Caso 1: Oponente tiene forfait
-                            pr_oponente.ff = 1 OR
-                            -- Caso 2: Compañero tiene forfait (el jugador ganó por forfait de su compañero)
-                            pr_compañero.ff = 1
+                            ({$wFfOppPod}) OR ({$wFfCompPod})
                         )
                 ) as ganadas_por_forfait,
                 COALESCE(
                     (SELECT MAX(pr.tarjeta) FROM partiresul pr
-                     WHERE pr.id_torneo = i.torneo_id AND pr.id_usuario = i.id_usuario AND pr.registrado = 1),
+                     WHERE pr.id_torneo = i.torneo_id AND pr.id_usuario = i.id_usuario AND ({$wRegPrTarPod})),
                     i.tarjeta,
                     0
                 ) AS tarjeta

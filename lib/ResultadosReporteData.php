@@ -7,10 +7,15 @@
  */
 declare(strict_types=1);
 
+require_once __DIR__ . '/PartiresulEstatusSql.php';
+
 final class ResultadosReporteData
 {
-    /** Subconsulta alineada con ganadas_por_forfait (partiresul.ff = 1). */
-    public const SQL_GFF_SUBQUERY = '(SELECT COUNT(*) FROM partiresul pr_gff WHERE pr_gff.id_usuario = i.id_usuario AND pr_gff.id_torneo = i.torneo_id AND pr_gff.ff = 1)';
+    /** Subconsulta COUNT GFF (forfait) por jugador/torneo; segura si ff no es numérico. */
+    public static function sqlGffSubquery(): string
+    {
+        return PartiresulEstatusSql::sqlSubqueryCountGffPorUsuarioTorneo();
+    }
 
     /**
      * Modalidad parejas (2) o parejas fijas (4): una fila por codigo_equipo con ambos nombres en nombre_completo.
@@ -77,7 +82,8 @@ final class ResultadosReporteData
             recalcularPosiciones($torneoId);
         }
 
-        $gffSql = self::SQL_GFF_SUBQUERY;
+        $gffSql = self::sqlGffSubquery();
+        $wRegPr = PartiresulEstatusSql::whereRegistradoUno('pr');
         $sqlParticipantes = "
             SELECT
                 i.id,
@@ -94,7 +100,7 @@ final class ResultadosReporteData
                 i.sancion,
                 i.tarjeta,
                 (SELECT COUNT(*) FROM partiresul pr WHERE pr.id_usuario = i.id_usuario AND pr.id_torneo = i.torneo_id
-                    AND pr.registrado = 1 AND pr.mesa = 0 AND pr.resultado1 > pr.resultado2) AS partidas_bye,
+                    AND {$wRegPr} AND pr.mesa = 0 AND pr.resultado1 > pr.resultado2) AS partidas_bye,
                 u.nombre AS nombre_completo,
                 u.username,
                 u.cedula,
