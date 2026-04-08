@@ -5687,7 +5687,7 @@ function actualizarEstadisticasInscritos($torneo_id) {
                     MAX({$prInt('zapato')}) AS zapatos,
                     MAX({$prInt('tarjeta')}) AS tarjeta
                 FROM partiresul
-                WHERE id_torneo = ? AND registrado = 1
+                WHERE id_torneo = ? AND " . PartiresulEstatusSql::whereRegistradoUno() . "
                 GROUP BY id_usuario, id_torneo, partida
             ) por_ronda
             GROUP BY id_usuario, id_torneo
@@ -5711,7 +5711,7 @@ function actualizarEstadisticasInscritos($torneo_id) {
         LEFT JOIN (
             SELECT DISTINCT id_usuario, id_torneo
             FROM partiresul
-            WHERE id_torneo = ? AND registrado = 1
+            WHERE id_torneo = ? AND " . PartiresulEstatusSql::whereRegistradoUno() . "
         ) has_data ON i.id_usuario = has_data.id_usuario AND i.torneo_id = has_data.id_torneo
         SET i.ganados = 0, i.perdidos = 0, i.efectividad = 0, i.puntos = 0,
             i.sancion = 0, i.chancletas = 0, i.zapatos = 0, i.tarjeta = 0

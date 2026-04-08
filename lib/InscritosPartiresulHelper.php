@@ -6,6 +6,7 @@
 require_once __DIR__ . '/../config/bootstrap.php';
 require_once __DIR__ . '/../config/db.php';
 require_once __DIR__ . '/InscritosHelper.php';
+require_once __DIR__ . '/PartiresulEstatusSql.php';
 
 class InscritosPartiresulHelper {
     
@@ -76,8 +77,8 @@ class InscritosPartiresulHelper {
             WHERE pr1.id_usuario = ? 
               AND pr1.id_torneo = ?
               AND pr1.mesa > 0
-              AND pr1.registrado = 1
-              AND pr1.ff = 0
+              AND " . PartiresulEstatusSql::whereRegistradoUno('pr1') . "
+              AND " . PartiresulEstatusSql::whereFfCero('pr1') . "
               AND (
                   (({$sn}) = 0 AND {$r1} > {$r2}) OR
                   (({$sn}) > 0 AND ({$r1} - {$sn}) > {$r2})
@@ -89,7 +90,7 @@ class InscritosPartiresulHelper {
         // Partidas ganadas por BYE (mesa=0: partida ganada, 100% puntos, 50% efectividad)
         $stmt = $pdo->prepare("
             SELECT COUNT(*) FROM partiresul
-            WHERE id_usuario = ? AND id_torneo = ? AND registrado = 1 AND mesa = 0 AND {$br1} > {$br2}
+            WHERE id_usuario = ? AND id_torneo = ? AND " . PartiresulEstatusSql::whereRegistradoUno() . " AND mesa = 0 AND {$br1} > {$br2}
         ");
         $stmt->execute([$id_usuario, $torneo_id]);
         $ganados += (int)$stmt->fetchColumn();
@@ -101,8 +102,8 @@ class InscritosPartiresulHelper {
             WHERE pr1.id_usuario = ? 
               AND pr1.id_torneo = ?
               AND pr1.mesa > 0
-              AND pr1.registrado = 1
-              AND pr1.ff = 0
+              AND " . PartiresulEstatusSql::whereRegistradoUno('pr1') . "
+              AND " . PartiresulEstatusSql::whereFfCero('pr1') . "
               AND (
                   (({$sn}) = 0 AND {$r1} < {$r2}) OR
                   (({$sn}) > 0 AND ({$r1} - {$sn}) <= {$r2})
@@ -117,7 +118,7 @@ class InscritosPartiresulHelper {
             FROM partiresul
             WHERE id_usuario = ? 
               AND id_torneo = ?
-              AND registrado = 1
+              AND " . PartiresulEstatusSql::whereRegistradoUno() . "
         ");
         $stmt->execute([$id_usuario, $torneo_id]);
         $efectividad = (int)$stmt->fetchColumn();
@@ -128,7 +129,7 @@ class InscritosPartiresulHelper {
             FROM partiresul
             WHERE id_usuario = ? 
               AND id_torneo = ?
-              AND registrado = 1
+              AND " . PartiresulEstatusSql::whereRegistradoUno() . "
         ");
         $stmt->execute([$id_usuario, $torneo_id]);
         $puntos = (int)$stmt->fetchColumn();
@@ -143,7 +144,7 @@ class InscritosPartiresulHelper {
             FROM partiresul
             WHERE id_usuario = ? 
               AND id_torneo = ?
-              AND registrado = 1
+              AND " . PartiresulEstatusSql::whereRegistradoUno() . "
         ");
         $stmt->execute([$id_usuario, $torneo_id]);
         $sanciones = $stmt->fetch(PDO::FETCH_ASSOC);

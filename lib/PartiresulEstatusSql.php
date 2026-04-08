@@ -102,4 +102,35 @@ final class PartiresulEstatusSql
 
         return $s === 'confirmado';
     }
+
+    /**
+     * partiresul.registrado: no usar `registrado = 1` si la columna puede ser VARCHAR.
+     * En modo estricto MySQL convierte el valor a número y cadenas como 'pendiente' provocan 1292.
+     * Comparación solo como texto: '1' coincide con TINYINT 1 y CHAR '1'.
+     *
+     * @param string $alias Alias de tabla (ej. pr, pr1) o vacío para columna suelta
+     */
+    public static function whereRegistradoUno(string $alias = ''): string
+    {
+        if ($alias !== '' && !preg_match('/^[a-zA-Z_][a-zA-Z0-9_]*$/', $alias)) {
+            throw new InvalidArgumentException('whereRegistradoUno: alias inválido');
+        }
+        $c = $alias === '' ? 'registrado' : $alias . '.registrado';
+
+        return "TRIM(CAST({$c} AS CHAR)) = '1'";
+    }
+
+    /**
+     * Comparación segura ff = 0 (evita 1292 si ff es VARCHAR con texto basura).
+     *
+     * @param string $alias Alias de tabla (ej. pr1)
+     */
+    public static function whereFfCero(string $alias = 'pr1'): string
+    {
+        if (!preg_match('/^[a-zA-Z_][a-zA-Z0-9_]*$/', $alias)) {
+            throw new InvalidArgumentException('whereFfCero: alias inválido');
+        }
+
+        return "TRIM(CAST({$alias}.ff AS CHAR)) = '0'";
+    }
 }
