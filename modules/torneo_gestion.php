@@ -5595,7 +5595,7 @@ function marcarNoPresentesRetiradosAntesRonda3($torneo_id) {
         UPDATE inscritos i
         SET i.estatus = ?
         WHERE i.torneo_id = ?
-          AND (i.estatus = 0 OR i.estatus = 'pendiente')
+          AND CAST(i.estatus AS CHAR) IN ('0', 'pendiente')
           AND NOT EXISTS (
               SELECT 1 FROM partiresul pr
               WHERE pr.id_torneo = i.torneo_id AND pr.id_usuario = i.id_usuario
