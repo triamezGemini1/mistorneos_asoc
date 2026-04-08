@@ -11,6 +11,8 @@ require_once __DIR__ . '/../config/auth.php';
 require_once __DIR__ . '/../config/db.php';
 require_once __DIR__ . '/../config/csrf.php';
 require_once __DIR__ . '/../lib/InscritosHelper.php';
+require_once __DIR__ . '/../lib/PartiresulEstatusSql.php';
+require_once __DIR__ . '/../lib/TorneoCampoNumerico.php';
 require_once __DIR__ . '/../lib/Tournament/Handlers/TournamentActionHandler.php';
 require_once __DIR__ . '/../lib/Tournament/Handlers/RoundManagerHandler.php';
 require_once __DIR__ . '/../lib/Tournament/Handlers/TournamentStatusHandler.php';
@@ -4839,10 +4841,11 @@ function obtenerDatosVerificarActasLista($torneo_id) {
         return ['actas_pendientes' => []];
     }
     $has_origen = in_array('origen_dato', $cols);
+    $wherePv = PartiresulEstatusSql::wherePendienteVerificacionSinAlias($pdo);
     $sql = "
         SELECT DISTINCT partida, mesa
         FROM partiresul
-        WHERE id_torneo = ? AND mesa > 0 AND estatus = 'pendiente_verificacion'"
+        WHERE id_torneo = ? AND mesa > 0 AND {$wherePv}"
         . ($has_origen ? " AND origen_dato = 'qr'" : "") . "
         ORDER BY partida ASC, mesa ASC
     ";
@@ -4871,6 +4874,7 @@ function obtenerTorneosConActasPendientes($user_id, $is_admin_general) {
     $params = $tournament_filter['params'];
 
     $extra_where = $has_origen ? " AND pr.origen_dato = 'qr'" : "";
+    $wherePrPv = PartiresulEstatusSql::qualifiedWherePendienteVerificacion($pdo, 'pr');
     $sql = "
         SELECT t.id, t.nombre, t.fechator, t.club_responsable,
                o.nombre as organizacion_nombre,
@@ -4878,7 +4882,7 @@ function obtenerTorneosConActasPendientes($user_id, $is_admin_general) {
         FROM partiresul pr
         INNER JOIN tournaments t ON pr.id_torneo = t.id
         LEFT JOIN organizaciones o ON t.club_responsable = o.id
-        WHERE pr.mesa > 0 AND pr.estatus = 'pendiente_verificacion' $extra_where
+        WHERE pr.mesa > 0 AND {$wherePrPv} $extra_where
         AND t.estatus = 1
         $where_t
         GROUP BY t.id, t.nombre, t.fechator, t.club_responsable, o.nombre
@@ -4926,7 +4930,7 @@ function obtenerDatosVerificarActa($torneo_id, $ronda, $mesa) {
     }
     if ($has_estatus) {
         $estatus_primero = $jugadores[0]['estatus'] ?? '';
-        if ($estatus_primero !== 'pendiente_verificacion') {
+        if (!PartiresulEstatusSql::valueIsPendienteVerificacion($estatus_primero, $pdo)) {
             return null; // Ya verificada
         }
     }
@@ -4986,8 +4990,8 @@ function verificarActaAprobar($user_id, $is_admin_general) {
         foreach ($rows as $row) {
             $partiresul_id = (int)$row['id'];
             $j = $jugadores_raw[$partiresul_id] ?? [];
-            $resultado1 = (int)($j['resultado1'] ?? $row['resultado1'] ?? 0);
-            $resultado2 = (int)($j['resultado2'] ?? $row['resultado2'] ?? 0);
+            $resultado1 = TorneoCampoNumerico::intEstadistica($j['resultado1'] ?? $row['resultado1'] ?? 0);
+            $resultado2 = TorneoCampoNumerico::intEstadistica($j['resultado2'] ?? $row['resultado2'] ?? 0);
             $sancion_input = (int)($j['sancion'] ?? 0);
             $tarjeta_inscritos = (int)($tarjeta_previa[(int)$row['id_usuario']] ?? 0);
             $procesado = SancionesHelper::procesar($sancion_input, 0, $tarjeta_inscritos);
@@ -4996,8 +5000,9 @@ function verificarActaAprobar($user_id, $is_admin_general) {
             $sancion_calc = $procesado['sancion_para_calculo'];
             $resultado1_ajust = max(0, $resultado1 - $sancion_calc);
             $efectividad = $calcularEf($resultado1_ajust, $resultado2, $puntosTorneo, 0, $tarjeta);
+            $setEstatus = PartiresulEstatusSql::setEstatusConfirmadoFragment($pdo);
             $pdo->prepare("
-                UPDATE partiresul SET resultado1 = ?, resultado2 = ?, efectividad = ?, tarjeta = ?, sancion = ?, estatus = 'confirmado'
+                UPDATE partiresul SET resultado1 = ?, resultado2 = ?, efectividad = ?, tarjeta = ?, sancion = ?, {$setEstatus}
                 WHERE id = ?
             ")->execute([$resultado1, $resultado2, $efectividad, $tarjeta, $sancion_guardar, $partiresul_id]);
         }
@@ -5044,7 +5049,9 @@ function verificarActaRechazar($user_id, $is_admin_general) {
     $has_foto = in_array('foto_acta', $cols);
     try {
         $updates = ["registrado = 0", "resultado1 = 0", "resultado2 = 0", "efectividad = 0", "ff = 0", "tarjeta = 0", "sancion = 0"];
-        if ($has_estatus) $updates[] = "estatus = 'pendiente_verificacion'";
+        if ($has_estatus) {
+            $updates[] = PartiresulEstatusSql::setEstatusPendienteVerificacionFragment($pdo);
+        }
         if ($has_foto) $updates[] = "foto_acta = NULL";
         $pdo->prepare("UPDATE partiresul SET " . implode(', ', $updates) . " WHERE id_torneo = ? AND partida = ? AND mesa = ?")
             ->execute([$torneo_id, $ronda, $mesa]);
@@ -5749,13 +5756,18 @@ function actualizarEstadisticasEquipos($torneo_id) {
     
     // Mismo universo que mesas (MesaAsignacionEquiposService: estatus != retirado): no solo confirmados,
     // para no perder clasificación/clasiequi si hay solventes/no_solventes en plantilla.
+    $exP = InscritosHelper::sqlExprColumnaNumerica('puntos');
+    $exG = InscritosHelper::sqlExprColumnaNumerica('ganados');
+    $exPe = InscritosHelper::sqlExprColumnaNumerica('perdidos');
+    $exE = InscritosHelper::sqlExprColumnaNumerica('efectividad');
+    $exS = InscritosHelper::sqlExprColumnaNumerica('sancion');
     $sql = "SELECT 
                 codigo_equipo,
-                SUM(puntos) as puntos_equipo,
-                SUM(ganados) as ganados_equipo,
-                SUM(perdidos) as perdidos_equipo,
-                SUM(efectividad) as efectividad_equipo,
-                SUM(sancion) as sancion_equipo,
+                SUM($exP) as puntos_equipo,
+                SUM($exG) as ganados_equipo,
+                SUM($exPe) as perdidos_equipo,
+                SUM($exE) as efectividad_equipo,
+                SUM($exS) as sancion_equipo,
                 COUNT(*) as total_jugadores
             FROM inscritos
             WHERE torneo_id = ? 
@@ -5878,15 +5890,19 @@ function asignarNumeroSecuencialPorEquipo($torneo_id) {
     $stmtEquipos->execute([$torneo_id]);
     $codigos = $stmtEquipos->fetchAll(PDO::FETCH_COLUMN);
 
+    $ordG = InscritosHelper::sqlExprColumnaNumerica('i.ganados');
+    $ordE = InscritosHelper::sqlExprColumnaNumerica('i.efectividad');
+    $ordP = InscritosHelper::sqlExprColumnaNumerica('i.puntos');
+    $ordPe = InscritosHelper::sqlExprColumnaNumerica('i.perdidos');
     $stmtJugadores = $pdo->prepare("
         SELECT i.id
         FROM inscritos i
         WHERE i.torneo_id = ? AND i.codigo_equipo = ? AND " . InscritosHelper::sqlWhereActivoConAlias('i') . "
         ORDER BY 
-            CAST(i.ganados AS SIGNED) DESC,
-            CAST(i.efectividad AS SIGNED) DESC,
-            CAST(i.puntos AS SIGNED) DESC,
-            CAST(i.perdidos AS SIGNED) ASC,
+            $ordG DESC,
+            $ordE DESC,
+            $ordP DESC,
+            $ordPe ASC,
             i.id_usuario ASC
     ");
     $stmtUpdateNumero = $pdo->prepare("UPDATE inscritos SET numero = ? WHERE id = ?");
@@ -5969,16 +5985,18 @@ function recalcularPosiciones($torneo_id) {
         
         // Obtener inscritos ordenados por: 1. ganados DESC, 2. efectividad DESC, 3. puntos DESC
         // Filtro: excluir retirados
-        // Asegurar que los valores sean numéricos en el ORDER BY usando CAST
+        $rg = InscritosHelper::sqlExprColumnaNumerica('ganados');
+        $re = InscritosHelper::sqlExprColumnaNumerica('efectividad');
+        $rp = InscritosHelper::sqlExprColumnaNumerica('puntos');
         $stmt = $pdo->prepare("SELECT id, id_usuario, 
-                               CAST(ganados AS SIGNED) as ganados, 
-                               CAST(efectividad AS SIGNED) as efectividad, 
-                               CAST(puntos AS SIGNED) as puntos
+                               $rg as ganados, 
+                               $re as efectividad, 
+                               $rp as puntos
                                FROM inscritos 
                                WHERE torneo_id = ? AND " . InscritosHelper::SQL_WHERE_SOLO_CONFIRMADO . "
-                               ORDER BY CAST(ganados AS SIGNED) DESC, 
-                                        CAST(efectividad AS SIGNED) DESC, 
-                                        CAST(puntos AS SIGNED) DESC");
+                               ORDER BY $rg DESC, 
+                                        $re DESC, 
+                                        $rp DESC");
         $stmt->execute([$torneo_id]);
         $inscritos = $stmt->fetchAll(PDO::FETCH_ASSOC);
         

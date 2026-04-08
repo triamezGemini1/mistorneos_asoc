@@ -4,9 +4,14 @@
  */
 declare(strict_types=1);
 
+require_once __DIR__ . '/InscritosHelper.php';
+
 if (!function_exists('obtenerTopJugadoresPorClub')) {
     function obtenerTopJugadoresPorClub($pdo, $torneo_id, $topN)
     {
+        $ig = InscritosHelper::sqlExprColumnaNumerica('i.ganados');
+        $ie = InscritosHelper::sqlExprColumnaNumerica('i.efectividad');
+        $ip = InscritosHelper::sqlExprColumnaNumerica('i.puntos');
         $sql = "SELECT 
                 i.*,
                 i.id_club as codigo_club,
@@ -54,9 +59,9 @@ if (!function_exists('obtenerTopJugadoresPorClub')) {
             WHERE i.torneo_id = ? 
                 AND i.estatus != 'retirado'
             ORDER BY COALESCE(i.id_club, -1) ASC, 
-                     CAST(i.ganados AS SIGNED) DESC, 
-                     CAST(i.efectividad AS SIGNED) DESC, 
-                     CAST(i.puntos AS SIGNED) DESC";
+                     $ig DESC, 
+                     $ie DESC, 
+                     $ip DESC";
 
         $stmt = $pdo->prepare($sql);
         $stmt->execute([$torneo_id, $torneo_id]);

@@ -2,6 +2,8 @@
 
 declare(strict_types=1);
 
+require_once __DIR__ . '/PartiresulEstatusSql.php';
+
 /**
  * Helper para contar actas pendientes de verificación (QR).
  * Usado en layout (badge) y dashboard.
@@ -27,12 +29,13 @@ class ActasPendientesHelper
             $tournament_filter = Auth::getTournamentFilterForRole('t');
             $where_t = !empty($tournament_filter['where']) ? 'AND ' . $tournament_filter['where'] : '';
             $params = $tournament_filter['params'];
+            $wherePv = PartiresulEstatusSql::qualifiedWherePendienteVerificacion($pdo, 'pr');
             $extra = $has_origen ? " AND pr.origen_dato = 'qr'" : '';
             $sql = "
                 SELECT COUNT(DISTINCT CONCAT(pr.id_torneo, '-', pr.partida, '-', pr.mesa))
                 FROM partiresul pr
                 INNER JOIN tournaments t ON pr.id_torneo = t.id
-                WHERE pr.mesa > 0 AND pr.estatus = 'pendiente_verificacion' {$extra}
+                WHERE pr.mesa > 0 AND {$wherePv} {$extra}
                 AND t.estatus = 1
                 {$where_t}
             ";
@@ -62,12 +65,13 @@ class ActasPendientesHelper
             $tournament_filter = Auth::getTournamentFilterForRole('t');
             $where_t = !empty($tournament_filter['where']) ? 'AND ' . $tournament_filter['where'] : '';
             $params = $tournament_filter['params'];
+            $wherePv = PartiresulEstatusSql::qualifiedWherePendienteVerificacion($pdo, 'pr');
             $extra = $has_origen ? " AND pr.origen_dato = 'qr'" : '';
             $sql = "
                 SELECT MAX(pr.fecha_partida) as ultimo
                 FROM partiresul pr
                 INNER JOIN tournaments t ON pr.id_torneo = t.id
-                WHERE pr.mesa > 0 AND pr.estatus = 'pendiente_verificacion' {$extra}
+                WHERE pr.mesa > 0 AND {$wherePv} {$extra}
                 AND t.estatus = 1
                 {$where_t}
             ";

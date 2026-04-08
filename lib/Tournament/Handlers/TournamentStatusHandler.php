@@ -8,6 +8,7 @@ use TorneoMesaAsignacionResolver;
 
 require_once __DIR__ . '/RoundManagerHandler.php';
 require_once __DIR__ . '/../../InscritosHelper.php';
+require_once __DIR__ . '/../../PartiresulEstatusSql.php';
 require_once __DIR__ . '/../../Core/TorneoMesaAsignacionResolver.php';
 
 /**
@@ -120,10 +121,11 @@ final class TournamentStatusHandler
             $cols_pr = $pdo->query('SHOW COLUMNS FROM partiresul')->fetchAll(\PDO::FETCH_COLUMN);
             if (in_array('estatus', $cols_pr, true)) {
                 $has_origen = in_array('origen_dato', $cols_pr, true);
+                $wherePv = \PartiresulEstatusSql::wherePendienteVerificacionSinAlias($pdo);
                 $sql = "
                 SELECT COUNT(DISTINCT CONCAT(partida,'-',mesa))
                 FROM partiresul
-                WHERE id_torneo = ? AND mesa > 0 AND estatus = 'pendiente_verificacion'"
+                WHERE id_torneo = ? AND mesa > 0 AND {$wherePv}"
                     . ($has_origen ? " AND origen_dato = 'qr'" : '') . '
             ';
                 $stmt = $pdo->prepare($sql);

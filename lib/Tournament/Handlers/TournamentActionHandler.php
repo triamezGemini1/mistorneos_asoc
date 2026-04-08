@@ -201,7 +201,7 @@ final class TournamentActionHandler
                 $puntosParejaB = null;
                 foreach ($jugadores as $jugador) {
                     $sec = (int) ($jugador['secuencia'] ?? 0);
-                    $r1 = (int) ($jugador['resultado1'] ?? 0);
+                    $r1 = \TorneoCampoNumerico::intEstadistica($jugador['resultado1'] ?? 0);
                     if (($sec === 1 || $sec === 2) && $puntosParejaA === null) {
                         $puntosParejaA = $r1;
                     }
@@ -219,8 +219,8 @@ final class TournamentActionHandler
                 $id = (int) ($jugador['id'] ?? 0);
                 $id_usuario = (int) ($jugador['id_usuario'] ?? 0);
                 $secuencia = (int) ($jugador['secuencia'] ?? 0);
-                $resultado1 = (int) ($jugador['resultado1'] ?? 0);
-                $resultado2 = (int) ($jugador['resultado2'] ?? 0);
+                $resultado1 = \TorneoCampoNumerico::intEstadistica($jugador['resultado1'] ?? 0);
+                $resultado2 = \TorneoCampoNumerico::intEstadistica($jugador['resultado2'] ?? 0);
                 $ff = isset($jugador['ff']) && ($jugador['ff'] == '1' || $jugador['ff'] === true || $jugador['ff'] === 'on') ? 1 : 0;
                 $tarjeta = (int) ($jugador['tarjeta'] ?? 0);
                 $sancion = (int) ($jugador['sancion'] ?? 0);

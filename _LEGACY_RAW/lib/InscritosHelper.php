@@ -8,6 +8,9 @@
  * - retirado: retirado del torneo
  *
  * Los valores legacy 'solvente' y 'no_solvente' se obvian; migrar a 'confirmado' si existen.
+ *
+ * Inscripción a torneo (INSERT en tabla inscritos): usar siempre {@see InscritosHelper::registrarInscripcion()}.
+ * No insertar filas en `inscritos` desde otros archivos salvo SQLite/desktop (esquema distinto).
  */
 
 class InscritosHelper {
@@ -218,11 +221,72 @@ class InscritosHelper {
             return $inscrito;
         }, $inscritos);
     }
+
+    /**
+     * Mapa columna_lower => nombre real en BD para `inscritos`.
+     * SHOW COLUMNS con PDO::FETCH_ASSOC (Field) evita fallos de PDO::FETCH_COLUMN en algunos drivers.
+     */
+    private static function mapaColumnasInscritos(PDO $pdo): array {
+        $stmt = $pdo->query('SHOW COLUMNS FROM `inscritos`');
+        if ($stmt === false) {
+            throw new Exception('No se pudo leer el esquema de la tabla inscritos');
+        }
+        $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+        $have = [];
+        foreach ($rows as $row) {
+            if (!is_array($row)) {
+                continue;
+            }
+            $name = '';
+            if (array_key_exists('Field', $row)) {
+                $name = trim((string) $row['Field']);
+            } elseif (array_key_exists('field', $row)) {
+                $name = trim((string) $row['field']);
+            }
+            if ($name === '') {
+                continue;
+            }
+            $have[strtolower($name)] = $name;
+        }
+        foreach (['mesa', 'letra'] as $crit) {
+            if (isset($have[$crit])) {
+                continue;
+            }
+            try {
+                $chk = $pdo->prepare(
+                    "SELECT COLUMN_NAME FROM information_schema.COLUMNS
+                     WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'inscritos' AND LOWER(COLUMN_NAME) = ? LIMIT 1"
+                );
+                $chk->execute([$crit]);
+                $cn = $chk->fetchColumn();
+                if ($cn !== false && (string) $cn !== '') {
+                    $have[$crit] = (string) $cn;
+                }
+            } catch (Throwable $e) {
+                // Sin permiso a information_schema u otro error: se ignora
+            }
+        }
+        return $have;
+    }
+
+    /**
+     * Punto único para crear una inscripción al torneo (MySQL). Aplica defaults y delega en insertarInscrito().
+     *
+     * @param array $datos Mismo contrato que insertarInscrito(); mesa/letra/numero se rellenan si faltan.
+     */
+    public static function registrarInscripcion(PDO $pdo, array $datos): int {
+        $datos = $datos + [
+            'mesa' => 0,
+            'letra' => ' ',
+            'numero' => 0,
+        ];
+        return self::insertarInscrito($pdo, $datos);
+    }
     
     /**
-     * Función centralizada para insertar inscripción en tabla inscritos
-     * Valida todos los campos obligatorios y asegura que todos los campos tengan valores
-     * 
+     * Ejecuta el INSERT en `inscritos` (solo vía registrarInscripcion desde el resto de la app).
+     * Valida campos obligatorios y alinea columnas al esquema MySQL.
+     *
      * @param PDO $pdo Conexión a la base de datos
      * @param array $datos Datos de la inscripción:
      *   - id_usuario (int, requerido)
@@ -232,10 +296,17 @@ class InscritosHelper {
      *   - inscrito_por (int|null, opcional)
      *   - numero (int|null, opcional, default=0)
      *   - codigo_equipo (string|null, opcional)
+     *   - mesa (int, opcional, default=0) si la columna existe en BD
+     *   - letra (string, opcional, default un espacio) si la columna existe en BD
      * @return int ID del registro insertado
      * @throws Exception Si los datos son inválidos o hay error al insertar
      */
     public static function insertarInscrito(PDO $pdo, array $datos): int {
+        // Defaults columnas NOT NULL habituales en producción (no pisan claves ya definidas)
+        $datos = $datos + [
+            'mesa' => 0,
+            'letra' => ' ',
+        ];
         // Validar campos obligatorios
         $id_usuario = (int)($datos['id_usuario'] ?? 0);
         $torneo_id = (int)($datos['torneo_id'] ?? 0);
@@ -247,9 +318,6 @@ class InscritosHelper {
         if ($torneo_id <= 0) {
             throw new Exception('ID de torneo es requerido y debe ser mayor a 0');
         }
-
-        // id_usuario en inscritos se mantiene como id interno de usuario para todos los torneos.
-        $id_usuario_guardar = $id_usuario;
         
         // Validar estatus: solo pendiente, confirmado, retirado
         $estatusRaw = $datos['estatus'] ?? 1;
@@ -280,26 +348,10 @@ class InscritosHelper {
             $nacionalidad_inscrito = 'V';
         }
         $cedula_inscrito = isset($datos['cedula']) ? preg_replace('/\D/', '', (string)$datos['cedula']) : '';
-        if ($cedula_inscrito === '' || $nacionalidad_inscrito === 'V') {
-            $identidadUsuario = self::obtenerIdentidadUsuario($pdo, $id_usuario);
-            if ($cedula_inscrito === '') {
-                $cedula_inscrito = $identidadUsuario['cedula'];
-            }
-            if (($nacionalidad_inscrito === 'V' || $nacionalidad_inscrito === '') && $identidadUsuario['nacionalidad'] !== '') {
-                $nacionalidad_inscrito = $identidadUsuario['nacionalidad'];
-            }
-        }
-        if ($cedula_inscrito === '') {
-            throw new Exception('No se pudo determinar la cédula del jugador para registrar la inscripción.');
-        }
-        $numfvd_inscrito = isset($datos['numfvd']) ? (int)$datos['numfvd'] : 0;
-        if ($numfvd_inscrito <= 0) {
-            $numfvd_inscrito = self::obtenerNumfvdDesdeUsuario($pdo, $id_usuario);
-        }
         
         // Verificar que no esté ya inscrito (excluir retirados)
         $stmt = $pdo->prepare("SELECT id FROM inscritos WHERE id_usuario = ? AND torneo_id = ? AND " . self::SQL_WHERE_NO_RETIRADO);
-        $stmt->execute([$id_usuario_guardar, $torneo_id]);
+        $stmt->execute([$id_usuario, $torneo_id]);
         if ($stmt->fetch()) {
             throw new Exception('Este usuario ya está inscrito en el torneo');
         }
@@ -310,19 +362,16 @@ class InscritosHelper {
             : (int) self::getEstatusNumero(is_string($estatus) ? $estatus : 'confirmado');
 
         // INSERT alineado al esquema real (evita 1136 si faltan/sobran columnas vs VALUES fijos)
-        $colNames = $pdo->query('SHOW COLUMNS FROM inscritos')->fetchAll(PDO::FETCH_COLUMN);
-        $have = [];
-        foreach ($colNames as $c) {
-            $have[strtolower((string)$c)] = $c;
-        }
+        $have = self::mapaColumnasInscritos($pdo);
+
         $H = static function (string $n) use ($have): bool {
-            return isset($have[strtolower($n)]);
+            return isset($have[strtolower(trim($n))]);
         };
         $insertCols = [];
         $insertVals = [];
         $params = [];
         $push = static function (string $col, string $sql, $param = null) use (&$insertCols, &$insertVals, &$params, $have): void {
-            $k = strtolower($col);
+            $k = strtolower(trim($col));
             if (!isset($have[$k])) {
                 return;
             }
@@ -339,10 +388,7 @@ class InscritosHelper {
         if ($H('cedula')) {
             $push('cedula', '?', $cedula_inscrito);
         }
-        if ($H('numfvd')) {
-            $push('numfvd', '?', $numfvd_inscrito);
-        }
-        $push('id_usuario', '?', $id_usuario_guardar);
+        $push('id_usuario', '?', $id_usuario);
         $push('torneo_id', '?', $torneo_id);
         if ($H('id_club')) {
             $push('id_club', '?', $id_club);
@@ -350,11 +396,21 @@ class InscritosHelper {
         if ($H('codigo_equipo')) {
             $push('codigo_equipo', '?', $codigo_equipo);
         }
-        foreach (['posicion', 'ganados', 'perdidos', 'efectividad', 'puntos', 'ptosrnk', 'sancion', 'chancletas', 'zapatos', 'tarjeta'] as $c) {
+        foreach (['posicion', 'ganados', 'perdidos', 'efectividad', 'puntos', 'ptosrnk', 'sancion', 'chancletas', 'zapatos', 'tarjeta', 'mesa'] as $c) {
+            $ck = strtolower(trim($c));
             if ($H($c)) {
-                $insertCols[] = '`' . $have[strtolower($c)] . '`';
-                $insertVals[] = '0';
+                $insertCols[] = '`' . str_replace('`', '``', $have[$ck]) . '`';
+                $insertVals[] = ($ck === 'mesa') ? (string)(int)($datos['mesa'] ?? 0) : '0';
             }
+        }
+
+        /* letra: espacio hasta asignación en mesa (NOT NULL sin default en algunos esquemas) */
+        if ($H('letra')) {
+            $letraIns = array_key_exists('letra', $datos) ? trim((string)$datos['letra']) : ' ';
+            if ($letraIns === '') {
+                $letraIns = ' ';
+            }
+            $push('letra', '?', $letraIns);
         }
         if ($H('fecha_inscripcion')) {
             $insertCols[] = '`' . $have['fecha_inscripcion'] . '`';
@@ -384,6 +440,28 @@ class InscritosHelper {
                 $push('entidad_id', '?', $ent);
             }
         }
+
+        /* Respaldo: mesa=0 y letra=' ' si el motor exige columnas y no quedaron en el INSERT (p. ej. nombres atípicos en SHOW COLUMNS) */
+        $insertedPhys = [];
+        foreach ($insertCols as $qc) {
+            $insertedPhys[strtolower(trim(str_replace('`', '', $qc)))] = true;
+        }
+        foreach ($have as $logicalKey => $physicalName) {
+            $physNorm = strtolower(trim((string) $physicalName));
+            if ($logicalKey === 'mesa' && !isset($insertedPhys[$physNorm])) {
+                $insertCols[] = '`' . str_replace('`', '``', $physicalName) . '`';
+                $insertVals[] = '?';
+                $params[] = (int)($datos['mesa'] ?? 0);
+                $insertedPhys[$physNorm] = true;
+            }
+            if ($logicalKey === 'letra' && !isset($insertedPhys[$physNorm])) {
+                $insertCols[] = '`' . str_replace('`', '``', $physicalName) . '`';
+                $insertVals[] = '?';
+                $letraIns = array_key_exists('letra', $datos) ? trim((string)$datos['letra']) : ' ';
+                $params[] = ($letraIns === '') ? ' ' : $letraIns;
+                $insertedPhys[$physNorm] = true;
+            }
+        }
         if ($insertCols === []) {
             throw new Exception('Tabla inscritos sin columnas reconocidas');
         }
@@ -404,43 +482,6 @@ class InscritosHelper {
         }
         
         return (int)$pdo->lastInsertId();
-    }
-
-    /**
-     * @return array{cedula:string,nacionalidad:string}
-     */
-    private static function obtenerIdentidadUsuario(PDO $pdo, int $usuarioId): array
-    {
-        if ($usuarioId <= 0) {
-            return ['cedula' => '', 'nacionalidad' => ''];
-        }
-        try {
-            $stmt = $pdo->prepare('SELECT cedula, nacionalidad FROM usuarios WHERE id = ? LIMIT 1');
-            $stmt->execute([$usuarioId]);
-            $row = $stmt->fetch(PDO::FETCH_ASSOC) ?: [];
-            $ced = preg_replace('/\D/', '', (string)($row['cedula'] ?? ''));
-            $nac = strtoupper(trim((string)($row['nacionalidad'] ?? '')));
-            if (!in_array($nac, ['V', 'E', 'J', 'P'], true)) {
-                $nac = 'V';
-            }
-            return ['cedula' => $ced, 'nacionalidad' => $nac];
-        } catch (Throwable $e) {
-            return ['cedula' => '', 'nacionalidad' => ''];
-        }
-    }
-
-    private static function obtenerNumfvdDesdeUsuario(PDO $pdo, int $usuarioId): int
-    {
-        if ($usuarioId <= 0) {
-            return 0;
-        }
-        try {
-            $stmt = $pdo->prepare('SELECT COALESCE(numfvd, 0) FROM usuarios WHERE id = ? LIMIT 1');
-            $stmt->execute([$usuarioId]);
-            return (int)($stmt->fetchColumn() ?: 0);
-        } catch (Throwable $e) {
-            return 0;
-        }
     }
     
     /**
@@ -627,45 +668,6 @@ class InscritosHelper {
                 'mensaje' => 'Error al validar pago'
             ];
         }
-    }
-
-    /**
-     * Contadores para badges/resumen: inscritos totales, jugadores confirmados y equipos activos.
-     * Equipos solo aplica a modalidades con tabla equipos (2=Parejas, 3=Equipos, 4=Parejas fijas).
-     *
-     * @return array{inscritos_total:int,jugadores_confirmados:int,equipos_activos:int}
-     */
-    public static function contadoresResumenInscripcionTorneo(\PDO $pdo, int $torneoId, ?int $modalidad = null): array
-    {
-        $torneoId = max(0, $torneoId);
-        if ($torneoId <= 0) {
-            return ['inscritos_total' => 0, 'jugadores_confirmados' => 0, 'equipos_activos' => 0];
-        }
-        if ($modalidad === null) {
-            $st = $pdo->prepare('SELECT modalidad FROM tournaments WHERE id = ?');
-            $st->execute([$torneoId]);
-            $modalidad = (int) ($st->fetchColumn() ?: 0);
-        }
-        $st = $pdo->prepare('SELECT COUNT(*) FROM inscritos WHERE torneo_id = ?');
-        $st->execute([$torneoId]);
-        $inscritosTotal = (int) $st->fetchColumn();
-
-        $st = $pdo->prepare('SELECT COUNT(*) FROM inscritos WHERE torneo_id = ? AND ' . self::SQL_WHERE_SOLO_CONFIRMADO);
-        $st->execute([$torneoId]);
-        $jugadoresConf = (int) $st->fetchColumn();
-
-        $equipos = 0;
-        if (in_array($modalidad, [2, 3, 4], true)) {
-            $st = $pdo->prepare('SELECT COUNT(*) FROM equipos WHERE id_torneo = ? AND estatus = 0');
-            $st->execute([$torneoId]);
-            $equipos = (int) $st->fetchColumn();
-        }
-
-        return [
-            'inscritos_total' => $inscritosTotal,
-            'jugadores_confirmados' => $jugadoresConf,
-            'equipos_activos' => $equipos,
-        ];
     }
 }
 

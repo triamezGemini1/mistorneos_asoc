@@ -23,6 +23,8 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
 require_once __DIR__ . '/../config/bootstrap.php';
 require_once __DIR__ . '/../config/db.php';
 require_once __DIR__ . '/../lib/QrMesaTokenHelper.php';
+require_once __DIR__ . '/../lib/PartiresulEstatusSql.php';
+require_once __DIR__ . '/../lib/TorneoCampoNumerico.php';
 
 $torneo_id = (int)($_POST['torneo_id'] ?? $_POST['t'] ?? 0);
 $mesa_id = (int)($_POST['mesa_id'] ?? $_POST['mesa'] ?? $_POST['m'] ?? 0);
@@ -123,7 +125,7 @@ try {
         exit;
     }
     $pr_estatus = $pr_row['estatus'] ?? '';
-    if ($has_estatus && ($pr_estatus === 'confirmado' || $pr_estatus === 1)) {
+    if ($has_estatus && PartiresulEstatusSql::valueIsConfirmado($pr_estatus, $pdo)) {
         http_response_code(403);
         echo json_encode(['success' => false, 'error' => 'Mesa ya procesada.']);
         exit;
@@ -133,8 +135,8 @@ try {
     $maximoPermitido = (int)round($puntosTorneo * 1.6);
 
     // Mismas validaciones que el formulario del administrador
-    $puntosA = (int)($jugadores[0]['resultado1'] ?? 0);
-    $puntosB = (int)($jugadores[2]['resultado1'] ?? 0);
+    $puntosA = TorneoCampoNumerico::intEstadistica($jugadores[0]['resultado1'] ?? 0);
+    $puntosB = TorneoCampoNumerico::intEstadistica($jugadores[2]['resultado1'] ?? 0);
     if ($puntosA > $maximoPermitido) {
         http_response_code(400);
         echo json_encode(['success' => false, 'error' => "Puntos Pareja A ($puntosA) exceden el máximo permitido ($maximoPermitido = puntos del torneo + 60%)."]);
@@ -186,8 +188,7 @@ try {
     };
 
     $estatus = $origen === 'qr' ? 'pendiente_verificacion' : 'confirmado';
-    // Valor para BD: partiresul.estatus en producción es TINYINT (0=pendiente, 1=confirmado)
-    $estatus_db = $estatus === 'confirmado' ? 1 : 0;
+    $estatus_db = PartiresulEstatusSql::estatusValorParaPersistencia($pdo, $origen !== 'qr');
 
     $tarjeta_previa = [];
     if (!$es_qr) {
@@ -201,8 +202,8 @@ try {
     foreach ($jugadores as $j) {
         $id_usuario = (int)($j['id_usuario'] ?? 0);
         $secuencia = (int)($j['secuencia'] ?? 0);
-        $resultado1 = (int)($j['resultado1'] ?? 0);
-        $resultado2 = (int)($j['resultado2'] ?? 0);
+        $resultado1 = TorneoCampoNumerico::intEstadistica($j['resultado1'] ?? 0);
+        $resultado2 = TorneoCampoNumerico::intEstadistica($j['resultado2'] ?? 0);
         $ff = isset($j['ff']) && ($j['ff'] == '1' || $j['ff'] === true || $j['ff'] === 'on') ? 1 : 0;
         $chancleta = (int)($j['chancleta'] ?? 0);
         $zapato = (int)($j['zapato'] ?? 0);

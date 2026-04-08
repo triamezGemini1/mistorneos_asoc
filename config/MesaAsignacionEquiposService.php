@@ -28,6 +28,7 @@
 if (!class_exists('DB', false)) {
     require_once __DIR__ . '/db.php';
 }
+require_once __DIR__ . '/../lib/InscritosHelper.php';
 
 class MesaAsignacionEquiposService
 {
@@ -655,6 +656,9 @@ class MesaAsignacionEquiposService
      */
     private function crearMesasDesdeConsulta($torneoId, $condicionClasiequi) {
         $pdo = $this->pdo;
+        $og = InscritosHelper::sqlExprColumnaNumerica('i.ganados');
+        $oe = InscritosHelper::sqlExprColumnaNumerica('i.efectividad');
+        $op = InscritosHelper::sqlExprColumnaNumerica('i.puntos');
         $sql = "
             SELECT 
                 i.id_usuario,
@@ -673,9 +677,9 @@ class MesaAsignacionEquiposService
               i.numero ASC,
               i.posicion ASC,
               i.clasiequi ASC,
-              CAST(i.ganados AS SIGNED) DESC,
-              CAST(i.efectividad AS SIGNED) DESC,
-              CAST(i.puntos AS SIGNED) DESC,
+              $og DESC,
+              $oe DESC,
+              $op DESC,
               i.id_usuario ASC
         ";
         $stmt = $pdo->prepare($sql);
@@ -949,6 +953,10 @@ class MesaAsignacionEquiposService
             return [];
         }
         
+        $jg = InscritosHelper::sqlExprColumnaNumerica('i.ganados');
+        $je = InscritosHelper::sqlExprColumnaNumerica('i.efectividad');
+        $jp = InscritosHelper::sqlExprColumnaNumerica('i.puntos');
+        $jpe = InscritosHelper::sqlExprColumnaNumerica('i.perdidos');
         $sql = "SELECT i.id as id_inscrito, i.id_usuario, i.codigo_equipo,
                        eq.id AS id_equipo,
                        u.cedula, u.nombre, u.id as usuario_id, u.sexo,
@@ -960,10 +968,10 @@ class MesaAsignacionEquiposService
                 WHERE i.torneo_id = ? AND i.codigo_equipo = ? AND i.estatus != 4
                 ORDER BY 
                     CASE WHEN u.id = i.id_usuario THEN 0 ELSE 1 END ASC,
-                    CAST(i.ganados AS SIGNED) DESC,
-                    CAST(i.efectividad AS SIGNED) DESC,
-                    CAST(i.puntos AS SIGNED) DESC,
-                    CAST(i.perdidos AS SIGNED) ASC,
+                    $jg DESC,
+                    $je DESC,
+                    $jp DESC,
+                    $jpe ASC,
                     i.id_usuario ASC";
         
         try {
