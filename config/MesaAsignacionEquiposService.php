@@ -660,6 +660,8 @@ class MesaAsignacionEquiposService
         $og = InscritosHelper::sqlExprColumnaNumerica('i.ganados');
         $oe = InscritosHelper::sqlExprColumnaNumerica('i.efectividad');
         $op = InscritosHelper::sqlExprColumnaNumerica('i.puntos');
+        $iClas = InscritosHelper::sqlExprColumnaNumerica('i.clasiequi');
+        $iNum = InscritosHelper::sqlExprColumnaNumerica('i.numero');
         $sql = "
             SELECT 
                 i.id_usuario,
@@ -673,11 +675,11 @@ class MesaAsignacionEquiposService
             FROM inscritos i
             WHERE i.torneo_id = ? 
               AND i.estatus != 4
-              AND i.clasiequi $condicionClasiequi
+              AND ({$iClas}) {$condicionClasiequi}
             ORDER BY 
-              i.numero ASC,
+              {$iNum} ASC,
               i.posicion ASC,
-              i.clasiequi ASC,
+              {$iClas} ASC,
               $og DESC,
               $oe DESC,
               $op DESC,
@@ -851,20 +853,24 @@ class MesaAsignacionEquiposService
      */
     private function obtenerEquiposConJugadoresYClasificacion($torneoId, $hastaRonda)
     {
+        $eg = InscritosHelper::sqlExprColumnaNumerica('e.ganados');
+        $ee = InscritosHelper::sqlExprColumnaNumerica('e.efectividad');
+        $ep = InscritosHelper::sqlExprColumnaNumerica('e.puntos');
+        $epe = InscritosHelper::sqlExprColumnaNumerica('e.perdidos');
         $sql = "SELECT e.id, e.codigo_equipo, e.nombre_equipo, e.id_club, c.nombre as nombre_club,
-                       COALESCE(e.puntos, 0) AS puntos_equipo,
-                       COALESCE(e.ganados, 0) AS ganados_equipo,
-                       COALESCE(e.perdidos, 0) AS perdidos_equipo,
-                       COALESCE(e.efectividad, 0) AS efectividad_equipo,
-                       (COALESCE(e.ganados, 0) - COALESCE(e.perdidos, 0)) AS diferencia_equipo
+                       {$ep} AS puntos_equipo,
+                       {$eg} AS ganados_equipo,
+                       {$epe} AS perdidos_equipo,
+                       {$ee} AS efectividad_equipo,
+                       ({$eg} - {$epe}) AS diferencia_equipo
                 FROM equipos e
                 LEFT JOIN clubes c ON e.id_club = c.id
                 WHERE e.id_torneo = ? AND e.estatus = 0
                 ORDER BY
-                    COALESCE(e.ganados, 0) DESC,
-                    COALESCE(e.efectividad, 0) DESC,
-                    COALESCE(e.puntos, 0) DESC,
-                    COALESCE(e.perdidos, 0) ASC,
+                    {$eg} DESC,
+                    {$ee} DESC,
+                    {$ep} DESC,
+                    {$epe} ASC,
                     e.codigo_equipo ASC";
         
         $stmt = $this->pdo->prepare($sql);
@@ -892,7 +898,8 @@ class MesaAsignacionEquiposService
         if (empty($codigoEquipo)) {
             return [];
         }
-        
+
+        $iNum = InscritosHelper::sqlExprColumnaNumerica('i.numero');
         $sql = "SELECT i.id as id_inscrito, i.torneo_id, i.id_usuario, i.codigo_equipo,
                        eq.id AS id_equipo,
                        u.cedula, u.nombre, u.id as usuario_id, u.sexo,
@@ -905,7 +912,7 @@ class MesaAsignacionEquiposService
                 ORDER BY 
                     i.torneo_id ASC,
                     CASE WHEN u.id = i.id_usuario THEN 0 ELSE 1 END ASC,
-                    CASE WHEN COALESCE(i.numero, 0) = 0 THEN 999 ELSE i.numero END ASC,
+                    CASE WHEN {$iNum} = 0 THEN 999 ELSE {$iNum} END ASC,
                     i.id ASC";
         
         try {
