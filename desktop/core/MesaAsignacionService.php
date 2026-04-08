@@ -24,6 +24,7 @@
 
 require_once __DIR__ . '/db_bridge.php';
 require_once __DIR__ . '/InscritosHelper.php';
+require_once dirname(__DIR__, 2) . '/lib/PartiresulEstatusSql.php';
 
 class MesaAsignacionService
 {
@@ -459,12 +460,15 @@ class MesaAsignacionService
     private function obtenerClasificacionInscritos($torneoId)
     {
         $ent = $this->whereEntidad('i');
+        $og = InscritosHelper::sqlExprColumnaNumerica('i.ganados');
+        $oe = InscritosHelper::sqlExprColumnaNumerica('i.efectividad');
+        $op = InscritosHelper::sqlExprColumnaNumerica('i.puntos');
         $sql = "SELECT i.*, u.nombre, u.sexo, c.nombre as club_nombre, c.id as club_id
                 FROM inscritos i
                 INNER JOIN usuarios u ON i.id_usuario = u.id
                 LEFT JOIN clubes c ON i.id_club = c.id
                 WHERE i.torneo_id = ? AND " . InscritosHelper::sqlWhereSoloConfirmadoConAlias('i') . $ent['sql'] . "
-                ORDER BY i.posicion ASC, i.ganados DESC, i.efectividad DESC, i.puntos DESC, i.id_usuario ASC";
+                ORDER BY i.posicion ASC, {$og} DESC, {$oe} DESC, {$op} DESC, i.id_usuario ASC";
         
         $stmt = $this->pdo->prepare($sql);
         $stmt->execute(array_merge([$torneoId], $ent['bind']));
@@ -478,9 +482,10 @@ class MesaAsignacionService
     private function obtenerIdsByeRonda1($torneoId): array
     {
         $ent = $this->whereEntidad();
+        $regOk = PartiresulEstatusSql::whereRegistradoUno();
         $stmt = $this->pdo->prepare("
             SELECT DISTINCT id_usuario FROM partiresul
-            WHERE id_torneo = ? AND partida = 1 AND mesa = 0 AND registrado = 1" . $ent['sql'] . "
+            WHERE id_torneo = ? AND partida = 1 AND mesa = 0 AND {$regOk}" . $ent['sql'] . "
         ");
         $stmt->execute(array_merge([$torneoId], $ent['bind']));
         return array_map('intval', $stmt->fetchAll(PDO::FETCH_COLUMN));
@@ -515,10 +520,11 @@ class MesaAsignacionService
             return [];
         }
         $ent = $this->whereEntidad();
+        $regOk = PartiresulEstatusSql::whereRegistradoUno();
         $stmt = $this->pdo->prepare("
             SELECT id_usuario, COUNT(*) AS cnt
             FROM partiresul
-            WHERE id_torneo = ? AND partida < ? AND partida >= 1 AND mesa = 0 AND registrado = 1" . $ent['sql'] . "
+            WHERE id_torneo = ? AND partida < ? AND partida >= 1 AND mesa = 0 AND {$regOk}" . $ent['sql'] . "
             GROUP BY id_usuario
         ");
         $stmt->execute(array_merge([$torneoId, $antesDeRonda], $ent['bind']));
@@ -577,21 +583,26 @@ class MesaAsignacionService
         $entI = $this->whereEntidad('i');
         $entP = $this->whereEntidad('pr1');
         $joinEnt = $entP['sql'] !== '' ? ' AND pr1.entidad_id = ?' : '';
+        $regPr1 = PartiresulEstatusSql::whereRegistradoUno('pr1');
+        $ganoR1 = InscritosHelper::sqlExprPartiresulResultado1MayorQueResultado2('pr1');
+        $ganadorR1Expr = "(CASE WHEN pr1.id IS NOT NULL AND ({$regPr1}) AND {$ganoR1} THEN 1 ELSE 0 END)";
+        $byeR1Expr = "(CASE WHEN pr1.id IS NOT NULL AND ({$regPr1}) AND {$ganoR1} AND pr1.mesa = 0 THEN 1 ELSE 0 END)";
+        $oe = InscritosHelper::sqlExprColumnaNumerica('i.efectividad');
+        $op = InscritosHelper::sqlExprColumnaNumerica('i.puntos');
         $sql = "SELECT i.*, u.nombre, u.sexo, c.nombre as club_nombre, c.id as club_id,
-                (CASE WHEN pr1.id IS NOT NULL AND pr1.registrado = 1 AND pr1.resultado1 > pr1.resultado2 THEN 1 ELSE 0 END) AS ganador_r1,
-                (CASE WHEN pr1.id IS NOT NULL AND pr1.registrado = 1 AND pr1.resultado1 > pr1.resultado2 AND pr1.mesa = 0 THEN 1 ELSE 0 END) AS bye_r1
+                {$ganadorR1Expr} AS ganador_r1,
+                {$byeR1Expr} AS bye_r1
                 FROM inscritos i
                 INNER JOIN usuarios u ON i.id_usuario = u.id
                 LEFT JOIN clubes c ON i.id_club = c.id
                 LEFT JOIN partiresul pr1 ON pr1.id_torneo = i.torneo_id AND pr1.id_usuario = i.id_usuario AND pr1.partida = 1" . $joinEnt . "
                 WHERE i.torneo_id = ? AND " . InscritosHelper::sqlWhereSoloConfirmadoConAlias('i') . $entI['sql'] . "
                 ORDER BY
-                    (CASE WHEN pr1.id IS NOT NULL AND pr1.registrado = 1 AND pr1.resultado1 > pr1.resultado2 THEN 1 ELSE 0 END) DESC,
-                    (CASE WHEN pr1.id IS NOT NULL AND pr1.registrado = 1 AND pr1.resultado1 > pr1.resultado2 AND pr1.mesa = 0 THEN 1 ELSE 0 END) ASC,
-                    i.efectividad DESC, i.puntos DESC, i.id_usuario ASC";
-        
+                    {$ganadorR1Expr} DESC,
+                    {$byeR1Expr} ASC,
+                    {$oe} DESC, {$op} DESC, i.id_usuario ASC";
+
         $stmt = $this->pdo->prepare($sql);
-        $bind = array_merge([$torneoId], $entP['bind'], $entI['bind']);
         $stmt->execute(array_merge($entP['bind'], [$torneoId], $entI['bind']));
         return $stmt->fetchAll(PDO::FETCH_ASSOC);
     }
@@ -1960,10 +1971,11 @@ class MesaAsignacionService
     public function todasLasMesasCompletas($torneoId, $ronda)
     {
         $ent = $this->whereEntidad();
+        $noReg = PartiresulEstatusSql::whereRegistradoNoCompleto();
         $sql = "SELECT COUNT(DISTINCT mesa) as mesas_incompletas
                 FROM partiresul
                 WHERE id_torneo = ? AND partida = ? AND mesa > 0
-                AND (registrado = 0 OR registrado IS NULL)" . $ent['sql'];
+                AND {$noReg}" . $ent['sql'];
         
         $stmt = $this->pdo->prepare($sql);
         $stmt->execute(array_merge([$torneoId, $ronda], $ent['bind']));
@@ -1978,10 +1990,11 @@ class MesaAsignacionService
     public function contarMesasIncompletas($torneoId, $ronda)
     {
         $ent = $this->whereEntidad();
+        $noReg = PartiresulEstatusSql::whereRegistradoNoCompleto();
         $sql = "SELECT COUNT(DISTINCT mesa) as mesas_incompletas
                 FROM partiresul
                 WHERE id_torneo = ? AND partida = ? AND mesa > 0
-                AND (registrado = 0 OR registrado IS NULL)" . $ent['sql'];
+                AND {$noReg}" . $ent['sql'];
         
         $stmt = $this->pdo->prepare($sql);
         $stmt->execute(array_merge([$torneoId, $ronda], $ent['bind']));
@@ -1998,8 +2011,9 @@ class MesaAsignacionService
     public function rondaTieneResultadosEnMesas($torneoId, $ronda): bool
     {
         $ent = $this->whereEntidad();
+        $regOk = PartiresulEstatusSql::whereRegistradoUno();
         $stmt = $this->pdo->prepare(
-            "SELECT COUNT(*) FROM partiresul WHERE id_torneo = ? AND partida = ? AND mesa > 0 AND registrado = 1" . $ent['sql']
+            "SELECT COUNT(*) FROM partiresul WHERE id_torneo = ? AND partida = ? AND mesa > 0 AND {$regOk}" . $ent['sql']
         );
         $stmt->execute(array_merge([$torneoId, $ronda], $ent['bind']));
         return (int)$stmt->fetchColumn() > 0;

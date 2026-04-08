@@ -61,6 +61,31 @@ class InscritosHelper {
     }
 
     /**
+     * Alineado con lib/InscritosHelper: columna numérica segura en SQL (evita 1292 con texto en DOUBLE).
+     */
+    public static function sqlExprColumnaNumerica(string $col): string
+    {
+        if ($col === '' || !preg_match('/^[a-zA-Z0-9_.]+$/', $col)) {
+            throw new InvalidArgumentException('sqlExprColumnaNumerica: columna inválida');
+        }
+        return 'IF(CAST(' . $col . ' AS CHAR) REGEXP \'^-?[0-9]+(\\.[0-9]+)?$\', CAST(' . $col . ' AS DECIMAL(18,4)), 0)';
+    }
+
+    /**
+     * partiresul: comparación segura resultado1 > resultado2 (misma lógica que torneo web).
+     */
+    public static function sqlExprPartiresulResultado1MayorQueResultado2(string $alias = 'pr'): string
+    {
+        if ($alias === '' || !preg_match('/^[a-zA-Z_][a-zA-Z0-9_]*$/', $alias)) {
+            throw new InvalidArgumentException('sqlExprPartiresulResultado1MayorQueResultado2: alias inválido');
+        }
+        $r1 = self::sqlExprColumnaNumerica($alias . '.resultado1');
+        $r2 = self::sqlExprColumnaNumerica($alias . '.resultado2');
+
+        return "(({$r1}) > ({$r2}))";
+    }
+
+    /**
      * Condición SQL: inscrito confirmado (cuenta para rondas: pago verificado o inscripción en sitio).
      */
     const SQL_WHERE_CONFIRMADO = "estatus = 'confirmado'";

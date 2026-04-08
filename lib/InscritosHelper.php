@@ -107,6 +107,23 @@ class InscritosHelper {
         }
         return 'IF(CAST(' . $col . ' AS CHAR) REGEXP \'^-?[0-9]+(\\.[0-9]+)?$\', CAST(' . $col . ' AS DECIMAL(18,4)), 0)';
     }
+
+    /**
+     * partiresul: comparación segura resultado1 mayor que resultado2 (ganador de fila).
+     * Misma lógica que en estadísticas agregadas: no comparar DOUBLE con texto ('pendiente').
+     *
+     * @param string $alias Alias de tabla partiresul (ej. pr1)
+     */
+    public static function sqlExprPartiresulResultado1MayorQueResultado2(string $alias = 'pr'): string
+    {
+        if ($alias === '' || ! preg_match('/^[a-zA-Z_][a-zA-Z0-9_]*$/', $alias)) {
+            throw new \InvalidArgumentException('sqlExprPartiresulResultado1MayorQueResultado2: alias inválido');
+        }
+        $r1 = self::sqlExprColumnaNumerica($alias . '.resultado1');
+        $r2 = self::sqlExprColumnaNumerica($alias . '.resultado2');
+
+        return "(({$r1}) > ({$r2}))";
+    }
     
     /**
      * Obtiene el texto del estatus a partir del valor numérico
