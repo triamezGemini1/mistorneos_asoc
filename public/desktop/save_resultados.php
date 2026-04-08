@@ -23,6 +23,7 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST' || empty($_POST['guardar_resultados'])
 
 require_once __DIR__ . '/../../desktop/core/db_bridge.php';
 require_once __DIR__ . '/../../desktop/core/logica_torneo.php';
+require_once __DIR__ . '/../../lib/TorneoCampoNumerico.php';
 
 $torneo_id = (int)($_POST['torneo_id'] ?? 0);
 $partida = (int)($_POST['partida'] ?? 0);
@@ -63,13 +64,13 @@ try {
         foreach ($jugadores as $jugador) {
             $id = (int)($jugador['id'] ?? 0);
             if ($id <= 0) continue;
-            $resultado1 = (int)($jugador['resultado1'] ?? 0);
-            $resultado2 = (int)($jugador['resultado2'] ?? 0);
-            $sancion = min(80, max(0, (int)($jugador['sancion'] ?? 0)));
+            $resultado1 = TorneoCampoNumerico::intEstadistica($jugador['resultado1'] ?? 0);
+            $resultado2 = TorneoCampoNumerico::intEstadistica($jugador['resultado2'] ?? 0);
+            $sancion = min(80, max(0, TorneoCampoNumerico::intEstadistica($jugador['sancion'] ?? 0)));
             $ff = isset($jugador['ff']) && ($jugador['ff'] === '1' || $jugador['ff'] === true || $jugador['ff'] === 'on') ? 1 : 0;
-            $tarjeta = (int)($jugador['tarjeta'] ?? 0);
-            $chancleta = (int)($jugador['chancleta'] ?? 0);
-            $zapato = (int)($jugador['zapato'] ?? 0);
+            $tarjeta = TorneoCampoNumerico::codigoTarjeta($jugador['tarjeta'] ?? 0);
+            $chancleta = TorneoCampoNumerico::intEstadistica($jugador['chancleta'] ?? 0);
+            $zapato = TorneoCampoNumerico::intEstadistica($jugador['zapato'] ?? 0);
 
             if ($ff === 1 || $tarjeta === 3 || $tarjeta === 4) {
                 $efectividad = -$puntosTorneo;
@@ -94,14 +95,14 @@ try {
             $partiresul_id = (int)$partiresul_id;
             if ($partiresul_id <= 0) continue;
 
-            $puntos1 = (int)($resultado['resultado1'] ?? 0);
-            $puntos2 = (int)($resultado['resultado2'] ?? 0);
-            $efectividad = (int)($resultado['efectividad'] ?? 0);
+            $puntos1 = TorneoCampoNumerico::intEstadistica($resultado['resultado1'] ?? 0);
+            $puntos2 = TorneoCampoNumerico::intEstadistica($resultado['resultado2'] ?? 0);
+            $efectividad = TorneoCampoNumerico::intEstadistica($resultado['efectividad'] ?? 0);
             $ff = isset($resultado['ff']) ? 1 : 0;
-            $tarjeta = (int)($resultado['tarjeta'] ?? 0);
-            $sancion = (int)($resultado['sancion'] ?? 0);
-            $chancleta = (int)($resultado['chancleta'] ?? 0);
-            $zapato = (int)($resultado['zapato'] ?? 0);
+            $tarjeta = TorneoCampoNumerico::codigoTarjeta($resultado['tarjeta'] ?? 0);
+            $sancion = min(80, max(0, TorneoCampoNumerico::intEstadistica($resultado['sancion'] ?? 0)));
+            $chancleta = TorneoCampoNumerico::intEstadistica($resultado['chancleta'] ?? 0);
+            $zapato = TorneoCampoNumerico::intEstadistica($resultado['zapato'] ?? 0);
             $observaciones = trim((string)($resultado['observaciones'] ?? ''));
             $registrado = isset($resultado['registrado']) ? 1 : 0;
 

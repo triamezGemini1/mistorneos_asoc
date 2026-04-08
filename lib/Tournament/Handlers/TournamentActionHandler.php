@@ -138,9 +138,9 @@ final class TournamentActionHandler
                         }
                         if (! isset($controlPorCodigo[$codigoEquipo])) {
                             $controlPorCodigo[$codigoEquipo] = [
-                                'sancion' => (int) ($jugadorPost['sancion'] ?? 0),
+                                'sancion' => min(80, max(0, \TorneoCampoNumerico::intEstadistica($jugadorPost['sancion'] ?? 0))),
                                 'ff' => (isset($jugadorPost['ff']) && ($jugadorPost['ff'] == '1' || $jugadorPost['ff'] === true || $jugadorPost['ff'] === 'on')) ? 1 : 0,
-                                'tarjeta' => (int) ($jugadorPost['tarjeta'] ?? 0),
+                                'tarjeta' => \TorneoCampoNumerico::codigoTarjeta($jugadorPost['tarjeta'] ?? 0),
                             ];
                         }
                     }
@@ -188,7 +188,7 @@ final class TournamentActionHandler
 
             $hayTarjetaGraveEnMesa = false;
             foreach ($jugadores as $jugador) {
-                $tarjeta_temp = (int) ($jugador['tarjeta'] ?? 0);
+                $tarjeta_temp = \TorneoCampoNumerico::codigoTarjeta($jugador['tarjeta'] ?? 0);
                 if ($tarjeta_temp == 3 || $tarjeta_temp == 4) {
                     $hayTarjetaGraveEnMesa = true;
                     break;
@@ -222,10 +222,11 @@ final class TournamentActionHandler
                 $resultado1 = \TorneoCampoNumerico::intEstadistica($jugador['resultado1'] ?? 0);
                 $resultado2 = \TorneoCampoNumerico::intEstadistica($jugador['resultado2'] ?? 0);
                 $ff = isset($jugador['ff']) && ($jugador['ff'] == '1' || $jugador['ff'] === true || $jugador['ff'] === 'on') ? 1 : 0;
-                $tarjeta = (int) ($jugador['tarjeta'] ?? 0);
-                $sancion = (int) ($jugador['sancion'] ?? 0);
-                $chancleta = (int) ($jugador['chancleta'] ?? 0);
-                $zapato = (int) ($jugador['zapato'] ?? 0);
+                $tarjeta = \TorneoCampoNumerico::codigoTarjeta($jugador['tarjeta'] ?? 0);
+                $sancion = \TorneoCampoNumerico::intEstadistica($jugador['sancion'] ?? 0);
+                $sancion = min(80, max(0, $sancion));
+                $chancleta = \TorneoCampoNumerico::intEstadistica($jugador['chancleta'] ?? 0);
+                $zapato = \TorneoCampoNumerico::intEstadistica($jugador['zapato'] ?? 0);
 
                 if ($resultado1 < 0 || $resultado2 < 0) {
                     throw new Exception('Los puntos (resultado1/resultado2) no pueden ser negativos (jugador ' . ($index + 1) . ').');

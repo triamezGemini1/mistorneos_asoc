@@ -23,6 +23,10 @@
  * V3.3 — Tras formar cada mesa (4 jugadores de equipos distintos), se ordenan asientos 1–4
  * (secuencia) por rendimiento individual (mismo criterio: ganados, efectividad, puntos, perdidos);
  * el de peor rendimiento queda en la última secuencia, sin mezclar equipos en la mesa.
+ *
+ * Sanciones / partiresul: los valores numéricos se normalizan en la app con {@see TorneoCampoNumerico}
+ * y {@see SancionesHelper} (mismo motor que Individual). No usar el texto 'pendiente' como valor
+ * de columna DOUBLE; el listado de estados de inscripción es independiente (InscritosHelper).
  */
 
 if (!class_exists('DB', false)) {

@@ -3,8 +3,9 @@
 declare(strict_types=1);
 
 /**
- * Normaliza valores hacia columnas INT/DOUBLE en torneos (resultados, estadísticas).
- * Evita persistir cadenas como 'pendiente' que rompen MySQL en modo estricto.
+ * Motor numérico unificado (Individual, Parejas, Equipos, QR, desktop).
+ * Normaliza hacia columnas INT/DOUBLE en torneos (resultados, sanciones, tarjetas).
+ * Cualquier texto no numérico o marcador legacy ('pendiente', etc.) → 0 (mismo criterio en toda la app).
  */
 final class TorneoCampoNumerico
 {
@@ -25,5 +26,24 @@ final class TorneoCampoNumerico
         }
 
         return 0;
+    }
+
+    /**
+     * Valor para aritmética (restas de sanción, efectividad): mismo saneamiento que intEstadistica.
+     */
+    public static function floatCalculo(mixed $v): float
+    {
+        return (float) self::intEstadistica($v);
+    }
+
+    /**
+     * Códigos de tarjeta en partiresul/inscritos: 0 ninguna, 1 amarilla, 3 roja, 4 negra.
+     * Cualquier otro número o texto → 0.
+     */
+    public static function codigoTarjeta(mixed $v): int
+    {
+        $n = self::intEstadistica($v);
+
+        return in_array($n, [0, 1, 3, 4], true) ? $n : 0;
     }
 }

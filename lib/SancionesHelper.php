@@ -13,7 +13,12 @@
  */
 require_once __DIR__ . '/InscritosHelper.php';
 require_once __DIR__ . '/PartiresulEstatusSql.php';
+require_once __DIR__ . '/TorneoCampoNumerico.php';
 
+/**
+ * Disciplina / tarjetas: misma base numérica que Individual ({@see TorneoCampoNumerico}).
+ * Nunca operar con valores crudos de BD sin normalizar (evita 'pendiente' en columnas DOUBLE).
+ */
 class SancionesHelper {
 
     /** Códigos de tarjeta (inscritos.tarjeta, partiresul.tarjeta) */
@@ -32,18 +37,19 @@ class SancionesHelper {
     /**
      * Procesa sanción y tarjeta para un jugador.
      *
-     * @param int $sancion Puntos de sanción (0-80)
-     * @param int $tarjetaForm Valor de tarjeta enviado en el formulario (0, 1, 3, 4)
-     * @param int $tarjetaInscritos Valor actual de inscritos.tarjeta para el jugador
+     * @param mixed $sancion Puntos de sanción (0-80); texto/NULL/'pendiente' → 0 vía {@see TorneoCampoNumerico}
+     * @param mixed $tarjetaForm Tarjeta en formulario (0, 1, 3, 4)
+     * @param mixed $tarjetaInscritos Tarjeta previa (inscritos o partidas anteriores)
      * @return array ['tarjeta' => int, 'sancion_para_calculo' => int, 'sancion_guardar' => int]
      *   - tarjeta: valor final a guardar en partiresul (0, 1, 3, 4)
      *   - sancion_para_calculo: puntos a restar en resultado1 para efectividad (40 → 0)
      *   - sancion_guardar: valor a guardar en partiresul.sancion (para registro)
      */
-    public static function procesar(int $sancion, int $tarjetaForm, int $tarjetaInscritos): array {
-        $sancion = (int)max(0, min($sancion, self::SANCION_ROJA));
-        $tarjetaInscritos = (int)$tarjetaInscritos;
-        $tarjetaForm = (int)$tarjetaForm;
+    public static function procesar(mixed $sancion, mixed $tarjetaForm, mixed $tarjetaInscritos): array {
+        $sancion = TorneoCampoNumerico::intEstadistica($sancion);
+        $sancion = (int) max(0, min($sancion, self::SANCION_ROJA));
+        $tarjetaInscritos = TorneoCampoNumerico::codigoTarjeta($tarjetaInscritos);
+        $tarjetaForm = TorneoCampoNumerico::codigoTarjeta($tarjetaForm);
 
         $tarjeta = $tarjetaForm;
         $sancionParaCalculo = $sancion;

@@ -213,8 +213,9 @@ try {
             $sancion_guardar = 0;
             $resultado1_ajust = $resultado1;
         } else {
-            $tarjeta_form = (int)($j['tarjeta'] ?? 0);
-            $sancion_input = (int)($j['sancion'] ?? 0);
+            $tarjeta_form = TorneoCampoNumerico::codigoTarjeta($j['tarjeta'] ?? 0);
+            $sancion_input = TorneoCampoNumerico::intEstadistica($j['sancion'] ?? 0);
+            $sancion_input = min(80, max(0, $sancion_input));
             $tarjeta_inscritos = (int)($tarjeta_previa[$id_usuario] ?? 0);
             $procesado = SancionesHelper::procesar($sancion_input, $tarjeta_form, $tarjeta_inscritos);
             $tarjeta = $procesado['tarjeta'];
