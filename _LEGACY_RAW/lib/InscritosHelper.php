@@ -92,6 +92,20 @@ class InscritosHelper {
         'confirmado' => 1,
         'retirado' => 4
     ];
+
+    /**
+     * Expresión SQL (MySQL): columna de inscritos como DECIMAL; texto no numérico (p. ej. 'pendiente') → 0.
+     * Evita SQLSTATE 22007/1292 con sql_mode estricto en SUM/CAST/ORDER BY.
+     *
+     * @param string $col Nombre calificado, p. ej. "ganados", "i.puntos"
+     */
+    public static function sqlExprColumnaNumerica(string $col): string
+    {
+        if ($col === '' || !preg_match('/^[a-zA-Z0-9_.]+$/', $col)) {
+            throw new InvalidArgumentException('sqlExprColumnaNumerica: columna inválida');
+        }
+        return 'IF(CAST(' . $col . ' AS CHAR) REGEXP \'^-?[0-9]+(\\.[0-9]+)?$\', CAST(' . $col . ' AS DECIMAL(18,4)), 0)';
+    }
     
     /**
      * Obtiene el texto del estatus a partir del valor numérico

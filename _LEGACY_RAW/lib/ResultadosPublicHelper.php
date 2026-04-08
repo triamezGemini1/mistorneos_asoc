@@ -2,6 +2,7 @@
 declare(strict_types=1);
 
 require_once __DIR__ . '/ResultadosReporteData.php';
+require_once __DIR__ . '/InscritosHelper.php';
 
 /**
  * ResultadosPublicHelper - Datos para reportes públicos de torneos
@@ -111,9 +112,12 @@ class ResultadosPublicHelper
                 u.nombre as nombre_completo, u.username, u.sexo, u.cedula,
                 c.id as club_id_from_join, c.nombre as club_nombre, c.logo as club_logo,
                 0 as ganadas_por_forfait";
+            $ig = InscritosHelper::sqlExprColumnaNumerica('i.ganados');
+            $ie = InscritosHelper::sqlExprColumnaNumerica('i.efectividad');
+            $ip = InscritosHelper::sqlExprColumnaNumerica('i.puntos');
             $sql .= " FROM inscritos i INNER JOIN usuarios u ON i.id_usuario = u.id LEFT JOIN clubes c ON i.id_club = c.id
                 WHERE i.torneo_id = ? AND (i.estatus IS NULL OR (i.estatus != 4 AND i.estatus != 'retirado'))
-                ORDER BY COALESCE(i.id_club, -1) ASC, CAST(i.ganados AS SIGNED) DESC, CAST(i.efectividad AS SIGNED) DESC, CAST(i.puntos AS SIGNED) DESC";
+                ORDER BY COALESCE(i.id_club, -1) ASC, $ig DESC, $ie DESC, $ip DESC";
 
             $stmt = $pdo->prepare($sql);
             $stmt->execute([$torneo_id]);

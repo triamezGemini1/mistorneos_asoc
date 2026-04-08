@@ -16,6 +16,7 @@ require_once __DIR__ . '/torneo_gestion/actions_inscritos.php';
 require_once __DIR__ . '/torneo_gestion/render_views.php';
 require_once __DIR__ . '/../lib/PanelTorneoViewData.php';
 require_once __DIR__ . '/../lib/ResultadosPartidaEfectividad.php';
+require_once __DIR__ . '/../lib/InscritosHelper.php';
 require_once __DIR__ . '/torneo_gestion/resultados_posiciones.php';
 
 $current_user = Auth::user();
@@ -2740,13 +2741,18 @@ function actualizarEstadisticasEquipos($torneo_id) {
     
     // Obtener estadísticas agregadas por codigo_equipo desde inscritos
     // Suma de puntos, ganados, perdidos, efectividad (suma de todas las efectividades), sanciones
+    $nP = InscritosHelper::sqlExprColumnaNumerica('puntos');
+    $nG = InscritosHelper::sqlExprColumnaNumerica('ganados');
+    $nPe = InscritosHelper::sqlExprColumnaNumerica('perdidos');
+    $nE = InscritosHelper::sqlExprColumnaNumerica('efectividad');
+    $nS = InscritosHelper::sqlExprColumnaNumerica('sancion');
     $sql = "SELECT 
                 codigo_equipo,
-                SUM(puntos) as puntos_equipo,
-                SUM(ganados) as ganados_equipo,
-                SUM(perdidos) as perdidos_equipo,
-                SUM(efectividad) as efectividad_equipo,
-                SUM(sancion) as sancion_equipo,
+                SUM($nP) as puntos_equipo,
+                SUM($nG) as ganados_equipo,
+                SUM($nPe) as perdidos_equipo,
+                SUM($nE) as efectividad_equipo,
+                SUM($nS) as sancion_equipo,
                 COUNT(*) as total_jugadores
             FROM inscritos
             WHERE torneo_id = ? 
@@ -2865,14 +2871,17 @@ function asignarNumeroSecuencialPorEquipo($torneo_id) {
     $stmtEquipos->execute([$torneo_id]);
     $codigos = $stmtEquipos->fetchAll(PDO::FETCH_COLUMN);
 
+    $og = InscritosHelper::sqlExprColumnaNumerica('ganados');
+    $oe = InscritosHelper::sqlExprColumnaNumerica('efectividad');
+    $op = InscritosHelper::sqlExprColumnaNumerica('puntos');
     $stmtJugadores = $pdo->prepare("
         SELECT id
         FROM inscritos
         WHERE torneo_id = ? AND codigo_equipo = ? AND estatus != 4
         ORDER BY 
-            CAST(ganados AS SIGNED) DESC,
-            CAST(efectividad AS SIGNED) DESC,
-            CAST(puntos AS SIGNED) DESC,
+            $og DESC,
+            $oe DESC,
+            $op DESC,
             id_usuario ASC
     ");
     $stmtUpdateNumero = $pdo->prepare("UPDATE inscritos SET numero = ? WHERE id = ?");
@@ -2962,15 +2971,18 @@ function recalcularPosiciones($torneo_id) {
         // Obtener inscritos ordenados por: 1. ganados DESC, 2. efectividad DESC, 3. puntos DESC
         // Filtro: estatus != 4 (4 = retirado) porque estatus es numérico
         // Asegurar que los valores sean numéricos en el ORDER BY usando CAST
+        $rg = InscritosHelper::sqlExprColumnaNumerica('ganados');
+        $re = InscritosHelper::sqlExprColumnaNumerica('efectividad');
+        $rp = InscritosHelper::sqlExprColumnaNumerica('puntos');
         $stmt = $pdo->prepare("SELECT id, id_usuario, 
-                               CAST(ganados AS SIGNED) as ganados, 
-                               CAST(efectividad AS SIGNED) as efectividad, 
-                               CAST(puntos AS SIGNED) as puntos
+                               $rg as ganados, 
+                               $re as efectividad, 
+                               $rp as puntos
                                FROM inscritos 
                                WHERE torneo_id = ? AND estatus != 4
-                               ORDER BY CAST(ganados AS SIGNED) DESC, 
-                                        CAST(efectividad AS SIGNED) DESC, 
-                                        CAST(puntos AS SIGNED) DESC");
+                               ORDER BY $rg DESC, 
+                                        $re DESC, 
+                                        $rp DESC");
         $stmt->execute([$torneo_id]);
         $inscritos = $stmt->fetchAll(PDO::FETCH_ASSOC);
         
@@ -3141,12 +3153,15 @@ function recalcularPosicionesParejasPorEquipo($torneo_id, $tipoRanking = 2) {
     $stmt->execute([$torneo_id]);
 
     // Clasificación por pareja (codigo_equipo), NO por jugador.
+    $pg = InscritosHelper::sqlExprColumnaNumerica('ganados');
+    $pe = InscritosHelper::sqlExprColumnaNumerica('efectividad');
+    $pp = InscritosHelper::sqlExprColumnaNumerica('puntos');
     $stmt = $pdo->prepare("
         SELECT
             codigo_equipo,
-            MAX(CAST(ganados AS SIGNED)) AS ganados,
-            MAX(CAST(efectividad AS SIGNED)) AS efectividad,
-            MAX(CAST(puntos AS SIGNED)) AS puntos
+            MAX($pg) AS ganados,
+            MAX($pe) AS efectividad,
+            MAX($pp) AS puntos
         FROM inscritos
         WHERE torneo_id = ?
           AND estatus != 4
@@ -3155,9 +3170,9 @@ function recalcularPosicionesParejasPorEquipo($torneo_id, $tipoRanking = 2) {
           AND codigo_equipo != '000-000'
         GROUP BY codigo_equipo
         ORDER BY
-            MAX(CAST(ganados AS SIGNED)) DESC,
-            MAX(CAST(efectividad AS SIGNED)) DESC,
-            MAX(CAST(puntos AS SIGNED)) DESC,
+            MAX($pg) DESC,
+            MAX($pe) DESC,
+            MAX($pp) DESC,
             codigo_equipo ASC
     ");
     $stmt->execute([$torneo_id]);

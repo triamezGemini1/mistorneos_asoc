@@ -11,6 +11,7 @@
  */
 
 require_once __DIR__ . '/db.php';
+require_once __DIR__ . '/../lib/InscritosHelper.php';
 
 class MesaAsignacionEquiposService
 {
@@ -287,6 +288,9 @@ class MesaAsignacionEquiposService
      */
     private function crearMesasDesdeConsulta($torneoId, $condicionClasiequi) {
         $pdo = $this->pdo;
+        $ig = InscritosHelper::sqlExprColumnaNumerica('i.ganados');
+        $ie = InscritosHelper::sqlExprColumnaNumerica('i.efectividad');
+        $ip = InscritosHelper::sqlExprColumnaNumerica('i.puntos');
         $sql = "
             SELECT 
                 i.id_usuario,
@@ -305,9 +309,9 @@ class MesaAsignacionEquiposService
               i.numero ASC,
               i.posicion ASC,
               i.clasiequi ASC,
-              CAST(i.ganados AS SIGNED) DESC,
-              CAST(i.efectividad AS SIGNED) DESC,
-              CAST(i.puntos AS SIGNED) DESC,
+              $ig DESC,
+              $ie DESC,
+              $ip DESC,
               i.id_usuario ASC
         ";
         $stmt = $pdo->prepare($sql);
