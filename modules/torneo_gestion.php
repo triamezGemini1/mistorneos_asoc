@@ -5639,6 +5639,16 @@ function actualizarEstadisticasInscritos($torneo_id) {
     // se pone a 0 únicamente a los inscritos que no tienen partidas registradas.
     
     // 1) Actualizar inscritos que tienen partidas: sumas desde partiresul; tarjeta = valor de la ÚLTIMA tarjeta (por partida más reciente)
+    // partiresul.resultado* u otras columnas pueden traer texto no numérico (p. ej. 'pendiente') en datos legacy/UI: forzar solo dígitos
+    // para evitar SQLSTATE[22007]/1292 en modo estricto al comparar o agregar.
+    $prR1 = "IF(CAST(resultado1 AS CHAR) REGEXP '^-?[0-9]+(\\.[0-9]+)?$', CAST(resultado1 AS DECIMAL(18,4)), 0)";
+    $prR2 = "IF(CAST(resultado2 AS CHAR) REGEXP '^-?[0-9]+(\\.[0-9]+)?$', CAST(resultado2 AS DECIMAL(18,4)), 0)";
+    $prInt = static function (string $col): string {
+        return "IF(CAST({$col} AS CHAR) REGEXP '^-?[0-9]+$', CAST({$col} AS SIGNED), 0)";
+    };
+    $prDec = static function (string $col): string {
+        return "IF(CAST({$col} AS CHAR) REGEXP '^-?[0-9]+(\\.[0-9]+)?$', CAST({$col} AS DECIMAL(18,4)), 0)";
+    };
     $sqlUpdate = "
         UPDATE inscritos i
         INNER JOIN (
@@ -5652,20 +5662,23 @@ function actualizarEstadisticasInscritos($torneo_id) {
                 SUM(sancion) AS sancion,
                 SUM(chancletas) AS chancletas,
                 SUM(zapatos) AS zapatos,
-                CAST(SUBSTRING_INDEX(GROUP_CONCAT(COALESCE(por_ronda.tarjeta, 0) ORDER BY por_ronda.partida DESC SEPARATOR ','), ',', 1) AS UNSIGNED) AS tarjeta
+                CAST(SUBSTRING_INDEX(GROUP_CONCAT(
+                    IF(CAST(por_ronda.tarjeta AS CHAR) REGEXP '^[0-9]+$', CAST(por_ronda.tarjeta AS UNSIGNED), 0)
+                    ORDER BY por_ronda.partida DESC SEPARATOR ','
+                ), ',', 1) AS UNSIGNED) AS tarjeta
             FROM (
                 SELECT
                     id_usuario,
                     id_torneo,
                     partida,
-                    MAX(CASE WHEN resultado1 > resultado2 THEN 1 ELSE 0 END) AS ganado,
-                    MAX(CASE WHEN resultado1 < resultado2 THEN 1 ELSE 0 END) AS perdido,
-                    MAX(COALESCE(efectividad, 0)) AS efectividad,
-                    MAX(COALESCE(resultado1, 0)) AS puntos,
-                    MAX(COALESCE(sancion, 0)) AS sancion,
-                    MAX(COALESCE(chancleta, 0)) AS chancletas,
-                    MAX(COALESCE(zapato, 0)) AS zapatos,
-                    MAX(COALESCE(tarjeta, 0)) AS tarjeta
+                    MAX(CASE WHEN {$prR1} > {$prR2} THEN 1 ELSE 0 END) AS ganado,
+                    MAX(CASE WHEN {$prR1} < {$prR2} THEN 1 ELSE 0 END) AS perdido,
+                    MAX({$prDec('efectividad')}) AS efectividad,
+                    MAX({$prR1}) AS puntos,
+                    MAX({$prInt('sancion')}) AS sancion,
+                    MAX({$prInt('chancleta')}) AS chancletas,
+                    MAX({$prInt('zapato')}) AS zapatos,
+                    MAX({$prInt('tarjeta')}) AS tarjeta
                 FROM partiresul
                 WHERE id_torneo = ? AND registrado = 1
                 GROUP BY id_usuario, id_torneo, partida
