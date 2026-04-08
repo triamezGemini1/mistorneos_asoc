@@ -47,18 +47,22 @@ class InscritosHelper {
     /**
      * Condición SQL: inscrito activo para conteo y rondas (no retirado).
      * Incluye pendiente (0), confirmado (1), solvente (2), no_solvente (3); excluye retirado (4).
-     * Necesario cuando la columna es INT: estatus != 'retirado' excluiría 0 en MySQL.
+     *
+     * Importante (MySQL modo estricto): NO mezclar `estatus IN (0,1,2,3) OR estatus IN ('pendiente',...)`
+     * cuando la columna es INT/TINYINT: MySQL puede convertir 'pendiente' a DOUBLE y disparar 1292.
+     * Misma estrategia que Parejas ({@see MesaAsignacionParejasFijasService::SQL_ESTATUS_ACTIVO_ALIAS_I}):
+     * comparar siempre vía CAST a CHAR.
      */
-    const SQL_WHERE_ACTIVO = "(estatus IN (0, 1, 2, 3) OR estatus IN ('pendiente', 'confirmado', 'solvente', 'no_solvente'))";
+    const SQL_WHERE_ACTIVO = "(CAST(estatus AS CHAR) IN ('0','1','2','3','pendiente','confirmado','solvente','no_solvente'))";
 
     /**
-     * Misma condición que SQL_WHERE_ACTIVO con alias de tabla (ej: 'i' → "i.estatus IN ...").
+     * Misma condición que SQL_WHERE_ACTIVO con alias de tabla (ej: 'i' → "i.estatus ...").
      * @param string $alias Alias de la tabla inscritos (ej: 'i'). Vacío = sin alias.
      */
     public static function sqlWhereActivoConAlias($alias = '')
     {
         $e = $alias ? $alias . '.' : '';
-        return "(" . $e . "estatus IN (0, 1, 2, 3) OR " . $e . "estatus IN ('pendiente', 'confirmado', 'solvente', 'no_solvente'))";
+        return '(CAST(' . $e . 'estatus AS CHAR) IN (\'0\',\'1\',\'2\',\'3\',\'pendiente\',\'confirmado\',\'solvente\',\'no_solvente\'))';
     }
 
     /**
