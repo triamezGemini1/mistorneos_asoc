@@ -7,6 +7,8 @@ declare(strict_types=1);
  *
  * Fuente única: app/Core/MesaRepository.php carga este archivo (no el duplicado bajo app/Core/).
  */
+require_once __DIR__ . '/../PartiresulEstatusSql.php';
+
 trait MesaRepositoryPersistTrait
 {
     /**
@@ -238,10 +240,11 @@ trait MesaRepositoryPersistTrait
 
     public function todasLasMesasCompletas(int $torneoId, int $ronda): bool
     {
+        $noReg = PartiresulEstatusSql::whereRegistradoNoCompleto();
         $sql = 'SELECT COUNT(DISTINCT mesa) as mesas_incompletas
                 FROM partiresul
                 WHERE id_torneo = ? AND partida = ? AND mesa > 0
-                AND (registrado = 0 OR registrado IS NULL)';
+                AND ' . $noReg;
         $stmt = $this->pdo->prepare($sql);
         $stmt->execute([$torneoId, $ronda]);
         $result = $stmt->fetch(PDO::FETCH_ASSOC);
@@ -251,10 +254,11 @@ trait MesaRepositoryPersistTrait
 
     public function contarMesasIncompletas(int $torneoId, int $ronda): int
     {
+        $noReg = PartiresulEstatusSql::whereRegistradoNoCompleto();
         $sql = 'SELECT COUNT(DISTINCT mesa) as mesas_incompletas
                 FROM partiresul
                 WHERE id_torneo = ? AND partida = ? AND mesa > 0
-                AND (registrado = 0 OR registrado IS NULL)';
+                AND ' . $noReg;
         $stmt = $this->pdo->prepare($sql);
         $stmt->execute([$torneoId, $ronda]);
         $result = $stmt->fetch(PDO::FETCH_ASSOC);
@@ -264,8 +268,9 @@ trait MesaRepositoryPersistTrait
 
     public function rondaTieneResultadosEnMesas(int $torneoId, int $ronda): bool
     {
+        $regOk = PartiresulEstatusSql::whereRegistradoUno();
         $stmt = $this->pdo->prepare(
-            'SELECT COUNT(*) FROM partiresul WHERE id_torneo = ? AND partida = ? AND mesa > 0 AND registrado = 1'
+            "SELECT COUNT(*) FROM partiresul WHERE id_torneo = ? AND partida = ? AND mesa > 0 AND {$regOk}"
         );
         $stmt->execute([$torneoId, $ronda]);
 

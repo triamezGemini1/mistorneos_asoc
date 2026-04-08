@@ -121,6 +121,21 @@ final class PartiresulEstatusSql
     }
 
     /**
+     * Mesa/partida sin resultado guardado (equivalente a registrado ≠ 1 completo).
+     * No usar `(registrado = 0 OR registrado IS NULL)`: si la columna es VARCHAR con 'pendiente',
+     * `registrado = 0` fuerza conversión a número y dispara 1292 (p. ej. al generar la siguiente ronda).
+     */
+    public static function whereRegistradoNoCompleto(string $alias = ''): string
+    {
+        if ($alias !== '' && !preg_match('/^[a-zA-Z_][a-zA-Z0-9_]*$/', $alias)) {
+            throw new InvalidArgumentException('whereRegistradoNoCompleto: alias inválido');
+        }
+        $c = $alias === '' ? 'registrado' : $alias . '.registrado';
+
+        return "(COALESCE(TRIM(CAST({$c} AS CHAR)), '') <> '1')";
+    }
+
+    /**
      * Comparación segura ff = 0 (evita 1292 si ff es VARCHAR con texto basura).
      *
      * @param string $alias Alias de tabla (ej. pr1)

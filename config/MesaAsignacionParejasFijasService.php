@@ -11,6 +11,7 @@ declare(strict_types=1);
  */
 require_once __DIR__ . '/db.php';
 require_once __DIR__ . '/../lib/InscritosHelper.php';
+require_once __DIR__ . '/../lib/PartiresulEstatusSql.php';
 require_once __DIR__ . '/../lib/ParejasFijasHelper.php';
 
 class MesaAsignacionParejasFijasService
@@ -872,10 +873,11 @@ class MesaAsignacionParejasFijasService
 
     public function todasLasMesasCompletas(int $torneoId, int $ronda): bool
     {
+        $noReg = PartiresulEstatusSql::whereRegistradoNoCompleto();
         $stmt = $this->pdo->prepare("
             SELECT COUNT(DISTINCT mesa) AS mesas_incompletas
             FROM partiresul
-            WHERE id_torneo = ? AND partida = ? AND mesa > 0 AND (registrado = 0 OR registrado IS NULL)
+            WHERE id_torneo = ? AND partida = ? AND mesa > 0 AND {$noReg}
         ");
         $stmt->execute([$torneoId, $ronda]);
         $row = $stmt->fetch(PDO::FETCH_ASSOC);
@@ -884,10 +886,11 @@ class MesaAsignacionParejasFijasService
 
     public function contarMesasIncompletas(int $torneoId, int $ronda): int
     {
+        $noReg = PartiresulEstatusSql::whereRegistradoNoCompleto();
         $stmt = $this->pdo->prepare("
             SELECT COUNT(DISTINCT mesa) AS mesas_incompletas
             FROM partiresul
-            WHERE id_torneo = ? AND partida = ? AND mesa > 0 AND (registrado = 0 OR registrado IS NULL)
+            WHERE id_torneo = ? AND partida = ? AND mesa > 0 AND {$noReg}
         ");
         $stmt->execute([$torneoId, $ronda]);
         $row = $stmt->fetch(PDO::FETCH_ASSOC);

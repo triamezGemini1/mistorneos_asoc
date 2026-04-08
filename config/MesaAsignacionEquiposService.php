@@ -29,6 +29,7 @@ if (!class_exists('DB', false)) {
     require_once __DIR__ . '/db.php';
 }
 require_once __DIR__ . '/../lib/InscritosHelper.php';
+require_once __DIR__ . '/../lib/PartiresulEstatusSql.php';
 
 class MesaAsignacionEquiposService
 {
@@ -1402,10 +1403,11 @@ class MesaAsignacionEquiposService
      */
     public function todasLasMesasCompletas($torneoId, $ronda)
     {
+        $noReg = PartiresulEstatusSql::whereRegistradoNoCompleto();
         $sql = "SELECT COUNT(DISTINCT mesa) as mesas_incompletas
                 FROM partiresul
                 WHERE id_torneo = ? AND partida = ? AND mesa > 0
-                AND (registrado = 0 OR registrado IS NULL)";
+                AND {$noReg}";
         
         $stmt = $this->pdo->prepare($sql);
         $stmt->execute([$torneoId, $ronda]);
@@ -1419,10 +1421,11 @@ class MesaAsignacionEquiposService
      */
     public function contarMesasIncompletas($torneoId, $ronda)
     {
+        $noReg = PartiresulEstatusSql::whereRegistradoNoCompleto();
         $sql = "SELECT COUNT(DISTINCT mesa) as mesas_incompletas
                 FROM partiresul
                 WHERE id_torneo = ? AND partida = ? AND mesa > 0
-                AND (registrado = 0 OR registrado IS NULL)";
+                AND {$noReg}";
         
         $stmt = $this->pdo->prepare($sql);
         $stmt->execute([$torneoId, $ronda]);

@@ -11,6 +11,9 @@
  * - Tarjeta negra (4): Al guardar resultados, el jugador se marca como retirado del torneo (inscritos.estatus=4).
  *   No participará en rondas futuras; se asume como BYE para el resto del torneo.
  */
+require_once __DIR__ . '/InscritosHelper.php';
+require_once __DIR__ . '/PartiresulEstatusSql.php';
+
 class SancionesHelper {
 
     /** Códigos de tarjeta (inscritos.tarjeta, partiresul.tarjeta) */
@@ -110,8 +113,9 @@ class SancionesHelper {
             return $result;
         }
         $placeholders = implode(',', array_fill(0, count($id_usuarios), '?'));
+        $tx = InscritosHelper::sqlExprColumnaNumerica('tarjeta');
         $stmt = $pdo->prepare("
-            SELECT id_usuario, COALESCE(tarjeta, 0) AS tarjeta
+            SELECT id_usuario, {$tx} AS tarjeta
             FROM inscritos
             WHERE torneo_id = ? AND id_usuario IN ($placeholders)
         ");
@@ -135,10 +139,12 @@ class SancionesHelper {
             return $result;
         }
         $placeholders = implode(',', array_fill(0, count($id_usuarios), '?'));
+        $tx = InscritosHelper::sqlExprColumnaNumerica('tarjeta');
+        $regOk = PartiresulEstatusSql::whereRegistradoUno();
         $stmt = $pdo->prepare("
-            SELECT id_usuario, MAX(COALESCE(tarjeta, 0)) AS tarjeta
+            SELECT id_usuario, MAX({$tx}) AS tarjeta
             FROM partiresul
-            WHERE id_torneo = ? AND partida < ? AND id_usuario IN ($placeholders) AND registrado = 1
+            WHERE id_torneo = ? AND partida < ? AND id_usuario IN ($placeholders) AND {$regOk}
             GROUP BY id_usuario
         ");
         $stmt->execute(array_merge([$torneo_id, $partida_actual], array_values($id_usuarios)));
