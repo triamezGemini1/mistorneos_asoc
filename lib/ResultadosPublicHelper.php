@@ -187,13 +187,16 @@ class ResultadosPublicHelper
     public static function getResultadosEquiposResumido(PDO $pdo, int $torneo_id, int $limit = 50, int $offset = 0): array
     {
         try {
+            $ordG = InscritosHelper::sqlExprColumnaNumerica('e.ganados');
+            $ordE = InscritosHelper::sqlExprColumnaNumerica('e.efectividad');
+            $ordP = InscritosHelper::sqlExprColumnaNumerica('e.puntos');
             $stmt = $pdo->prepare("
                 SELECT e.id as equipo_id, e.codigo_equipo, e.nombre_equipo, e.id_club, c.nombre as club_nombre,
                     e.posicion, e.ganados, e.perdidos, e.efectividad, e.puntos, e.sancion, e.gff
                 FROM equipos e
                 LEFT JOIN clubes c ON e.id_club = c.id
                 WHERE e.id_torneo = ? AND e.estatus = 0 AND e.codigo_equipo IS NOT NULL AND e.codigo_equipo != ''
-                ORDER BY e.ganados DESC, e.efectividad DESC, e.puntos DESC, e.codigo_equipo ASC
+                ORDER BY $ordG DESC, $ordE DESC, $ordP DESC, e.codigo_equipo ASC
                 LIMIT " . (int)$limit . " OFFSET " . (int)$offset
             );
             $stmt->execute([$torneo_id]);
@@ -207,6 +210,11 @@ class ResultadosPublicHelper
                 );
                 $stmt->execute([$torneo_id]);
                 $cods = $stmt->fetchAll(PDO::FETCH_COLUMN);
+                $sxG = InscritosHelper::sqlExprColumnaNumerica('ganados');
+                $sxPe = InscritosHelper::sqlExprColumnaNumerica('perdidos');
+                $sxE = InscritosHelper::sqlExprColumnaNumerica('efectividad');
+                $sxP = InscritosHelper::sqlExprColumnaNumerica('puntos');
+                $st3 = $pdo->prepare("SELECT SUM($sxG) g, SUM($sxPe) p, SUM($sxE) ef, SUM($sxP) pt FROM inscritos WHERE torneo_id = ? AND codigo_equipo = ? AND (estatus IS NULL OR (estatus != 4 AND estatus != 'retirado'))");
                 foreach ($cods as $cod) {
                     $st2 = $pdo->prepare("
                         SELECT i.codigo_equipo, CONCAT('Equipo ', i.codigo_equipo) as nombre_equipo, i.id_club, c.nombre as club_nombre
@@ -216,7 +224,6 @@ class ResultadosPublicHelper
                     $st2->execute([$torneo_id, $cod]);
                     $eq = $st2->fetch(PDO::FETCH_ASSOC);
                     if ($eq) {
-                        $st3 = $pdo->prepare("SELECT SUM(ganados) g, SUM(perdidos) p, SUM(efectividad) ef, SUM(puntos) pt FROM inscritos WHERE torneo_id = ? AND codigo_equipo = ? AND (estatus IS NULL OR (estatus != 4 AND estatus != 'retirado'))");
                         $st3->execute([$torneo_id, $cod]);
                         $s = $st3->fetch(PDO::FETCH_ASSOC);
                         $equipos[] = [

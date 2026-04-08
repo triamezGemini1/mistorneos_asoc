@@ -7,6 +7,8 @@ namespace Tournament\Handlers;
 use PDO;
 use PDOException;
 
+require_once __DIR__ . '/../../InscritosHelper.php';
+
 /**
  * Ranking de equipos: lectura desde tabla equipos o agregados SUM desde inscritos,
  * ordenación (ganados, efectividad, puntos, código) y asignación de posiciones.
@@ -29,6 +31,9 @@ final class TeamPerformanceHandler
         $pdo = \DB::pdo();
         $incluirJugadores = strtolower($modalidad) === 'detallado';
 
+        $ordG = \InscritosHelper::sqlExprColumnaNumerica('e.ganados');
+        $ordE = \InscritosHelper::sqlExprColumnaNumerica('e.efectividad');
+        $ordP = \InscritosHelper::sqlExprColumnaNumerica('e.puntos');
         $sqlEquipos = "
             SELECT 
                 e.id as equipo_id,
@@ -50,9 +55,9 @@ final class TeamPerformanceHandler
                 AND e.codigo_equipo IS NOT NULL
                 AND e.codigo_equipo != ''
             ORDER BY 
-                e.ganados DESC,
-                e.efectividad DESC,
-                e.puntos DESC,
+                $ordG DESC,
+                $ordE DESC,
+                $ordP DESC,
                 e.codigo_equipo ASC
         ";
 
@@ -170,13 +175,18 @@ final class TeamPerformanceHandler
                 continue;
             }
 
+            $sxG = \InscritosHelper::sqlExprColumnaNumerica('i.ganados');
+            $sxPe = \InscritosHelper::sqlExprColumnaNumerica('i.perdidos');
+            $sxE = \InscritosHelper::sqlExprColumnaNumerica('i.efectividad');
+            $sxP = \InscritosHelper::sqlExprColumnaNumerica('i.puntos');
+            $sxS = \InscritosHelper::sqlExprColumnaNumerica('i.sancion');
             $sqlStats = "
                 SELECT 
-                    SUM(i.ganados) as ganados,
-                    SUM(i.perdidos) as perdidos,
-                    SUM(i.efectividad) as efectividad,
-                    SUM(i.puntos) as puntos,
-                    SUM(i.sancion) as sancion,
+                    SUM($sxG) as ganados,
+                    SUM($sxPe) as perdidos,
+                    SUM($sxE) as efectividad,
+                    SUM($sxP) as puntos,
+                    SUM($sxS) as sancion,
                     MIN(i.id_club) as id_club
                 FROM inscritos i
                 WHERE i.torneo_id = ? 

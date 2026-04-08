@@ -57,6 +57,17 @@ class InscritosPartiresulHelper {
      */
     public static function obtenerEstadisticas(int $id_usuario, int $torneo_id): array {
         $pdo = DB::pdo();
+        $r1 = InscritosHelper::sqlExprColumnaNumerica('pr1.resultado1');
+        $r2 = InscritosHelper::sqlExprColumnaNumerica('pr1.resultado2');
+        $sn = InscritosHelper::sqlExprColumnaNumerica('pr1.sancion');
+        $br1 = InscritosHelper::sqlExprColumnaNumerica('resultado1');
+        $br2 = InscritosHelper::sqlExprColumnaNumerica('resultado2');
+        $sumEf = InscritosHelper::sqlExprColumnaNumerica('efectividad');
+        $sumR1 = InscritosHelper::sqlExprColumnaNumerica('resultado1');
+        $sumSan = InscritosHelper::sqlExprColumnaNumerica('sancion');
+        $sumCh = InscritosHelper::sqlExprColumnaNumerica('chancleta');
+        $sumZp = InscritosHelper::sqlExprColumnaNumerica('zapato');
+        $sumTj = InscritosHelper::sqlExprColumnaNumerica('tarjeta');
         
         // Partidas ganadas (solo mesas normales; BYE se cuenta aparte). Con sanción: (resultado1 - sancion) > resultado2.
         $stmt = $pdo->prepare("
@@ -68,8 +79,8 @@ class InscritosPartiresulHelper {
               AND pr1.registrado = 1
               AND pr1.ff = 0
               AND (
-                  (pr1.sancion = 0 AND pr1.resultado1 > pr1.resultado2) OR
-                  (pr1.sancion > 0 AND (pr1.resultado1 - pr1.sancion) > pr1.resultado2)
+                  (({$sn}) = 0 AND {$r1} > {$r2}) OR
+                  (({$sn}) > 0 AND ({$r1} - {$sn}) > {$r2})
               )
         ");
         $stmt->execute([$id_usuario, $torneo_id]);
@@ -78,7 +89,7 @@ class InscritosPartiresulHelper {
         // Partidas ganadas por BYE (mesa=0: partida ganada, 100% puntos, 50% efectividad)
         $stmt = $pdo->prepare("
             SELECT COUNT(*) FROM partiresul
-            WHERE id_usuario = ? AND id_torneo = ? AND registrado = 1 AND mesa = 0 AND resultado1 > resultado2
+            WHERE id_usuario = ? AND id_torneo = ? AND registrado = 1 AND mesa = 0 AND {$br1} > {$br2}
         ");
         $stmt->execute([$id_usuario, $torneo_id]);
         $ganados += (int)$stmt->fetchColumn();
@@ -93,8 +104,8 @@ class InscritosPartiresulHelper {
               AND pr1.registrado = 1
               AND pr1.ff = 0
               AND (
-                  (pr1.sancion = 0 AND pr1.resultado1 < pr1.resultado2) OR
-                  (pr1.sancion > 0 AND (pr1.resultado1 - pr1.sancion) <= pr1.resultado2)
+                  (({$sn}) = 0 AND {$r1} < {$r2}) OR
+                  (({$sn}) > 0 AND ({$r1} - {$sn}) <= {$r2})
               )
         ");
         $stmt->execute([$id_usuario, $torneo_id]);
@@ -102,7 +113,7 @@ class InscritosPartiresulHelper {
         
         // Efectividad total
         $stmt = $pdo->prepare("
-            SELECT COALESCE(SUM(efectividad), 0) as efectividad
+            SELECT COALESCE(SUM({$sumEf}), 0) as efectividad
             FROM partiresul
             WHERE id_usuario = ? 
               AND id_torneo = ?
@@ -113,7 +124,7 @@ class InscritosPartiresulHelper {
 
         // Puntos acumulados (suma de resultado1 de todas las partidas registradas, incluye BYE)
         $stmt = $pdo->prepare("
-            SELECT COALESCE(SUM(resultado1), 0) as puntos
+            SELECT COALESCE(SUM({$sumR1}), 0) as puntos
             FROM partiresul
             WHERE id_usuario = ? 
               AND id_torneo = ?
@@ -125,10 +136,10 @@ class InscritosPartiresulHelper {
         // Sanciones
         $stmt = $pdo->prepare("
             SELECT 
-                COALESCE(SUM(sancion), 0) as sancion,
-                COALESCE(SUM(chancleta), 0) as chancletas,
-                COALESCE(SUM(zapato), 0) as zapatos,
-                COALESCE(SUM(tarjeta), 0) as tarjeta
+                COALESCE(SUM({$sumSan}), 0) as sancion,
+                COALESCE(SUM({$sumCh}), 0) as chancletas,
+                COALESCE(SUM({$sumZp}), 0) as zapatos,
+                COALESCE(SUM({$sumTj}), 0) as tarjeta
             FROM partiresul
             WHERE id_usuario = ? 
               AND id_torneo = ?

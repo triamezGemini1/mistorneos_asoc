@@ -5827,14 +5827,18 @@ function actualizarEstadisticasEquipos($torneo_id) {
  */
 function recalcularPosicionesEquipos($torneo_id) {
     $pdo = DB::pdo();
-    
+    // COALESCE(ganados,0) no basta si la columna tiene texto ('pendiente'): COALESCE devuelve el texto y ORDER BY en modo estricto dispara 1292.
+    $og = InscritosHelper::sqlExprColumnaNumerica('ganados');
+    $oe = InscritosHelper::sqlExprColumnaNumerica('efectividad');
+    $op = InscritosHelper::sqlExprColumnaNumerica('puntos');
+    $ope = InscritosHelper::sqlExprColumnaNumerica('perdidos');
     $sql = "SELECT codigo_equipo, puntos, ganados, perdidos, efectividad
             FROM equipos
             WHERE id_torneo = ? AND estatus = 0
-            ORDER BY COALESCE(ganados, 0) DESC,
-                     COALESCE(efectividad, 0) DESC,
-                     COALESCE(puntos, 0) DESC,
-                     COALESCE(perdidos, 0) ASC,
+            ORDER BY $og DESC,
+                     $oe DESC,
+                     $op DESC,
+                     $ope ASC,
                      codigo_equipo ASC";
     
     $stmt = $pdo->prepare($sql);

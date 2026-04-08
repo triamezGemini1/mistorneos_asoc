@@ -354,6 +354,9 @@ class MesaAsignacionParejasFijasService
         if ($modo === 'ronda1') {
             $orden = "ORDER BY t.id_club ASC, t.numero ASC, t.codigo_equipo ASC";
         }
+        $exP = InscritosHelper::sqlExprColumnaNumerica('i.puntos');
+        $exG = InscritosHelper::sqlExprColumnaNumerica('i.ganados');
+        $exE = InscritosHelper::sqlExprColumnaNumerica('i.efectividad');
         $sql = "
             SELECT t.*
             FROM (
@@ -363,9 +366,9 @@ class MesaAsignacionParejasFijasService
                     COALESCE(MAX(i.numero), 999999) AS numero,
                     COALESCE(MAX(i.id_club), 0) AS id_club,
                     COALESCE(MAX(e.nombre_equipo), MAX(i.codigo_equipo)) AS nombre_equipo,
-                    COALESCE(SUM(i.puntos), 0) AS puntos_equipo,
-                    COALESCE(SUM(i.ganados), 0) AS ganados_equipo,
-                    COALESCE(AVG(i.efectividad), 0) AS efectividad_equipo,
+                    COALESCE(SUM($exP), 0) AS puntos_equipo,
+                    COALESCE(SUM($exG), 0) AS ganados_equipo,
+                    COALESCE(AVG($exE), 0) AS efectividad_equipo,
                     COUNT(*) AS jugadores_activos
                 FROM inscritos i
                 LEFT JOIN equipos e ON e.id_torneo = i.torneo_id AND e.codigo_equipo = i.codigo_equipo
@@ -729,11 +732,14 @@ class MesaAsignacionParejasFijasService
      */
     private function obtenerParejasConJugadoresYClasificacion(int $torneoId): array
     {
+        $exP = InscritosHelper::sqlExprColumnaNumerica('i.puntos');
+        $exG = InscritosHelper::sqlExprColumnaNumerica('i.ganados');
+        $exE = InscritosHelper::sqlExprColumnaNumerica('i.efectividad');
         $sql = "
             SELECT e.codigo_equipo, e.nombre_equipo, e.id_club, e.consecutivo_club AS numero,
-                   COALESCE(SUM(i.puntos), 0) AS puntos_equipo,
-                   COALESCE(SUM(i.ganados), 0) AS ganados_equipo,
-                   COALESCE(AVG(i.efectividad), 0) AS efectividad_equipo
+                   COALESCE(SUM($exP), 0) AS puntos_equipo,
+                   COALESCE(SUM($exG), 0) AS ganados_equipo,
+                   COALESCE(AVG($exE), 0) AS efectividad_equipo
             FROM equipos e
             LEFT JOIN inscritos i ON i.torneo_id = e.id_torneo AND i.codigo_equipo = e.codigo_equipo
                 AND (i.estatus IN (0,1,2,3) OR i.estatus IN ('pendiente','confirmado','solvente','no_solvente'))
