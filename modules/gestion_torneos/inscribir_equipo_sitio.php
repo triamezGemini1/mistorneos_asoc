@@ -434,9 +434,8 @@ $api_guardar_equipo = $base_url . ($use_standalone ? '?' : '&') . 'action=guarda
                 <!-- Buscador: parejas = solo lista + cédula en fila (blur); equipos = lista o lazy con botón -->
                 <div class="search-box">
                     <?php if ($es_parejas): ?>
-                        <small class="text-muted d-block">Atletas de su entidad. Seleccione club y escriba cédula en la fila del jugador; al salir del campo se busca automáticamente.</small>
+                        <small class="text-muted d-block">Atletas de su entidad. Seleccione club y escriba cédula en la fila del jugador; al salir del campo o Enter se busca automáticamente.</small>
                         <input type="text" id="searchJugadores" class="form-control form-control-sm mt-1 d-none" disabled aria-hidden="true">
-                        <input type="hidden" id="buscarCedulaLazy" aria-hidden="true">
                     <?php elseif ($jugadores_lista_lazy): ?>
                         <label class="form-label small mb-1 fw-semibold" for="buscarCedulaLazy">Buscar por cédula (añadir a disponibles)</label>
                         <div class="input-group input-group-sm mb-1">
@@ -778,12 +777,11 @@ $api_guardar_equipo = $base_url . ($use_standalone ? '?' : '&') . 'action=guarda
                                                    class="form-control form-control-sm jugador-cedula input-cedula" 
                                                    id="jugador_cedula_<?php echo $i; ?>" 
                                                    name="jugadores[<?php echo $i; ?>][cedula]" 
-                                                   placeholder="Céd."
+                                                   placeholder="Cédula (blur o Enter)"
                                                    data-posicion="<?php echo $i; ?>"
                                                    onblur="buscarJugadorPorCedula(this)"
                                                    oninput="validarFormulario()"
-                                                   readonly
-                                                   style="background-color: #f1f1f1;">
+                                                   style="background-color: #fff;">
                                             <input type="hidden" 
                                                    class="jugador-id-inscrito" 
                                                    id="jugador_id_inscrito_<?php echo $i; ?>" 
@@ -857,6 +855,10 @@ const JUGADORES_POR_EQUIPO = <?php echo $jugadores_por_equipo; ?>;
 const ES_PAREJAS = <?php echo $es_parejas ? 'true' : 'false'; ?>;
 const TORNEO_ID = <?php echo $torneo['id']; ?>;
 const JUGADORES_LISTA_LAZY = <?php echo $jugadores_lista_lazy ? 'true' : 'false'; ?>;
+
+function fetchJsonBuscarJugador(url) {
+    return fetch(url, { credentials: 'same-origin', headers: { 'Accept': 'application/json, text/plain, */*' } });
+}
 /** Datos para editar: todo viene del servidor al cargar la página — sin fetch a obtener_equipo */
 const EQUIPOS_EDITAR = <?php
 $map = [];
@@ -888,6 +890,13 @@ echo json_encode($map, JSON_UNESCAPED_UNICODE);
 document.addEventListener('DOMContentLoaded', function() {
     validarFormulario();
     actualizarBloqueoSeleccionJugadores();
+    document.querySelectorAll('.jugador-cedula').forEach(function (el) {
+        el.addEventListener('keydown', function (ev) {
+            if (ev.key !== 'Enter') return;
+            ev.preventDefault();
+            buscarJugadorPorCedula(el);
+        });
+    });
     var cedulaBuscarParejas = document.getElementById('cedula_buscar_parejas');
     if (cedulaBuscarParejas) {
         cedulaBuscarParejas.addEventListener('blur', buscarCedulaParejasGlobal);
@@ -1179,7 +1188,7 @@ async function buscarCedulaLazyAnadir() {
         return;
     }
     try {
-        const response = await fetch(`<?php echo $api_base_path; ?>buscar_jugador_inscripcion.php?cedula=${encodeURIComponent(cedula)}&torneo_id=${TORNEO_ID}`);
+        const response = await fetchJsonBuscarJugador(`<?php echo $api_base_path; ?>buscar_jugador_inscripcion.php?cedula=${encodeURIComponent(cedula)}&torneo_id=${TORNEO_ID}`);
         const data = await response.json();
         if (!data.success || !data.jugador) {
             Swal.fire({ icon: 'error', title: 'No encontrado', text: data.message || 'Jugador no disponible', confirmButtonColor: '#3b82f6' });
@@ -1239,7 +1248,7 @@ async function buscarJugadorPorCedula(input) {
     }
     
     try {
-        const response = await fetch(`<?php echo $api_base_path; ?>buscar_jugador_inscripcion.php?cedula=${encodeURIComponent(cedula)}&torneo_id=${TORNEO_ID}`);
+        const response = await fetchJsonBuscarJugador(`<?php echo $api_base_path; ?>buscar_jugador_inscripcion.php?cedula=${encodeURIComponent(cedula)}&torneo_id=${TORNEO_ID}`);
         const data = await response.json();
         
         if (data.success && data.jugador) {
@@ -1295,7 +1304,7 @@ async function buscarCedulaParejasGlobal() {
         return;
     }
     try {
-        const response = await fetch(`<?php echo $api_base_path; ?>buscar_jugador_inscripcion.php?cedula=${encodeURIComponent(cedula)}&torneo_id=${TORNEO_ID}`);
+        const response = await fetchJsonBuscarJugador(`<?php echo $api_base_path; ?>buscar_jugador_inscripcion.php?cedula=${encodeURIComponent(cedula)}&torneo_id=${TORNEO_ID}`);
         const data = await response.json();
         if (data.success && data.jugador) {
             if (data.jugador.codigo_equipo) {
