@@ -142,7 +142,7 @@ $api_guardar_equipo = $base_url . ($use_standalone ? '?' : '&') . 'action=guarda
     .equipo-registrado-item > div:first-child:hover {
         color: #0d6efd;
     }
-    /* Disponibles 43% | Inscritos 55% (formulario compacto arriba en columna izquierda) */
+    /* Disponibles ~52% | Inscritos ~46% (izquierda +20% frente a 43%; formulario arriba en columna izquierda) */
     .page-inscripcion-sitio .row-inscripcion-dos-columnas {
         display: flex;
         flex-direction: row;
@@ -162,12 +162,12 @@ $api_guardar_equipo = $base_url . ($use_standalone ? '?' : '&') . 'action=guarda
     }
     @media (min-width: 992px) {
         .page-inscripcion-sitio .row-inscripcion-dos-columnas .col-disponibles {
-            flex: 0 0 calc(43% - 0.375rem) !important;
-            max-width: calc(43% - 0.375rem) !important;
+            flex: 0 0 calc(51.6% - 0.375rem) !important;
+            max-width: calc(51.6% - 0.375rem) !important;
         }
         .page-inscripcion-sitio .row-inscripcion-dos-columnas .col-insc-equipos {
-            flex: 0 0 calc(55% - 0.375rem) !important;
-            max-width: calc(55% - 0.375rem) !important;
+            flex: 0 0 calc(46.4% - 0.375rem) !important;
+            max-width: calc(46.4% - 0.375rem) !important;
         }
     }
     .page-inscripcion-sitio .row-inscripcion-dos-columnas .col-disponibles {
@@ -192,11 +192,6 @@ $api_guardar_equipo = $base_url . ($use_standalone ? '?' : '&') . 'action=guarda
         border-color: #4dd0e1 !important;
         border-width: 2px !important;
     }
-    .card-formulario-inscripcion .card-header.card-formulario-inscripcion-header {
-        background: linear-gradient(180deg, #4dd0e1 0%, #26c6da 100%) !important;
-        color: #fff !important;
-        border-bottom: 1px solid rgba(0, 105, 120, 0.2) !important;
-    }
     .card-formulario-inscripcion .card-formulario-inscripcion-body {
         max-height: min(48vh, 520px);
         overflow-y: auto;
@@ -212,7 +207,7 @@ $api_guardar_equipo = $base_url . ($use_standalone ? '?' : '&') . 'action=guarda
         flex: 1 1 auto;
         overflow: hidden;
     }
-    .card-formulario-inscripcion .fila-club-nombre-equipo {
+    .card-formulario-inscripcion .formulario-equipo-dos-filas {
         flex-shrink: 0;
         margin-bottom: 0.35rem !important;
     }
@@ -241,38 +236,27 @@ $api_guardar_equipo = $base_url . ($use_standalone ? '?' : '&') . 'action=guarda
         min-width: 0;
     }
     .fila-club-nombre-equipo .form-label { margin-bottom: 0.15rem; }
-    /* Parejas: Guardar + Nueva a la derecha de club/nombre, siempre en línea */
-    /* Una fila: club + nombre + código + Guardar + Nueva (equipos y parejas) */
-    .fila-club-nombre-equipo--compacta .campo-club,
-    .fila-club-nombre-equipo--compacta .campo-nombre-equipo {
-        flex: 1 1 0;
-        min-width: 0;
-    }
-    .fila-club-nombre-equipo--compacta .campo-acciones-inscripcion {
-        display: flex;
-        flex-wrap: nowrap;
-        align-items: flex-end;
-        gap: 0.3rem;
-        flex: 0 0 auto;
-    }
-    .fila-club-nombre-equipo--compacta .campo-acciones-inscripcion .btn {
+    /* Dos filas: (1) club + código + Guardar · (2) nombre + Nueva */
+    .formulario-equipo-dos-filas .fila-form-equipo-1 .btn,
+    .formulario-equipo-dos-filas .fila-form-equipo-2 .btn {
         white-space: nowrap;
         padding: 0.2rem 0.45rem;
         font-size: 0.75rem;
     }
-    .fila-club-nombre-equipo--compacta .campo-acciones-inscripcion #wrap_codigo_equipo_barra {
+    .formulario-equipo-dos-filas #wrap_codigo_equipo_barra {
         margin-bottom: 0.15rem;
     }
-    .fila-club-nombre-equipo--compacta .campo-acciones-inscripcion #wrap_codigo_equipo_barra .badge {
+    .formulario-equipo-dos-filas #wrap_codigo_equipo_barra .badge {
         font-size: 0.7rem !important;
         padding: 0.2rem 0.35rem !important;
     }
     @media (max-width: 576px) {
-        .fila-club-nombre-equipo { flex-wrap: wrap; }
-        .fila-club-nombre-equipo .campo-club,
-        .fila-club-nombre-equipo .campo-nombre-equipo { flex: 1 1 100%; }
-        .fila-club-nombre-equipo--compacta .campo-acciones-inscripcion {
+        .formulario-equipo-dos-filas .fila-form-equipo-1 .campo-club,
+        .formulario-equipo-dos-filas .fila-form-equipo-2 .campo-nombre-equipo {
             flex: 1 1 100%;
+        }
+        .formulario-equipo-dos-filas .fila-form-equipo-1,
+        .formulario-equipo-dos-filas .fila-form-equipo-2 {
             justify-content: flex-end;
         }
     }
@@ -443,11 +427,7 @@ $api_guardar_equipo = $base_url . ($use_standalone ? '?' : '&') . 'action=guarda
         <div class="col-12 col-disponibles">
             <!-- Formulario compacto (columna izquierda, encima de atletas disponibles) -->
             <div id="bloqueFormularioInscripcion" class="mb-2">
-            <div class="card border-info shadow-sm card-formulario-inscripcion" role="region" aria-labelledby="tituloFormFlotanteInscripcion">
-                <div class="card-header card-formulario-inscripcion-header py-2 px-2 d-flex align-items-center justify-content-between flex-wrap gap-1">
-                    <span id="tituloFormFlotanteInscripcion" class="small fw-semibold mb-0"><i class="fas fa-edit me-1"></i>Formulario de inscripción</span>
-                    <button type="button" class="btn btn-sm btn-outline-light py-0 px-2" id="btnToggleFormFlotante" data-bs-toggle="collapse" data-bs-target="#collapseFormInscripcion" aria-expanded="true" aria-controls="collapseFormInscripcion" title="Mostrar u ocultar formulario"><i class="fas fa-chevron-up" aria-hidden="true"></i></button>
-                </div>
+            <div class="card border-info shadow-sm card-formulario-inscripcion" role="region" aria-label="Inscripción de <?php echo htmlspecialchars($etiqueta_equipo, ENT_QUOTES, 'UTF-8'); ?> en sitio">
                 <div id="collapseFormInscripcion" class="collapse show">
                     <div class="card-body card-formulario-inscripcion-body">
                     <?php if ($torneo_iniciado): ?>
@@ -464,39 +444,41 @@ $api_guardar_equipo = $base_url . ($use_standalone ? '?' : '&') . 'action=guarda
                         <input type="hidden" id="codigo_club_prefijo" name="codigo_club_prefijo" value="">
                         <input type="hidden" id="codigo_equipo" name="codigo_equipo" value="">
 
-                        <!-- Club, nombre, código y acciones en una sola fila compacta -->
-                        <div class="fila-club-nombre-equipo fila-club-nombre-equipo--compacta">
-                            <div class="campo-club">
-                                <label class="form-label small mb-0" for="club_id">Club *</label>
-                                <select id="club_id" name="club_id" class="form-select form-select-sm w-100" required>
-                                    <option value="">Club *</option>
-                                    <?php if (!empty($clubes_disponibles)): ?>
-                                        <?php foreach ($clubes_disponibles as $club): ?>
-                                            <option value="<?php echo $club['id']; ?>" data-codigo-prefijo="<?php echo htmlspecialchars((string)($club['codigo_prefijo'] ?? $club['id']), ENT_QUOTES, 'UTF-8'); ?>"><?php echo htmlspecialchars($club['nombre']); ?></option>
-                                        <?php endforeach; ?>
-                                    <?php else: ?>
-                                        <option value="" disabled>No hay clubes disponibles</option>
-                                    <?php endif; ?>
-                                </select>
-                            </div>
-                            <div class="campo-nombre-equipo">
-                                <label class="form-label small mb-0" for="nombre_equipo">Nombre de la <?php echo strtolower($etiqueta_equipo); ?><?php echo $es_parejas ? ' (opcional)' : ' *'; ?></label>
-                                <input type="text"
-                                       id="nombre_equipo"
-                                       name="nombre_equipo"
-                                       class="form-control form-control-sm w-100"
-                                       <?php echo $es_parejas ? '' : 'required '; ?>
-                                       placeholder="<?php echo $es_parejas ? 'Opcional (sin nombre)' : 'Nombre del ' . $etiqueta_equipo . ' *'; ?>">
-                            </div>
-                            <div class="campo-acciones-inscripcion">
-                                <div id="wrap_codigo_equipo_barra" class="d-flex align-items-center gap-2" style="visibility:hidden;" aria-hidden="true">
+                        <!-- Fila 1: club + código + Guardar · Fila 2: nombre + Nueva -->
+                        <div class="formulario-equipo-dos-filas">
+                            <div class="fila-form-equipo-1 d-flex flex-wrap align-items-end gap-2">
+                                <div class="campo-club flex-grow-1 min-w-0">
+                                    <label class="form-label small mb-0" for="club_id">Club *</label>
+                                    <select id="club_id" name="club_id" class="form-select form-select-sm w-100" required>
+                                        <option value="">Club *</option>
+                                        <?php if (!empty($clubes_disponibles)): ?>
+                                            <?php foreach ($clubes_disponibles as $club): ?>
+                                                <option value="<?php echo $club['id']; ?>" data-codigo-prefijo="<?php echo htmlspecialchars((string)($club['codigo_prefijo'] ?? $club['id']), ENT_QUOTES, 'UTF-8'); ?>"><?php echo htmlspecialchars($club['nombre']); ?></option>
+                                            <?php endforeach; ?>
+                                        <?php else: ?>
+                                            <option value="" disabled>No hay clubes disponibles</option>
+                                        <?php endif; ?>
+                                    </select>
+                                </div>
+                                <div id="wrap_codigo_equipo_barra" class="d-flex align-items-center gap-2 flex-shrink-0" style="visibility:hidden;" aria-hidden="true">
                                     <span class="small fw-bold mb-0" style="color:#006064;">Cód.</span>
                                     <span id="codigo_equipo_visible" class="badge bg-secondary fs-6 px-2 py-1"></span>
                                 </div>
-                                <button type="submit" class="btn btn-success btn-sm py-1" id="btnGuardarEquipo" <?= $torneo_iniciado ? 'disabled' : '' ?>>
+                                <button type="submit" class="btn btn-success btn-sm py-1 flex-shrink-0" id="btnGuardarEquipo" <?= $torneo_iniciado ? 'disabled' : '' ?>>
                                     <i class="fas fa-save me-1"></i>Guardar <?php echo $etiqueta_equipo; ?>
                                 </button>
-                                <button type="button" class="btn btn-secondary btn-sm py-1" onclick="limpiarFormulario()" <?= $torneo_iniciado ? 'disabled' : '' ?>>
+                            </div>
+                            <div class="fila-form-equipo-2 d-flex flex-wrap align-items-end gap-2 mt-1">
+                                <div class="campo-nombre-equipo flex-grow-1 min-w-0">
+                                    <label class="form-label small mb-0" for="nombre_equipo">Nombre de la <?php echo strtolower($etiqueta_equipo); ?><?php echo $es_parejas ? ' (opcional)' : ' *'; ?></label>
+                                    <input type="text"
+                                           id="nombre_equipo"
+                                           name="nombre_equipo"
+                                           class="form-control form-control-sm w-100"
+                                           <?php echo $es_parejas ? '' : 'required '; ?>
+                                           placeholder="<?php echo $es_parejas ? 'Opcional (sin nombre)' : 'Nombre del ' . $etiqueta_equipo . ' *'; ?>">
+                                </div>
+                                <button type="button" class="btn btn-secondary btn-sm py-1 flex-shrink-0" onclick="limpiarFormulario()" <?= $torneo_iniciado ? 'disabled' : '' ?>>
                                     <i class="fas fa-redo me-1"></i>Nueva <?php echo $etiqueta_equipo; ?>
                                 </button>
                             </div>
