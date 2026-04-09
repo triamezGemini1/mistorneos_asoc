@@ -351,9 +351,9 @@ $contextLabel = $contextGenero === 'F' ? 'Femenino' : 'Masculino';
         -webkit-overflow-scrolling: touch;
     }
     
-    /* Scroll solo si hay más de 12 mesas; altura permite ~12 visibles */
+    /* Scroll si hay más de 10 mesas; altura ≈10 filas visibles (13" y similares) */
     .lista-mesas-scroll {
-        max-height: min(72vh, calc(12 * 2.35rem));
+        max-height: min(60vh, calc(10 * 2.35rem));
         overflow-y: auto;
         -webkit-overflow-scrolling: touch;
         scrollbar-width: thin;
@@ -453,17 +453,17 @@ $contextLabel = $contextGenero === 'F' ? 'Femenino' : 'Masculino';
         display: block;
     }
     
-    /* Fila Observaciones + Zap/Chan: 20% más compacta */
-    .row-observaciones-zapchan { margin-bottom: 0.55rem; }
-    .row-observaciones-zapchan .d-flex.mb-2 { margin-bottom: 0.4rem !important; }
+    /* Fila Observaciones + Zap/Chan compacta; textarea −20% de alto respecto al bloque anterior */
+    .row-observaciones-zapchan { margin-bottom: 0.44rem; }
+    .row-observaciones-zapchan .d-flex.mb-2 { margin-bottom: 0.32rem !important; }
     .row-observaciones-zapchan textarea.observaciones-compact {
         width: 60%;
         max-width: 60%;
         box-sizing: border-box;
-        min-height: 2.4rem !important;
-        padding: 0.35rem 0.5rem !important;
+        min-height: 1.92rem !important;
+        padding: 0.28rem 0.4rem !important;
         font-size: 0.9em;
-        line-height: 1.25;
+        line-height: 1.2;
         resize: vertical;
     }
     @media screen and (max-width: 768px) {
@@ -744,7 +744,7 @@ $contextLabel = $contextGenero === 'F' ? 'Femenino' : 'Masculino';
                 $mesasPendientesLista = array_values($mesasPendientesLista);
                 ?>
                 <div class="card-body p-2 pt-1">
-                    <div class="<?php echo count($mesasPendientesLista) > 12 ? 'lista-mesas-scroll' : ''; ?>">
+                    <div class="<?php echo count($mesasPendientesLista) > 10 ? 'lista-mesas-scroll' : ''; ?>">
                     <div class="list-group list-group-flush">
                         <?php if (empty($mesasPendientesLista)): ?>
                             <div class="list-group-item text-center text-success py-3 small">
@@ -1393,7 +1393,7 @@ $contextLabel = $contextGenero === 'F' ? 'Femenino' : 'Masculino';
                                     </div>
                                 </div>
                                 <textarea name="observaciones" 
-                                          rows="2"
+                                          rows="1"
                                           class="form-control observaciones-compact"
                                           placeholder="Observaciones sobre la partida (opcional)"><?php echo htmlspecialchars($observacionesMesa ?? ''); ?></textarea>
                             </div>

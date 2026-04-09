@@ -327,10 +327,10 @@ body {
   font-weight: 700 !important;
 }
 
-/* Lista mesas en sidebar: hasta 12 ítems visibles sin scroll (pantallas ≥992px) */
+/* Lista mesas en sidebar: hasta 10 ítems visibles; scroll si hay más (pantallas ≥992px) */
 @media (min-width: 992px) {
   .registrar-resultados-wrap .lista-mesas-scroll {
-    max-height: min(72vh, calc(12 * 2.35rem));
+    max-height: min(60vh, calc(10 * 2.35rem));
     overflow-y: auto;
   }
   .registrar-resultados-wrap #sidebar-mesas .mesa-item {

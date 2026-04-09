@@ -243,9 +243,9 @@ $esTorneoParejas = in_array((int)($torneo['modalidad'] ?? 0), [2, 4], true);
         -webkit-overflow-scrolling: touch;
     }
     
-    /* Lista de mesas: barra de desplazamiento al superar 10 mesas */
+    /* Lista de mesas: aprox. 10 filas visibles; scroll si hay más */
     .lista-mesas-scroll {
-        max-height: 28rem; /* ~10 mesas visibles (~44px c/u) */
+        max-height: min(60vh, calc(10 * 2.35rem));
         overflow-y: auto;
         -webkit-overflow-scrolling: touch;
         scrollbar-width: thin;
@@ -305,14 +305,14 @@ $esTorneoParejas = in_array((int)($torneo['modalidad'] ?? 0), [2, 4], true);
         display: block;
     }
     
-    /* Fila Observaciones + Zap/Chan: 20% más compacta */
-    .row-observaciones-zapchan { margin-bottom: 0.55rem; }
-    .row-observaciones-zapchan .d-flex.mb-2 { margin-bottom: 0.4rem !important; }
+    /* Observaciones + Zap/Chan: textarea −20% de alto */
+    .row-observaciones-zapchan { margin-bottom: 0.44rem; }
+    .row-observaciones-zapchan .d-flex.mb-2 { margin-bottom: 0.32rem !important; }
     .row-observaciones-zapchan textarea.observaciones-compact {
-        min-height: 2.4rem !important;
-        padding: 0.35rem 0.5rem !important;
+        min-height: 1.92rem !important;
+        padding: 0.28rem 0.4rem !important;
         font-size: 0.9em;
-        line-height: 1.25;
+        line-height: 1.2;
         resize: vertical;
     }
     .row-observaciones-zapchan .zapchan-linea { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: flex; align-items: center; gap: 0.4rem; flex-wrap: nowrap; }
@@ -1226,8 +1226,8 @@ $esTorneoParejas = in_array((int)($torneo['modalidad'] ?? 0), [2, 4], true);
                                         <?php endforeach; ?>
                                     </div>
                                 </div>
-                                <textarea name="observaciones" 
-                                          rows="2"
+                                <textarea name="observaciones"
+                                          rows="1"
                                           class="form-control observaciones-compact"
                                           placeholder="Observaciones sobre la partida (opcional)"><?php echo htmlspecialchars($observacionesMesa ?? ''); ?></textarea>
                             </div>

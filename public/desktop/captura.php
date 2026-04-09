@@ -173,7 +173,7 @@ if (!$tabla_partiresul_existe) {
 .tarjeta-btn:hover { transform: scale(1.1); }
 .tarjeta-btn.activo { border-width: 3px; box-shadow: 0 0 0 2px #000; }
 .sidebar-sticky { position: sticky; top: 1rem; max-height: calc(100vh - 2rem); overflow-y: auto; }
-.lista-mesas-scroll { max-height: 22rem; overflow-y: auto; }
+.lista-mesas-scroll { max-height: min(60vh, calc(10 * 2.35rem)); overflow-y: auto; }
 #formResultados tbody tr td { padding: 0.35rem 0.5rem; vertical-align: middle; }
 .columna-id { width: 3rem; }
 .columna-puntos { min-width: 5rem; }
