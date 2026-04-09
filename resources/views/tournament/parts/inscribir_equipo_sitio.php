@@ -1221,11 +1221,11 @@ async function buscarJugadorPorCedula(input) {
     const cedula = input.value.trim();
     const posicion = input.getAttribute('data-posicion');
     
-    if (!puedeSeleccionarJugadores()) {
+    if (!tieneClubSeleccionado()) {
         Swal.fire({
             icon: 'warning',
             title: 'Atención',
-            text: ES_PAREJAS ? 'Primero seleccione el Club.' : 'Primero seleccione el Club y el Nombre del Equipo.',
+            text: 'Primero seleccione el Club.',
             confirmButtonColor: '#3b82f6'
         });
         input.value = '';
@@ -1397,8 +1397,15 @@ function puedeSeleccionarJugadores() {
     return !!(clubId && (ES_PAREJAS || nombreEquipo));
 }
 
+/** Solo club: permite escribir cédula y llamar a la API (nombre del equipo sigue siendo obligatorio al guardar en modalidad equipos). */
+function tieneClubSeleccionado() {
+    return !!document.getElementById('club_id').value;
+}
+
 function actualizarBloqueoSeleccionJugadores() {
     const ready = puedeSeleccionarJugadores();
+    const editandoEquipo = parseInt(document.getElementById('equipo_id').value || '0', 10) > 0;
+    const puedeEditarCedula = tieneClubSeleccionado() || editandoEquipo;
 
     const searchInput = document.getElementById('searchJugadores');
     if (searchInput && !searchInput.classList.contains('d-none')) {
@@ -1434,15 +1441,13 @@ function actualizarBloqueoSeleccionJugadores() {
         }
     });
     
-    const editandoEquipo = parseInt(document.getElementById('equipo_id').value || '0', 10) > 0;
     for (let i = 1; i <= JUGADORES_POR_EQUIPO; i++) {
         const cedulaEl = document.getElementById(`jugador_cedula_${i}`);
         const limpiarBtn = document.getElementById(`btn_limpiar_${i}`);
         const filaTieneJugador = cedulaEl && cedulaEl.value.trim() !== '';
-        const puedeFila = ready || editandoEquipo;
         if (cedulaEl) {
-            cedulaEl.readOnly = !puedeFila;
-            cedulaEl.style.backgroundColor = puedeFila ? '' : '#f1f1f1';
+            cedulaEl.readOnly = !puedeEditarCedula;
+            cedulaEl.style.backgroundColor = puedeEditarCedula ? '' : '#f1f1f1';
         }
         if (limpiarBtn) {
             limpiarBtn.disabled = !filaTieneJugador;
