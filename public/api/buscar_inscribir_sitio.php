@@ -65,7 +65,7 @@ try {
 
 // ─── NIVEL 2–3: usuarios (variantes + normalizado) y afiliados — BusquedaJugadorInscripcionService ───
 $usuario = BusquedaJugadorInscripcionService::buscarUsuarioPorCedula($pdo, $nacionalidad, $cedula);
-if ($usuario && BusquedaJugadorInscripcionService::usuarioPermitidoInscripcionSitioIndividual($usuario)) {
+if ($usuario) {
     $user_id = (int) $usuario['id'];
     $fechnac = $usuario['fechnac'] ?? '';
     if ($fechnac && !preg_match('/^\d{4}-\d{2}-\d{2}/', $fechnac) && strtotime($fechnac) !== false) {

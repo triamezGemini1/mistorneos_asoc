@@ -32,6 +32,11 @@ if (!isset($base_url) || !isset($use_standalone)) {
             padding: 0;
             box-sizing: border-box;
         }
+
+        :root {
+            /* 90% del ancho carta: encaja mejor en impresión/PDF */
+            --hoja-ancho: calc(8.5in * 0.9);
+        }
         
         html {
             overflow-y: auto;
@@ -153,9 +158,9 @@ if (!isset($base_url) || !isset($use_standalone)) {
             padding: 20px;
             margin-bottom: 30px;
             page-break-after: always;
-            width: 8.5in;
+            width: var(--hoja-ancho);
             min-height: 11in;
-            max-width: 8.5in;
+            max-width: var(--hoja-ancho);
             margin-left: auto;
             margin-right: auto;
             display: flex;

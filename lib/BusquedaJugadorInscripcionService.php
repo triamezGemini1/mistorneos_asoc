@@ -52,58 +52,6 @@ final class BusquedaJugadorInscripcionService
     }
 
     /**
-     * Estado de cuenta aceptable para fichar en torneo (misma idea en individual y equipos).
-     */
-    public static function cuentaUsuarioActiva(array $u): bool
-    {
-        $st = $u['status'] ?? null;
-        if ($st === null || $st === '') {
-            return true;
-        }
-        if ($st === 1 || $st === '1') {
-            return true;
-        }
-        if (is_string($st) && in_array(strtolower($st), ['approved', 'active', 'activo'], true)) {
-            return true;
-        }
-
-        return false;
-    }
-
-    /**
-     * Inscripción en sitio / buscar_inscribir_sitio: permitía usuario y admin_club (legacy).
-     */
-    public static function usuarioPermitidoInscripcionSitioIndividual(array $u): bool
-    {
-        if (!self::cuentaUsuarioActiva($u)) {
-            return false;
-        }
-        $role = $u['role'] ?? null;
-        if ($role === null || $role === '') {
-            return true;
-        }
-        $r = (string) $role;
-
-        return $r === 'usuario' || $r === 'admin_club';
-    }
-
-    /**
-     * Equipos/parejas: solo rol jugador (no admin_club como integrante de equipo).
-     */
-    public static function usuarioPermitidoParaInscripcion(array $u): bool
-    {
-        if (!self::cuentaUsuarioActiva($u)) {
-            return false;
-        }
-        $role = $u['role'] ?? null;
-        if ($role === null || trim((string) $role) === '') {
-            return true;
-        }
-
-        return $role === 'usuario';
-    }
-
-    /**
      * Busca en usuarios por cédula (mismas variantes que search_persona.php bloque 2 + normalizado).
      *
      * @return array<string, mixed>|null
@@ -241,7 +189,7 @@ final class BusquedaJugadorInscripcionService
         $nac = self::normalizarNacionalidad($nacionalidad);
 
         $u = self::buscarUsuarioPorCedula($pdo, $nac, $dig);
-        if ($u !== null && self::usuarioPermitidoParaInscripcion($u)) {
+        if ($u !== null) {
             $uid = (int) ($u['id'] ?? 0);
             $ins = self::inscritoTorneoPorUsuario($pdo, $torneoId, $uid);
             $codigo = $ins['codigo_equipo'] ?? '';

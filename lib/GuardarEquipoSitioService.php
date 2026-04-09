@@ -43,6 +43,7 @@ final class GuardarEquipoSitioService
         require_once __DIR__ . '/EquiposHelper.php';
         require_once __DIR__ . '/InscritosHelper.php';
         require_once __DIR__ . '/UserActivationHelper.php';
+        require_once __DIR__ . '/UsuarioInscripcionSitioHelper.php';
 
         /* Carga masiva u otro caller puede tener ya una transacción abierta; PDO no admite anidar beginTransaction. */
         $transaccionPropia = !$pdo->inTransaction();
@@ -102,19 +103,20 @@ final class GuardarEquipoSitioService
                 $cedula = trim((string)$jugador_data['cedula']);
                 $id_usuario = (int)($jugador_data['id_usuario'] ?? 0);
                 $id_inscrito = (int)($jugador_data['id_inscrito'] ?? 0);
+                $nombre_jugador = trim((string)($jugador_data['nombre'] ?? ''));
 
+                /* Resolver usuario: id enviado, o búsqueda por cédula (variantes), o alta mínima si no existe (manual / afiliados sin cuenta). */
                 if ($id_usuario <= 0) {
-                    $stmt = $pdo->prepare('SELECT id FROM usuarios WHERE cedula = ? LIMIT 1');
-                    $stmt->execute([$cedula]);
-                    $row = $stmt->fetch(PDO::FETCH_ASSOC);
-                    $id_usuario = $row ? (int)$row['id'] : 0;
+                    $id_usuario = UsuarioInscripcionSitioHelper::obtenerOCrearUsuarioJugador(
+                        $pdo,
+                        $cedula,
+                        $nombre_jugador,
+                        $club_id,
+                        $entidad_club
+                    );
                 }
                 if ($id_usuario <= 0) {
-                    throw new RuntimeException("No se pudo determinar el ID de usuario para la cédula $cedula");
-                }
-                $id_usuario_db = $id_usuario;
-                if ($id_usuario_db <= 0) {
-                    throw new RuntimeException("No se pudo determinar el identificador operativo para la cédula $cedula");
+                    throw new RuntimeException('No se pudo resolver el usuario para la cédula ' . $cedula);
                 }
 
                 $stmt = $pdo->prepare('UPDATE usuarios SET club_id = ?, entidad = ? WHERE id = ?');
@@ -122,14 +124,14 @@ final class GuardarEquipoSitioService
 
                 if ($id_inscrito > 0) {
                     $stmt = $pdo->prepare('SELECT id FROM inscritos WHERE id = ? AND id_usuario = ? AND torneo_id = ? LIMIT 1');
-                    $stmt->execute([$id_inscrito, $id_usuario_db, $torneo_id]);
+                    $stmt->execute([$id_inscrito, $id_usuario, $torneo_id]);
                     if (!$stmt->fetch()) {
                         $id_inscrito = 0;
                     }
                 }
                 if ($id_inscrito <= 0) {
                     $stmt = $pdo->prepare('SELECT id FROM inscritos WHERE id_usuario = ? AND torneo_id = ? LIMIT 1');
-                    $stmt->execute([$id_usuario_db, $torneo_id]);
+                    $stmt->execute([$id_usuario, $torneo_id]);
                     $row = $stmt->fetch(PDO::FETCH_ASSOC);
                     if ($row) {
                         $id_inscrito = (int)$row['id'];
@@ -147,7 +149,7 @@ final class GuardarEquipoSitioService
                     }
                 }
                 $stmt = $pdo->prepare('UPDATE inscritos SET id_usuario = ?, id_club = ?, codigo_equipo = ?, estatus = 1 WHERE id = ?');
-                $stmt->execute([$id_usuario_db, $club_id, $codigo_equipo, $id_inscrito]);
+                $stmt->execute([$id_usuario, $club_id, $codigo_equipo, $id_inscrito]);
             }
 
             if ($transaccionPropia) {

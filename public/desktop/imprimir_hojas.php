@@ -104,6 +104,7 @@ require_once __DIR__ . '/desktop_layout.php';
 
 <?php if ($torneo && $ronda > 0 && !empty($mesas)): ?>
 <style>
+:root { --hoja-ancho: calc(8.5in * 0.9); }
 @media print { .no-print { display: none !important; } body { background: #fff; } }
 .hoja-mesa {
     background: #fff;
@@ -111,9 +112,9 @@ require_once __DIR__ . '/desktop_layout.php';
     padding: 20px;
     margin: 0 auto 30px;
     page-break-after: always;
-    width: 8.5in;
+    width: var(--hoja-ancho);
     min-height: 11in;
-    max-width: 8.5in;
+    max-width: var(--hoja-ancho);
     display: flex;
     flex-direction: column;
 }

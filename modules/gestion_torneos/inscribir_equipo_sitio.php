@@ -833,6 +833,24 @@ const JUGADORES_LISTA_LAZY = <?php echo $jugadores_lista_lazy ? 'true' : 'false'
 function fetchJsonBuscarJugador(url) {
     return fetch(url, { credentials: 'same-origin', headers: { 'Accept': 'application/json, text/plain, */*' } });
 }
+/** Parsea JSON y lanza si HTTP error (evita asumir 200 con body HTML). */
+async function fetchJsonBuscarJugadorParse(url) {
+    const response = await fetchJsonBuscarJugador(url);
+    const text = await response.text();
+    let data = {};
+    try {
+        data = text ? JSON.parse(text) : {};
+    } catch (e) {
+        if (!response.ok) {
+            throw new Error('Error del servidor (' + response.status + ')');
+        }
+        throw new Error('Respuesta no válida');
+    }
+    if (!response.ok) {
+        throw new Error(data.message || ('Error HTTP ' + response.status));
+    }
+    return data;
+}
 /** Datos para editar: todo viene del servidor al cargar la página — sin fetch a obtener_equipo */
 const EQUIPOS_EDITAR = <?php
 $map = [];
@@ -1175,8 +1193,7 @@ async function buscarCedulaLazyAnadir() {
         return;
     }
     try {
-        const response = await fetchJsonBuscarJugador(urlBuscarJugadorEquipoApi(cedula));
-        const data = await response.json();
+        const data = await fetchJsonBuscarJugadorParse(urlBuscarJugadorEquipoApi(cedula));
         if (data.success && data.resultado === 'no_encontrado') {
             Swal.fire({ icon: 'info', title: 'Sin registro', text: data.message || 'No consta en plataforma ni afiliados. Añada el jugador manualmente o verifique la cédula.', confirmButtonColor: '#3b82f6' });
             return;
@@ -1242,9 +1259,7 @@ async function buscarJugadorPorCedula(input) {
     }
     
     try {
-        const response = await fetchJsonBuscarJugador(urlBuscarJugadorEquipoApi(cedula));
-        const data = await response.json();
-
+        const data = await fetchJsonBuscarJugadorParse(urlBuscarJugadorEquipoApi(cedula));
         if (data.success && data.resultado === 'no_encontrado') {
             Swal.fire({ icon: 'info', title: 'Sin registro', text: data.message || 'Complete el nombre en la fila.', confirmButtonColor: '#3b82f6' });
             desbloquearNombreJugadorFila(posicion);
@@ -1304,8 +1319,7 @@ async function buscarCedulaParejasGlobal() {
         return;
     }
     try {
-        const response = await fetchJsonBuscarJugador(urlBuscarJugadorEquipoApi(cedula));
-        const data = await response.json();
+        const data = await fetchJsonBuscarJugadorParse(urlBuscarJugadorEquipoApi(cedula));
         if (data.success && data.resultado === 'no_encontrado') {
             Swal.fire({ icon: 'info', title: 'Sin registro', text: data.message || 'Use cédula con datos en sistema o complete manualmente.', confirmButtonColor: '#3b82f6' });
             input.value = '';

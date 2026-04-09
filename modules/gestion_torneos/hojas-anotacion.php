@@ -71,6 +71,8 @@ if (!empty($context_switcher['items']) && is_array($context_switcher['items'])) 
             /* Margen para barra con píldoras en 1–2 líneas (nombres largos) */
             --hojas-toolbar-h: 68px;
             --hojas-fixed-stack: calc(var(--hojas-header-h) + var(--hojas-toolbar-h));
+            /* 90% del ancho carta: encaja mejor en impresión/PDF */
+            --hoja-ancho: calc(8.5in * 0.9);
         }
 
         body {
@@ -307,9 +309,9 @@ if (!empty($context_switcher['items']) && is_array($context_switcher['items'])) 
             padding: 20px;
             margin-bottom: 30px;
             page-break-after: always;
-            width: 8.5in;
+            width: var(--hoja-ancho);
             min-height: 11in;
-            max-width: 8.5in;
+            max-width: var(--hoja-ancho);
             margin-left: auto;
             margin-right: auto;
             display: flex;
