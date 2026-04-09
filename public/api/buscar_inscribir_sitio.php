@@ -12,6 +12,7 @@
 require_once __DIR__ . '/../../config/bootstrap.php';
 require_once __DIR__ . '/../../config/db_config.php';
 require_once __DIR__ . '/../../config/auth.php';
+require_once __DIR__ . '/../../lib/BusquedaJugadorInscripcionService.php';
 
 header('Content-Type: application/json; charset=utf-8');
 
@@ -37,7 +38,6 @@ if (!Auth::canAccessTournament($torneo_id)) {
 }
 
 $pdo = DB::pdo();
-$cedula_nac = $nacionalidad . $cedula;
 
 // ─── NIVEL 1: Validación en inscritos (coincidencia exacta: torneo_id + nacionalidad + cedula) ───
 try {
@@ -63,19 +63,10 @@ try {
     // Continuar con NIVEL 2 (búsqueda en usuarios)
 }
 
-// ─── NIVEL 2: Búsqueda en tabla usuarios (local) ───
-$stmt = $pdo->prepare("
-    SELECT id, username, nombre, cedula, email, celular, fechnac, sexo, nacionalidad, club_id
-    FROM usuarios
-    WHERE (cedula = ? OR cedula = ?) AND role IN ('usuario','admin_club')
-    LIMIT 1
-");
-$stmt->execute([$cedula, $cedula_nac]);
-$usuario = $stmt->fetch(PDO::FETCH_ASSOC);
-
-if ($usuario) {
-    // No está inscrito (ya comprobado en NIVEL 1): devolver todos los campos desde usuarios (telefono/email pueden estar vacíos)
-    $user_id = (int)$usuario['id'];
+// ─── NIVEL 2–3: usuarios (variantes + normalizado) y afiliados — BusquedaJugadorInscripcionService ───
+$usuario = BusquedaJugadorInscripcionService::buscarUsuarioPorCedula($pdo, $nacionalidad, $cedula);
+if ($usuario && BusquedaJugadorInscripcionService::usuarioPermitidoInscripcionSitioIndividual($usuario)) {
+    $user_id = (int) $usuario['id'];
     $fechnac = $usuario['fechnac'] ?? '';
     if ($fechnac && !preg_match('/^\d{4}-\d{2}-\d{2}/', $fechnac) && strtotime($fechnac) !== false) {
         $fechnac = date('Y-m-d', strtotime($fechnac));
@@ -94,38 +85,29 @@ if ($usuario) {
             'fechnac' => $fechnac,
             'sexo' => $usuario['sexo'] ?? 'M',
             'nacionalidad' => $usuario['nacionalidad'] ?? $nacionalidad,
-            'club_id' => (int)($usuario['club_id'] ?? 0)
-        ]
+            'club_id' => (int) ($usuario['club_id'] ?? 0),
+        ],
     ]);
     exit;
 }
 
-// ─── NIVEL 3: No existe en usuarios → Base de datos externa ───
-if (file_exists(__DIR__ . '/../../config/persona_database.php')) {
-    require_once __DIR__ . '/../../config/persona_database.php';
-    try {
-        $database = new PersonaDatabase();
-        $result = $database->searchPersonaById($nacionalidad, $cedula);
-        if (!empty($result['encontrado']) && !empty($result['persona'])) {
-            $p = $result['persona'];
-            echo json_encode([
-                'success' => true,
-                'resultado' => 'persona_externa',
-                'persona' => [
-                    'nacionalidad' => $p['nacionalidad'] ?? $nacionalidad,
-                    'cedula' => $cedula,
-                    'nombre' => $p['nombre'] ?? '',
-                    'sexo' => $p['sexo'] ?? '',
-                    'fechnac' => $p['fechnac'] ?? '',
-                    'telefono' => $p['celular'] ?? $p['telefono'] ?? '',
-                    'email' => $p['email'] ?? ''
-                ]
-            ]);
-            exit;
-        }
-    } catch (Throwable $e) {
-        error_log('buscar_inscribir_sitio externa: ' . $e->getMessage());
-    }
+$ext = BusquedaJugadorInscripcionService::buscarPersonaExternaPorCedula($nacionalidad, $cedula);
+if ($ext !== null) {
+    $p = $ext['persona'];
+    echo json_encode([
+        'success' => true,
+        'resultado' => 'persona_externa',
+        'persona' => [
+            'nacionalidad' => $p['nacionalidad'] ?? $nacionalidad,
+            'cedula' => $cedula,
+            'nombre' => $p['nombre'] ?? '',
+            'sexo' => $p['sexo'] ?? '',
+            'fechnac' => $p['fechnac'] ?? '',
+            'telefono' => $p['celular'] ?? $p['telefono'] ?? '',
+            'email' => $p['email'] ?? '',
+        ],
+    ]);
+    exit;
 }
 
 // No encontrado: registro manual

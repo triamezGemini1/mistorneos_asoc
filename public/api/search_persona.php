@@ -31,30 +31,150 @@ try {
 }
 
 $input = array_merge($_GET, $_POST);
-$cedula_raw = isset($input['cedula']) ? trim((string) $input['cedula']) : '';
-$cedula = preg_replace('/^[VEJP]/i', '', $cedula_raw);
-$cedula = preg_replace('/\D/', '', $cedula);
 $nacionalidad = isset($input['nacionalidad']) ? strtoupper(trim((string) $input['nacionalidad'])) : 'V';
 if (!in_array($nacionalidad, ['V', 'E', 'J', 'P'], true)) {
     $nacionalidad = 'V';
 }
 $torneo_id = isset($input['torneo_id']) ? (int) $input['torneo_id'] : (isset($input['torneo']) ? (int) $input['torneo'] : 0);
+$cedula_raw = isset($input['cedula']) ? trim((string) $input['cedula']) : '';
+if ($cedula_raw === '' && isset($input['busqueda'])) {
+    $cedula_raw = trim((string) $input['busqueda']);
+}
+$userIdParam = (int) ($input['user_id'] ?? 0);
+$qNombre = trim((string) ($input['q'] ?? $input['nombre'] ?? ''));
 
-error_log("search_persona.php - ENTRADA: nacionalidad=" . $nacionalidad . ", cedula=" . $cedula . ", torneo_id=" . $torneo_id);
+error_log("search_persona.php - ENTRADA: nacionalidad=" . $nacionalidad . ", raw=" . $cedula_raw . ", torneo_id=" . $torneo_id . ", user_id=" . $userIdParam . ", q=" . $qNombre);
 
-if ($cedula === '') {
-    http_response_code(400);
-    echo json_encode([
-        'accion' => 'error',
-        'status' => 'error',
-        'mensaje' => 'Cédula requerida',
-        'error' => 'Cédula requerida'
-    ]);
-    exit;
+$cedula = preg_replace('/^[VEJP]/i', '', $cedula_raw);
+$cedula = preg_replace('/\D/', '', $cedula);
+// Campo único "busqueda": si no hay dígitos, tratar como nombre (no como cédula vacía).
+if ($qNombre === '' && $cedula === '' && $cedula_raw !== '') {
+    $soloDig = preg_replace('/\D/', '', $cedula_raw);
+    if ($soloDig === '') {
+        $qNombre = trim($cedula_raw);
+    }
 }
 
 try {
     $pdo = DB::pdo();
+
+    $emitirEncontradoUsuario = static function (array $persona, string $cRef): void {
+        $fechnac = $persona['fechnac'] ?? '';
+        if ($fechnac && preg_match('/^\d{4}-\d{2}-\d{2}/', $fechnac) === false && strtotime($fechnac) !== false) {
+            $fechnac = date('Y-m-d', strtotime($fechnac));
+        }
+        $celular = $persona['celular'] ?? '';
+        echo json_encode([
+            'accion' => 'encontrado_usuario',
+            'status' => 'encontrado',
+            'encontrado' => true,
+            'fuente' => 'usuarios',
+            'existe_en_usuarios' => true,
+            'mensaje' => 'Datos encontrados en la plataforma. Revise y pulse Inscribir.',
+            'persona' => [
+                'id' => (int) ($persona['id'] ?? 0),
+                'username' => $persona['username'] ?? '',
+                'nacionalidad' => $persona['nacionalidad'] ?? 'V',
+                'nombre' => $persona['nombre'] ?? '',
+                'cedula' => $persona['cedula'] ?? $cRef,
+                'sexo' => $persona['sexo'] ?? '',
+                'fechnac' => $fechnac,
+                'celular' => $celular,
+                'telefono' => $celular,
+                'email' => $persona['email'] ?? '',
+                'club_id' => (int) ($persona['club_id'] ?? 0),
+            ],
+        ]);
+        exit;
+    };
+
+    // ─── BLOQUE 0a: ID de usuario (inscripción en sitio: búsqueda por ID) ───
+    if ($userIdParam > 0) {
+        if ($torneo_id <= 0) {
+            http_response_code(400);
+            echo json_encode([
+                'accion' => 'error',
+                'status' => 'error',
+                'mensaje' => 'Indique torneo_id para buscar por ID de usuario.',
+                'error' => 'torneo_id requerido',
+            ]);
+            exit;
+        }
+        $stmtI = $pdo->prepare('SELECT id FROM inscritos WHERE torneo_id = ? AND id_usuario = ? LIMIT 1');
+        $stmtI->execute([$torneo_id, $userIdParam]);
+        if ($stmtI->fetch(PDO::FETCH_ASSOC)) {
+            echo json_encode([
+                'accion' => 'ya_inscrito',
+                'status' => 'ya_inscrito',
+                'mensaje' => 'El jugador ya está en este torneo.',
+                'encontrado' => false,
+            ]);
+            exit;
+        }
+        $stmtU = $pdo->prepare('SELECT id, username, nacionalidad, nombre, cedula, sexo, fechnac, celular, email, club_id FROM usuarios WHERE id = ? LIMIT 1');
+        $stmtU->execute([$userIdParam]);
+        $persona = $stmtU->fetch(PDO::FETCH_ASSOC);
+        if ($persona) {
+            error_log('search_persona.php - BLOQUE ID: ENCONTRADO id=' . $userIdParam);
+            $emitirEncontradoUsuario($persona, (string) ($persona['cedula'] ?? ''));
+        }
+        // Sin fila con ese PK: seguir (p. ej. número largo era cédula, no id).
+    }
+
+    // ─── BLOQUE 0b: Nombre o usuario (fragmento, mín. 3 caracteres) ───
+    $lenQ = function_exists('mb_strlen') ? mb_strlen($qNombre, 'UTF-8') : strlen($qNombre);
+    if ($qNombre !== '' && $lenQ >= 3) {
+        if ($torneo_id <= 0) {
+            http_response_code(400);
+            echo json_encode([
+                'accion' => 'error',
+                'status' => 'error',
+                'mensaje' => 'Indique torneo_id para buscar por nombre.',
+                'error' => 'torneo_id requerido',
+            ]);
+            exit;
+        }
+        $like = '%' . addcslashes($qNombre, '%_\\') . '%';
+        $stmtN = $pdo->prepare("
+            SELECT id, username, nacionalidad, nombre, cedula, sexo, fechnac, celular, email, club_id
+            FROM usuarios
+            WHERE (nombre LIKE ? OR username LIKE ?)
+            LIMIT 2
+        ");
+        $stmtN->execute([$like, $like]);
+        $rows = $stmtN->fetchAll(PDO::FETCH_ASSOC);
+        if (count($rows) === 1) {
+            error_log('search_persona.php - BLOQUE NOMBRE: ENCONTRADO (' . ($rows[0]['nombre'] ?? '') . ')');
+            $emitirEncontradoUsuario($rows[0], (string) ($rows[0]['cedula'] ?? ''));
+        }
+        if (count($rows) > 1) {
+            echo json_encode([
+                'accion' => 'error',
+                'status' => 'error',
+                'mensaje' => 'Hay varios jugadores con ese criterio. Use cédula o ID de usuario.',
+                'error' => 'multiple',
+            ]);
+            exit;
+        }
+        echo json_encode([
+            'accion' => 'error',
+            'status' => 'error',
+            'mensaje' => 'No se encontró un jugador con ese nombre. Pruebe con cédula o ID.',
+            'error' => 'nombre no encontrado',
+        ]);
+        exit;
+    }
+
+    if ($cedula === '') {
+        http_response_code(400);
+        echo json_encode([
+            'accion' => 'error',
+            'status' => 'error',
+            'mensaje' => 'Indique cédula (números), ID de usuario o al menos 3 letras del nombre/apellido.',
+            'error' => 'Parámetro de búsqueda requerido',
+        ]);
+        exit;
+    }
 
     // ─── BLOQUE 1: INSCRITO. Si está inscrito → ya_inscrito.
     // 1a) Por torneo_id + nacionalidad + cédula (réplica en inscritos).
@@ -129,37 +249,27 @@ try {
             $persona = $stmt->fetch(PDO::FETCH_ASSOC);
             if ($persona) {
                 error_log("search_persona.php - BLOQUE USUARIO: ENCONTRADO (" . ($persona['nombre'] ?? '') . ")");
-                $fechnac = $persona['fechnac'] ?? '';
-                if ($fechnac && preg_match('/^\d{4}-\d{2}-\d{2}/', $fechnac) === false && strtotime($fechnac) !== false) {
-                    $fechnac = date('Y-m-d', strtotime($fechnac));
-                }
-                $celular = $persona['celular'] ?? '';
-                echo json_encode([
-                    'accion' => 'encontrado_usuario',
-                    'status' => 'encontrado',
-                    'encontrado' => true,
-                    'fuente' => 'usuarios',
-                    'existe_en_usuarios' => true,
-                    'mensaje' => 'Datos encontrados en la plataforma. Revise y pulse Inscribir.',
-                    'persona' => [
-                        'id' => (int) ($persona['id'] ?? 0),
-                        'username' => $persona['username'] ?? '',
-                        'nacionalidad' => $persona['nacionalidad'] ?? 'V',
-                        'nombre' => $persona['nombre'] ?? '',
-                        'cedula' => $persona['cedula'] ?? $c,
-                        'sexo' => $persona['sexo'] ?? '',
-                        'fechnac' => $fechnac,
-                        'celular' => $celular,
-                        'telefono' => $celular,
-                        'email' => $persona['email'] ?? '',
-                        'club_id' => (int)($persona['club_id'] ?? 0)
-                    ]
-                ]);
-                exit;
+                $emitirEncontradoUsuario($persona, $c);
             }
         } catch (Throwable $e) {
             error_log("search_persona.php - BLOQUE USUARIO excepcion: " . $e->getMessage());
         }
+    }
+    try {
+        $stmtNorm = $pdo->prepare("
+            SELECT id, username, nacionalidad, nombre, cedula, sexo, fechnac, celular, email, club_id
+            FROM usuarios
+            WHERE REPLACE(REPLACE(REPLACE(REPLACE(TRIM(CAST(cedula AS CHAR)), '-', ''), '.', ''), ' ', ''), '/', '') = ?
+            LIMIT 1
+        ");
+        $stmtNorm->execute([$cedula]);
+        $personaNorm = $stmtNorm->fetch(PDO::FETCH_ASSOC);
+        if ($personaNorm) {
+            error_log("search_persona.php - BLOQUE USUARIO (normalizado): ENCONTRADO (" . ($personaNorm['nombre'] ?? '') . ")");
+            $emitirEncontradoUsuario($personaNorm, (string) ($personaNorm['cedula'] ?? $cedula));
+        }
+    } catch (Throwable $e) {
+        error_log("search_persona.php - BLOQUE USUARIO normalizado: " . $e->getMessage());
     }
     error_log("search_persona.php - BLOQUE USUARIO: no encontrado, continuar a BLOQUE PERSONAS");
 

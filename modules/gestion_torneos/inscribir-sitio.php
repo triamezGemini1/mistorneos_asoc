@@ -73,7 +73,7 @@ if ($base_public_abs === '' && !empty($_SERVER['HTTP_HOST'])) {
             <h5 class="mb-0"><i class="fas fa-user-plus me-2"></i>Inscribir Jugador en Sitio</h5>
         </div>
         <div class="card-body px-2 px-md-3">
-            <p class="small text-muted mb-2">Búsqueda: inscritos → usuarios → BD externa. Al salir de cédula se busca automáticamente.</p>
+            <p class="small text-muted mb-2">Búsqueda: inscritos → usuarios → BD externa. Puede usar <strong>cédula</strong>, <strong>ID de usuario</strong> (p. ej. 6 dígitos) o <strong>fragmento de nombre</strong> (mín. 3 letras). Al salir del campo o Enter se ejecuta.</p>
 
             <!-- Una sola línea: Nacionalidad, Cédula, Club, y (al tener resultado) Nombre, Sexo, Inscribir, Otra búsqueda. Estatus siempre confirmado. -->
             <div class="insc-sitio-fila insc-sitio-una-linea mb-2" id="insc_sitio_linea_principal">
@@ -82,8 +82,8 @@ if ($base_public_abs === '' && !empty($_SERVER['HTTP_HOST'])) {
                     <input type="text" id="select_nacionalidad_cedula" class="form-control form-control-sm" placeholder="V" value="V" maxlength="1" title="V, E, J o P" autocomplete="off">
                 </div>
                 <div class="insc-sitio-campo insc-sitio-cedula">
-                    <label class="form-label small mb-0">Cédula <span class="text-danger">*</span></label>
-                    <input type="text" id="input_cedula" class="form-control form-control-sm" placeholder="Solo números" maxlength="15" inputmode="numeric" autocomplete="off">
+                    <label class="form-label small mb-0" for="input_cedula">Cédula / ID / nombre</label>
+                    <input type="text" id="input_cedula" class="form-control form-control-sm" placeholder="Números, ID o nombre" maxlength="80" autocomplete="off" spellcheck="false">
                 </div>
                 <div class="insc-sitio-campo insc-sitio-club">
                     <label class="form-label small mb-0">Club</label>
@@ -275,9 +275,17 @@ if ($base_public_abs === '' && !empty($_SERVER['HTTP_HOST'])) {
         var nacEl = $('select_nacionalidad_cedula');
         var nac = normalizarNacionalidad(nacEl ? nacEl.value : '');
         if (nacEl) nacEl.value = nac;
-        var ced = ($('input_cedula') && $('input_cedula').value) || '';
-        ced = ced.replace(/\D/g, '');
-        if (ced.length < 4) return;
+        var raw = ($('input_cedula') && $('input_cedula').value) ? $('input_cedula').value.trim() : '';
+        if (raw.length < 1) return;
+        if (raw.length < 3 && /[a-zA-Z\u00C0-\u024F]/.test(raw)) {
+            msg('Escriba al menos 3 letras para buscar por nombre.', 'warning');
+            return;
+        }
+        if (raw.length < 3 && /^[0-9]+$/.test(raw)) {
+            msg('Escriba al menos 3 dígitos (cédula o ID).', 'warning');
+            return;
+        }
+        var ced = raw.replace(/\D/g, '');
         isSearching = true;
         msg('<i class="fas fa-spinner fa-spin me-1"></i>Buscando (inscritos → usuarios → BD externa)...', 'info');
         showInscribir(false);
@@ -289,7 +297,11 @@ if ($base_public_abs === '' && !empty($_SERVER['HTTP_HOST'])) {
         var fetchOpts = { credentials: 'same-origin', cache: 'no-store' };
         if (controller) fetchOpts.signal = controller.signal;
 
-        fetch(BUSCAR_API + '?torneo_id=' + TORNEOS_ID + '&nacionalidad=' + encodeURIComponent(nac) + '&cedula=' + encodeURIComponent(ced), fetchOpts)
+        var qs = 'torneo_id=' + TORNEOS_ID + '&nacionalidad=' + encodeURIComponent(nac) + '&busqueda=' + encodeURIComponent(raw) + '&cedula=' + encodeURIComponent(ced);
+        if (/^[0-9]{1,6}$/.test(raw)) {
+            qs += '&user_id=' + encodeURIComponent(raw);
+        }
+        fetch(BUSCAR_API + '?' + qs, fetchOpts)
             .then(function(r) {
                 if (timeoutId) window.clearTimeout(timeoutId);
                 return r.text().then(function(text) {

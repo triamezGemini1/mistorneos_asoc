@@ -1,88 +1,82 @@
 <?php
 /**
- * API: Buscar jugador por cédula para inscripción equipo/pareja.
- * Criterios alineados a search_usuario_inscripcion_sitio + coincidencia por solo dígitos
- * cuando la columna guarda puntos/guiones (V-12.345.678).
+ * API: Buscar jugador para inscripción equipo/pareja.
+ * Criterios unificados (lib/BusquedaJugadorInscripcionService): 1) usuarios 2) afiliados 3) no encontrado (manual).
  */
 require_once __DIR__ . '/../../config/bootstrap.php';
 require_once __DIR__ . '/../../config/db_config.php';
 require_once __DIR__ . '/../../config/auth.php';
+require_once __DIR__ . '/../../lib/BusquedaJugadorInscripcionService.php';
 
 header('Content-Type: application/json; charset=utf-8');
 
-/** Extrae solo dígitos para búsqueda expedita. */
-function cedulaSoloNumerosInscripcion($cedula) {
-    return preg_replace('/\D/', '', trim($cedula));
-}
-
 try {
-    $cedula = trim($_GET['cedula'] ?? '');
-    $torneo_id = (int)($_GET['torneo_id'] ?? 0);
+    $cedula = trim($_GET['cedula'] ?? $_GET['busqueda'] ?? '');
+    $torneo_id = (int) ($_GET['torneo_id'] ?? 0);
+    $nacionalidad = BusquedaJugadorInscripcionService::normalizarNacionalidad((string) ($_GET['nacionalidad'] ?? 'V'));
 
     if ($cedula === '' || $torneo_id <= 0) {
         echo json_encode(['success' => false, 'message' => 'Cédula y torneo_id son requeridos']);
         exit;
     }
 
-    $pdo = DB::pdo();
-    $solo_numeros = cedulaSoloNumerosInscripcion($cedula);
-    if ($solo_numeros === '') {
-        echo json_encode(['success' => false, 'message' => 'Cédula inválida']);
+    Auth::requireRole(['admin_general', 'admin_torneo', 'admin_club']);
+    if (!Auth::canAccessTournament($torneo_id)) {
+        echo json_encode(['success' => false, 'message' => 'Sin permiso para este torneo.']);
         exit;
     }
 
-    $cedNormExpr = "REPLACE(REPLACE(REPLACE(REPLACE(TRIM(CAST(u.cedula AS CHAR)), '-', ''), '.', ''), ' ', ''), '/', '')";
+    $pdo = DB::pdo();
+    $out = BusquedaJugadorInscripcionService::buscarParaInscripcionEquipo($pdo, $torneo_id, $nacionalidad, $cedula);
 
-    $sql = "
-        SELECT u.id as id_usuario, u.nombre, u.cedula, u.sexo,
-               u.club_id as club_id, c.nombre as club_nombre,
-               ins.id as id_inscrito, ins.codigo_equipo
-        FROM usuarios u
-        LEFT JOIN clubes c ON u.club_id = c.id
-        LEFT JOIN inscritos ins ON ins.id_usuario = u.id AND ins.torneo_id = ?
-            AND (ins.estatus IS NULL OR CAST(ins.estatus AS CHAR) NOT IN ('4', 'retirado'))
-        WHERE (
-                u.cedula = ?
-             OR u.cedula = ?
-             OR u.cedula = ?
-             OR u.cedula = ?
-             OR u.cedula = ?
-             OR {$cedNormExpr} = ?
-        )
-          AND (u.role IS NULL OR TRIM(CAST(u.role AS CHAR)) = '' OR u.role = 'usuario')
-          AND (u.status IS NULL OR u.status IN ('approved', 'active', 'activo') OR u.status = 1)
-        LIMIT 1
-    ";
-
-    $stmt = $pdo->prepare($sql);
-    $stmt->execute([
-        $torneo_id,
-        $solo_numeros,
-        'V' . $solo_numeros,
-        'E' . $solo_numeros,
-        'J' . $solo_numeros,
-        'P' . $solo_numeros,
-        $solo_numeros,
-    ]);
-    $jugador = $stmt->fetch(PDO::FETCH_ASSOC);
-
-    if ($jugador) {
-        if (!empty(trim($jugador['codigo_equipo'] ?? ''))) {
-            echo json_encode([
-                'success' => false,
-                'message' => 'Este jugador ya está asignado (código: ' . trim($jugador['codigo_equipo']) . ')',
-                'jugador' => $jugador
-            ]);
-            exit;
-        }
-        $jugador['id'] = $jugador['id_inscrito'] ?? null;
-        echo json_encode(['success' => true, 'jugador' => $jugador]);
-    } else {
-        echo json_encode(['success' => false, 'message' => 'No encontrado. Verifique la cédula.']);
+    if (empty($out['success']) && empty($out['jugador'])) {
+        echo json_encode([
+            'success' => false,
+            'resultado' => $out['resultado'] ?? 'error',
+            'message' => $out['message'] ?? 'Solicitud inválida.',
+        ]);
+        exit;
     }
-} catch (Exception $e) {
+
+    if (($out['resultado'] ?? '') === BusquedaJugadorInscripcionService::RESULTADO_YA_EN_EQUIPO) {
+        echo json_encode([
+            'success' => false,
+            'resultado' => $out['resultado'],
+            'message' => $out['message'] ?? '',
+            'jugador' => $out['jugador'] ?? null,
+        ]);
+        exit;
+    }
+
+    if (!empty($out['success']) && !empty($out['jugador'])) {
+        $j = $out['jugador'];
+        $j['id'] = $j['id_inscrito'] ?? null;
+        echo json_encode([
+            'success' => true,
+            'resultado' => $out['resultado'] ?? BusquedaJugadorInscripcionService::RESULTADO_USUARIO,
+            'message' => $out['message'] ?? '',
+            'jugador' => $j,
+        ]);
+        exit;
+    }
+
+    if (!empty($out['success']) && ($out['resultado'] ?? '') === BusquedaJugadorInscripcionService::RESULTADO_NO_ENCONTRADO) {
+        echo json_encode([
+            'success' => true,
+            'resultado' => BusquedaJugadorInscripcionService::RESULTADO_NO_ENCONTRADO,
+            'message' => $out['message'] ?? '',
+            'jugador' => null,
+        ]);
+        exit;
+    }
+
     echo json_encode([
         'success' => false,
-        'message' => 'Error: ' . $e->getMessage()
+        'message' => $out['message'] ?? 'Error en la búsqueda.',
+    ]);
+} catch (Throwable $e) {
+    echo json_encode([
+        'success' => false,
+        'message' => 'Error: ' . $e->getMessage(),
     ]);
 }
