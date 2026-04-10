@@ -260,4 +260,29 @@ final class MesaRepository
 
         return $matriz;
     }
+
+    /**
+     * Individual (modalidad 1) + tipo_torneo interclubes (1): emparejamiento "rotado" por codigo_equipo.
+     * No altera el esquema; si falta tipo_torneo en BD, devuelve false.
+     */
+    public function esTorneoIndividualRotadoInterclubes(int $torneoId): bool
+    {
+        if ($torneoId < 1) {
+            return false;
+        }
+        try {
+            $stmt = $this->pdo->prepare(
+                'SELECT modalidad, COALESCE(tipo_torneo, 0) AS tipo_torneo FROM tournaments WHERE id = ? LIMIT 1'
+            );
+            $stmt->execute([$torneoId]);
+            $row = $stmt->fetch(PDO::FETCH_ASSOC);
+            if ($row === false) {
+                return false;
+            }
+
+            return (int) ($row['modalidad'] ?? 0) === 1 && (int) ($row['tipo_torneo'] ?? 0) === 1;
+        } catch (Throwable $e) {
+            return false;
+        }
+    }
 }

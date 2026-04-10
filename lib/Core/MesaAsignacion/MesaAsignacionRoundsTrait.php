@@ -24,6 +24,10 @@ trait MesaAsignacionRoundsTrait
      */
     private function generarPrimeraRonda($torneoId)
     {
+        if ($this->repo->esTorneoIndividualRotadoInterclubes((int) $torneoId)) {
+            return $this->generarRondaIndividualRotadoInterclubes((int) $torneoId, 1);
+        }
+
         $inscritos = $this->repo->obtenerClasificacionInscritos($torneoId);
         $totalInscritos = count($inscritos);
 
@@ -103,6 +107,10 @@ trait MesaAsignacionRoundsTrait
      */
     private function generarSegundaRonda($torneoId)
     {
+        if ($this->repo->esTorneoIndividualRotadoInterclubes((int) $torneoId)) {
+            return $this->generarRondaIndividualRotadoInterclubes((int) $torneoId, 2);
+        }
+
         $ranking = $this->repo->obtenerClasificacionInscritosParaRonda2($torneoId);
         $totalInscritos = count($ranking);
 
@@ -242,6 +250,10 @@ trait MesaAsignacionRoundsTrait
      */
     private function generarRondaIntermedia($torneoId, $numRonda)
     {
+        if ($this->repo->esTorneoIndividualRotadoInterclubes((int) $torneoId)) {
+            return $this->generarRondaIndividualRotadoInterclubes((int) $torneoId, (int) $numRonda);
+        }
+
         $inscritos = $this->repo->obtenerClasificacionInscritos($torneoId);
         $totalInscritos = count($inscritos);
 
@@ -333,6 +345,10 @@ trait MesaAsignacionRoundsTrait
      */
     private function generarUltimaRonda($torneoId, $numRonda)
     {
+        if ($this->repo->esTorneoIndividualRotadoInterclubes((int) $torneoId)) {
+            return $this->generarRondaIndividualRotadoInterclubes((int) $torneoId, (int) $numRonda);
+        }
+
         $inscritos = $this->repo->obtenerClasificacionInscritos($torneoId);
         $totalInscritos = count($inscritos);
 
@@ -387,6 +403,228 @@ trait MesaAsignacionRoundsTrait
             'jugadores_bye' => count($jugadoresBye),
             'mesas' => $mesas
         ];
+    }
+
+    /**
+     * Modalidad individual + tipo torneo interclubes: parejas intra-club por permutación (i + ronda) mod n,
+     * emparejamiento de mesas cruzando clubes en anillo (pareja de Ci vs C{i+1}).
+     *
+     * @return array<string, mixed>
+     */
+    private function generarRondaIndividualRotadoInterclubes(int $torneoId, int $numRonda): array
+    {
+        $inscritos = $this->repo->obtenerClasificacionInscritos($torneoId);
+        $totalInscritos = count($inscritos);
+
+        if ($totalInscritos < self::JUGADORES_POR_MESA) {
+            return [
+                'success' => false,
+                'message' => 'No hay suficientes jugadores inscritos (mínimo 4)',
+            ];
+        }
+
+        $r = $numRonda > 0 ? $numRonda : 1;
+        $porClub = $this->rotadoInterclubesAgruparPorCodigoEquipo($inscritos);
+
+        if (count($porClub) < 2) {
+            error_log("Individual Rotado Interclubes (torneo {$torneoId}): hacen falta al menos 2 codigo_equipo distintos con inscritos confirmados.");
+
+            return [
+                'success' => false,
+                'message' => 'Individual Rotado Interclubes: asigne codigo_equipo en al menos dos clubes con jugadores confirmados.',
+            ];
+        }
+
+        $parejasPorClub = [];
+        $jugadoresBye = [];
+
+        foreach ($porClub as $codigo => $jugadoresClub) {
+            $resClub = $this->rotadoInterclubesParejasEnClub($jugadoresClub, $r);
+            foreach ($resClub['parejas'] as $par) {
+                if (!isset($parejasPorClub[$codigo])) {
+                    $parejasPorClub[$codigo] = [];
+                }
+                $parejasPorClub[$codigo][] = $par;
+            }
+            foreach ($resClub['bye'] as $bj) {
+                $jugadoresBye[] = $bj;
+            }
+        }
+
+        $cruce = $this->rotadoInterclubesCruzarMesas($parejasPorClub);
+        $mesasArray = $cruce['mesas'];
+
+        foreach ($cruce['parejasSinUsar'] as $parSueltas) {
+            $jugadoresBye[] = $parSueltas[0];
+            $jugadoresBye[] = $parSueltas[1];
+        }
+
+        if ($mesasArray === []) {
+            error_log("Individual Rotado Interclubes (torneo {$torneoId}): no se formó ninguna mesa con el cruce circular actual.");
+
+            return [
+                'success' => false,
+                'message' => 'No se pudo formar ninguna mesa interclubes; revise codigo_equipo y el reparto por club.',
+            ];
+        }
+
+        $this->repo->guardarAsignacionRonda($torneoId, $numRonda, $mesasArray, $this->registradoPorUsuarioId);
+
+        if ($jugadoresBye !== []) {
+            $nBye = count($jugadoresBye);
+            $this->repo->aplicarBye($torneoId, $numRonda, $jugadoresBye, max(3, $nBye), $this->registradoPorUsuarioId);
+        }
+
+        return [
+            'success' => true,
+            'message' => "Ronda {$numRonda} (Individual Rotado Interclubes) generada",
+            'total_inscritos' => $totalInscritos,
+            'total_mesas' => count($mesasArray),
+            'jugadores_bye' => count($jugadoresBye),
+            'mesas' => $mesasArray,
+        ];
+    }
+
+    /**
+     * @param list<array<string, mixed>> $inscritos
+     * @return array<string, list<array<string, mixed>>>
+     */
+    private function rotadoInterclubesAgruparPorCodigoEquipo(array $inscritos): array
+    {
+        $gr = [];
+        foreach ($inscritos as $row) {
+            $cod = trim((string) ($row['codigo_equipo'] ?? ''));
+            if ($cod === '') {
+                $cod = '_SIN_CODIGO_';
+                error_log('Individual Rotado Interclubes: inscrito sin codigo_equipo; use un código de equipo para agrupar correctamente.');
+            }
+            if (!isset($gr[$cod])) {
+                $gr[$cod] = [];
+            }
+            $gr[$cod][] = $row;
+        }
+        foreach ($gr as $cod => $lista) {
+            usort($lista, static function ($a, $b) {
+                return (int) ($a['id_usuario'] ?? 0) <=> (int) ($b['id_usuario'] ?? 0);
+            });
+            $gr[$cod] = $lista;
+        }
+        ksort($gr, SORT_STRING);
+
+        return $gr;
+    }
+
+    /**
+     * @param list<array<string, mixed>> $jugadoresOrdenados
+     * @return array{parejas: list<array{0: array<string, mixed>, 1: array<string, mixed>}>, bye: list<array<string, mixed>>}
+     */
+    private function rotadoInterclubesParejasEnClub(array $jugadoresOrdenados, int $numRonda): array
+    {
+        $parejas = [];
+        $bye = [];
+        $n = count($jugadoresOrdenados);
+        if ($n < 2) {
+            if ($n === 1) {
+                error_log('Individual Rotado Interclubes: club con un solo jugador; queda en BYE.');
+                $bye[] = $jugadoresOrdenados[0];
+            }
+
+            return ['parejas' => $parejas, 'bye' => $bye];
+        }
+
+        $r = $numRonda > 0 ? $numRonda : 1;
+        $visitado = array_fill(0, $n, false);
+
+        for ($inicio = 0; $inicio < $n; $inicio++) {
+            if ($visitado[$inicio]) {
+                continue;
+            }
+            $ciclo = [];
+            $i = $inicio;
+            do {
+                $visitado[$i] = true;
+                $ciclo[] = $i;
+                $i = ($i + $r) % $n;
+            } while ($i !== $inicio);
+
+            $L = count($ciclo);
+            if ($L % 2 === 1) {
+                error_log("Individual Rotado Interclubes: ciclo impar (n={$n}, r={$r}, L={$L}); un jugador sin pareja pasa a BYE.");
+                for ($t = 0; $t + 1 < $L; $t += 2) {
+                    $parejas[] = [$jugadoresOrdenados[$ciclo[$t]], $jugadoresOrdenados[$ciclo[$t + 1]]];
+                }
+                $bye[] = $jugadoresOrdenados[$ciclo[$L - 1]];
+            } else {
+                for ($t = 0; $t < $L; $t += 2) {
+                    $parejas[] = [$jugadoresOrdenados[$ciclo[$t]], $jugadoresOrdenados[$ciclo[$t + 1]]];
+                }
+            }
+        }
+
+        return ['parejas' => $parejas, 'bye' => $bye];
+    }
+
+    /**
+     * @param array<string, list<array{0: array<string, mixed>, 1: array<string, mixed>}>> $parejasPorClub
+     * @return array{mesas: list<list<array<string, mixed>>>, parejasSinUsar: list<array{0: array<string, mixed>, 1: array<string, mixed>}>}
+     */
+    private function rotadoInterclubesCruzarMesas(array $parejasPorClub): array
+    {
+        $mesas = [];
+        $sinUsar = [];
+
+        $codes = [];
+        foreach ($parejasPorClub as $cod => $lista) {
+            if ($lista !== []) {
+                $codes[] = (string) $cod;
+            }
+        }
+        $K = count($codes);
+        if ($K < 2) {
+            foreach ($parejasPorClub as $lista) {
+                foreach ($lista as $par) {
+                    $sinUsar[] = $par;
+                }
+            }
+
+            return ['mesas' => $mesas, 'parejasSinUsar' => $sinUsar];
+        }
+
+        $slot = [];
+        foreach ($codes as $c) {
+            $slot[$c] = 0;
+        }
+
+        $formed = true;
+        while ($formed) {
+            $formed = false;
+            for ($m0 = 0; $m0 < $K; $m0++) {
+                $codeA = $codes[$m0];
+                $codeB = $codes[($m0 + 1) % $K];
+                if ($slot[$codeA] >= count($parejasPorClub[$codeA])) {
+                    continue;
+                }
+                if ($slot[$codeB] >= count($parejasPorClub[$codeB])) {
+                    continue;
+                }
+                $pa = $parejasPorClub[$codeA][$slot[$codeA]];
+                $pb = $parejasPorClub[$codeB][$slot[$codeB]];
+                $slot[$codeA]++;
+                $slot[$codeB]++;
+                // Pareja AC (club A) vs BD (club B): mismo orden que el resto del servicio [A,C,B,D]
+                $mesas[] = [$pa[0], $pa[1], $pb[0], $pb[1]];
+                $formed = true;
+            }
+        }
+
+        foreach ($codes as $c) {
+            while ($slot[$c] < count($parejasPorClub[$c])) {
+                $sinUsar[] = $parejasPorClub[$c][$slot[$c]];
+                $slot[$c]++;
+            }
+        }
+
+        return ['mesas' => $mesas, 'parejasSinUsar' => $sinUsar];
     }
 }
 
