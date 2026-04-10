@@ -2,6 +2,8 @@
 declare(strict_types=1);
 /**
  * Vista móvil por QR: token corto (torneo + id jugador) → mesa actual, resumen, clasificación.
+ * Sin rondas en partiresul: bienvenida + bondades del sistema y qué verá según modalidad.
+ * Con rondas: desempeño personal y resultados generales (individual / parejas / equipos).
  * Parámetros: t=token [&ronda=N] [&fmt=json] (json solo actualiza bloque mesa).
  */
 
@@ -12,6 +14,7 @@ require_once __DIR__ . '/../lib/TorneoJugadorQrToken.php';
 require_once __DIR__ . '/../lib/PublicTorneoPortalHelper.php';
 require_once __DIR__ . '/../lib/PublicInfoTorneoMesasService.php';
 require_once __DIR__ . '/../lib/TorneoQrJugadorMesaPartial.php';
+require_once __DIR__ . '/../lib/TorneoQrGrupoHelper.php';
 
 header('X-Content-Type-Options: nosniff');
 header('Referrer-Policy: strict-origin-when-cross-origin');
@@ -48,37 +51,40 @@ if (!PublicInfoTorneoMesasService::estaInscrito($pdo, $torneo_id, $id_usuario)) 
     exit;
 }
 
-$rondas_disponibles = PublicInfoTorneoMesasService::rondasConDatos($pdo, $torneo_id);
-if ($rondas_disponibles === []) {
-    $rondas_disponibles = range(1, max(1, (int) ($torneo['rondas'] ?? 1)));
-}
-$default_ronda = PublicInfoTorneoMesasService::ultimaRondaConPartidas($pdo, $torneo_id);
-if (!in_array($default_ronda, $rondas_disponibles, true)) {
-    $rondas_disponibles[] = $default_ronda;
-    sort($rondas_disponibles, SORT_NUMERIC);
-}
+$torneo_iniciado = PublicInfoTorneoMesasService::torneoTienePartidasGeneradas($pdo, $torneo_id);
 
-$ronda = (int) ($_GET['ronda'] ?? 0);
-if ($ronda <= 0 || !in_array($ronda, $rondas_disponibles, true)) {
-    $ronda = $default_ronda;
+$rondas_disponibles = [];
+$default_ronda = 1;
+$ronda = 1;
+
+if ($torneo_iniciado) {
+    $rondas_disponibles = PublicInfoTorneoMesasService::rondasConDatos($pdo, $torneo_id);
+    if ($rondas_disponibles === []) {
+        $rondas_disponibles = range(1, max(1, (int) ($torneo['rondas'] ?? 1)));
+    }
+    $default_ronda = PublicInfoTorneoMesasService::ultimaRondaConPartidas($pdo, $torneo_id);
+    if (!in_array($default_ronda, $rondas_disponibles, true)) {
+        $rondas_disponibles[] = $default_ronda;
+        sort($rondas_disponibles, SORT_NUMERIC);
+    }
+    $ronda = (int) ($_GET['ronda'] ?? 0);
+    if ($ronda <= 0 || !in_array($ronda, $rondas_disponibles, true)) {
+        $ronda = $default_ronda;
+    }
 }
 
 $modalidad = (int) ($torneo['modalidad'] ?? 0);
 $es_equipos = ($modalidad === 3);
+$es_parejas = in_array($modalidad, [2, 4], true);
 $viewerId = $id_usuario;
 
-$asignacion = PublicInfoTorneoMesasService::resumenAsignacion($pdo, $torneo_id, $ronda, $viewerId);
-$mesa_html = TorneoQrJugadorMesaPartial::renderBody($asignacion, $viewerId, $es_equipos, $ronda);
-
-if (($_GET['fmt'] ?? '') === 'json') {
-    header('Content-Type: application/json; charset=utf-8');
-    echo json_encode([
-        'ok' => true,
-        'ronda' => $ronda,
-        'mesa_html' => $mesa_html,
-        'updated_at' => time(),
-    ], JSON_UNESCAPED_UNICODE);
-    exit;
+$asignacion = null;
+$mesa_html = '';
+if ($torneo_iniciado) {
+    $asignacion = PublicInfoTorneoMesasService::resumenAsignacion($pdo, $torneo_id, $ronda, $viewerId);
+    $mesa_html = TorneoQrJugadorMesaPartial::renderBody($asignacion, $viewerId, $es_equipos, $ronda);
+} else {
+    $mesa_html = '<div class="preinicio-mesa-msg"><p class="mesa-num">Aún no hay rondas publicadas</p><p class="muted">Cuando el organizador genere la primera ronda, aquí verás tu mesa, rivales y resultados.</p></div>';
 }
 
 $resumen_pack = null;
@@ -94,27 +100,97 @@ $mi_codigo_equipo = (string) ($jug['codigo_equipo'] ?? '');
 
 $clasificacion_rows = [];
 $ranking_equipos = [];
-if ($es_equipos) {
-    require_once __DIR__ . '/../lib/Tournament/Handlers/TeamPerformanceHandler.php';
-    try {
-        $ranking_equipos = \Tournament\Handlers\TeamPerformanceHandler::getRankingPorEquipos($torneo_id, 'resumido');
-    } catch (Throwable $e) {
-        $ranking_equipos = [];
+if ($torneo_iniciado) {
+    if ($es_equipos) {
+        require_once __DIR__ . '/../lib/Tournament/Handlers/TeamPerformanceHandler.php';
+        try {
+            $ranking_equipos = \Tournament\Handlers\TeamPerformanceHandler::getRankingPorEquipos($torneo_id, 'resumido');
+        } catch (Throwable $e) {
+            $ranking_equipos = [];
+        }
+    } else {
+        $st = $pdo->prepare(
+            'SELECT i.id_usuario, i.posicion, i.ganados, i.perdidos, i.efectividad, i.puntos, i.ptosrnk,
+                    COALESCE(u.nombre, u.username) AS nombre_jugador, c.nombre AS club_nombre
+             FROM inscritos i
+             LEFT JOIN usuarios u ON i.id_usuario = u.id
+             LEFT JOIN clubes c ON i.id_club = c.id
+             WHERE i.torneo_id = ?
+             AND (i.estatus IN (1, 2, \'1\', \'2\', \'confirmado\', \'solvente\'))
+             ORDER BY i.ptosrnk DESC, i.efectividad DESC, i.ganados DESC, i.puntos DESC, i.id_usuario ASC'
+        );
+        $st->execute([$torneo_id]);
+        $clasificacion_rows = $st->fetchAll(PDO::FETCH_ASSOC) ?: [];
     }
-} else {
-    $st = $pdo->prepare(
-        'SELECT i.id_usuario, i.posicion, i.ganados, i.perdidos, i.efectividad, i.puntos, i.ptosrnk,
-                COALESCE(u.nombre, u.username) AS nombre_jugador, c.nombre AS club_nombre
-         FROM inscritos i
-         LEFT JOIN usuarios u ON i.id_usuario = u.id
-         LEFT JOIN clubes c ON i.id_club = c.id
-         WHERE i.torneo_id = ?
-         AND (i.estatus IN (1, 2, \'1\', \'2\', \'confirmado\', \'solvente\'))
-         ORDER BY i.ptosrnk DESC, i.efectividad DESC, i.ganados DESC, i.puntos DESC, i.id_usuario ASC'
-    );
-    $st->execute([$torneo_id]);
-    $clasificacion_rows = $st->fetchAll(PDO::FETCH_ASSOC) ?: [];
 }
+
+$grupo_html = '';
+if ($es_equipos || $es_parejas) {
+    $grupo_html = TorneoQrGrupoHelper::renderTarjetaHtml(
+        $pdo,
+        $torneo_id,
+        $viewerId,
+        $modalidad,
+        $ronda,
+        $torneo_iniciado,
+        $ranking_equipos,
+        $mi_codigo_equipo
+    );
+}
+
+if (($_GET['fmt'] ?? '') === 'json') {
+    header('Content-Type: application/json; charset=utf-8');
+    echo json_encode([
+        'ok' => true,
+        'torneo_iniciado' => $torneo_iniciado,
+        'ronda' => $ronda,
+        'mesa_html' => $mesa_html,
+        'grupo_html' => $grupo_html,
+        'updated_at' => time(),
+    ], JSON_UNESCAPED_UNICODE);
+    exit;
+}
+
+$beneficios_sistema = [
+    'Acceso instantáneo desde el móvil con tu código QR, sin recordar contraseñas.',
+    'Consulta en qué mesa juegas cada ronda y con quién te emparejan.',
+    'Revisa tu resumen: puntos, efectividad y partidas ganadas o perdidas.',
+    'Consulta la clasificación general o el ranking por equipos según el formato del torneo.',
+    'Actualiza con un toque cuando el organizador publique nuevas rondas o resultados.',
+];
+
+$que_vera_items = [];
+if ($es_equipos) {
+    $que_vera_items = [
+        'Modalidad por equipos: verás la mesa con los códigos de equipo y rivales.',
+        'Resumen orientado a tu participación y al desempeño acumulado.',
+        'Tabla de posiciones por equipo (puntos del equipo), con tu fila resaltada.',
+    ];
+} elseif ($es_parejas) {
+    $que_vera_items = [
+        'Modalidad parejas: en cada mesa se muestran las dos parejas enfrentadas (jugadores 1–4).',
+        'Tu resumen personal: puntos y efectividad según lo registrado en el torneo.',
+        'Clasificación general de jugadores inscritos (el criterio oficial lo define el organizador).',
+    ];
+} else {
+    $que_vera_items = [
+        'Modalidad individual: mesa con los cuatro jugadores y resultado cuando esté cargado.',
+        'Tu posición, puntos y efectividad frente al resto de inscritos.',
+        'Clasificación completa ordenada por el criterio del torneo.',
+    ];
+}
+
+$subtitulo_resumen_card = $es_equipos
+    ? 'Puntos y estadísticas vinculados a tu inscripción en el torneo por equipos.'
+    : ($es_parejas
+        ? 'Tu desempeño personal en el torneo (modalidad parejas).'
+        : 'Tu desempeño personal frente al resto de jugadores.');
+
+$subtitulo_clas_card = $es_equipos
+    ? 'Ranking por equipo: puntos acumulados y posición respecto a los demás equipos.'
+    : ($es_parejas
+        ? 'Listado general de jugadores; en mesa verás el formato de parejas enfrentadas.'
+        : 'Clasificación general de todos los jugadores inscritos.');
 
 $public_base = rtrim(AppHelpers::getPublicUrl(), '/');
 $page_url = $public_base . '/torneo_qr_jugador.php?' . http_build_query(['t' => $token, 'ronda' => $ronda]);
@@ -129,7 +205,7 @@ $nombre_yo = (string) ($jug['nombre'] ?? '');
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5">
     <meta name="theme-color" content="#0c4a6e">
-    <title><?= htmlspecialchars($nombre_torneo, ENT_QUOTES, 'UTF-8') ?> — Mi mesa</title>
+    <title><?= htmlspecialchars($nombre_torneo, ENT_QUOTES, 'UTF-8') ?> — <?= $torneo_iniciado ? 'Mi mesa' : 'Bienvenida' ?></title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
         :root {
@@ -280,6 +356,41 @@ $nombre_yo = (string) ($jug['nombre'] ?? '');
             text-decoration: none;
         }
         .link-btn.alt { background: #0f172a; }
+        .welcome-hero {
+            background: linear-gradient(145deg, #e0f2fe 0%, #fff 55%);
+            border-radius: 14px;
+            padding: 16px 14px;
+            border: 1px solid var(--border);
+            margin-bottom: 12px;
+        }
+        .welcome-hero h2 { margin: 0 0 8px; font-size: 1.2rem; color: #0369a1; }
+        .welcome-hero .lead { margin: 0; color: var(--text); font-size: 0.98rem; }
+        ul.benefits-list { margin: 10px 0 0; padding-left: 1.15rem; }
+        ul.benefits-list li { margin-bottom: 8px; color: #334155; font-size: 0.95rem; }
+        .preinicio-mesa-msg .muted, .card-sub, p.muted { color: var(--muted); font-size: 0.88rem; margin: 6px 0 0; line-height: 1.35; }
+        .card-sub { margin: 0 0 10px; }
+        .fecha-lugar { font-size: 0.9rem; color: #475569; margin-top: 8px; }
+        ul.que-vera { margin: 8px 0 0; padding-left: 1.1rem; }
+        ul.que-vera li { margin-bottom: 6px; font-size: 0.92rem; color: #334155; }
+        .qr-grupo-card {
+            background: var(--card);
+            border-radius: 14px;
+            border: 1px solid var(--border);
+            box-shadow: 0 4px 14px rgba(3, 105, 161, 0.08);
+            margin-bottom: 14px;
+            padding: 12px 14px;
+        }
+        .qr-grupo-card--warn { background: #fffbeb; border-color: #fde68a; }
+        .qr-grupo-tit { font-weight: 800; color: #0369a1; margin: 0 0 8px; font-size: 0.98rem; }
+        .qr-grupo-cod { color: var(--muted); font-weight: 600; }
+        ul.qr-grupo-miembros { list-style: none; margin: 0; padding: 0; }
+        ul.qr-grupo-miembros li { padding: 6px 0; border-bottom: 1px solid #e2e8f0; font-size: 0.95rem; }
+        ul.qr-grupo-miembros li:last-child { border-bottom: none; }
+        .qr-grupo-yo { color: var(--yo); font-weight: 800; }
+        .qr-grupo-ronda-h { font-weight: 700; margin: 12px 0 8px; font-size: 0.9rem; color: #0f172a; }
+        table.qr-grupo-tab { font-size: 0.8rem; }
+        .qr-grupo-totales { margin-top: 12px; padding-top: 10px; border-top: 1px dashed #cbd5e1; }
+        .qr-grupo-totales__k { margin: 0 0 8px; font-size: 0.88rem; color: #334155; }
     </style>
 </head>
 <body>
@@ -287,9 +398,55 @@ $nombre_yo = (string) ($jug['nombre'] ?? '');
     <h1><i class="fas fa-chess-board"></i> <?= htmlspecialchars($nombre_torneo, ENT_QUOTES, 'UTF-8') ?></h1>
     <div class="yo-line">
         <?= htmlspecialchars($nombre_yo !== '' ? $nombre_yo : 'Jugador', ENT_QUOTES, 'UTF-8') ?>
-        <small>ID jugador <?= (int) $viewerId ?><?= (int) ($torneo['locked'] ?? 0) === 1 ? ' · Torneo finalizado (solo lectura)' : '' ?></small>
+        <small>ID jugador <?= (int) $viewerId ?><?= (int) ($torneo['locked'] ?? 0) === 1 ? ' · Torneo finalizado (solo lectura)' : '' ?><?= !$torneo_iniciado ? ' · Torneo aún no iniciado' : '' ?></small>
     </div>
 
+    <?php if (!$torneo_iniciado && $grupo_html !== ''): ?>
+        <?= $grupo_html ?>
+    <?php endif; ?>
+
+    <?php if (!$torneo_iniciado): ?>
+    <div id="panel-bienvenida" class="panel active">
+        <div class="welcome-hero">
+            <h2><i class="fas fa-hand-sparkles"></i> Bienvenido al torneo</h2>
+            <p class="lead">Estás conectado con el sistema de información del evento. Cuando comience la competición, esta misma página mostrará <strong>tu mesa</strong>, <strong>tu desempeño</strong> y los <strong>resultados generales</strong>.</p>
+            <?php
+            $fl = trim((string) ($torneo['fechator'] ?? ''));
+            $lug = trim((string) ($torneo['lugar'] ?? ''));
+            if ($fl !== '' || $lug !== ''): ?>
+                <p class="fecha-lugar"><?= $fl !== '' ? '<i class="fas fa-calendar-alt"></i> ' . htmlspecialchars($fl, ENT_QUOTES, 'UTF-8') : '' ?><?= $fl !== '' && $lug !== '' ? ' · ' : '' ?><?= $lug !== '' ? '<i class="fas fa-map-marker-alt"></i> ' . htmlspecialchars($lug, ENT_QUOTES, 'UTF-8') : '' ?></p>
+            <?php endif; ?>
+        </div>
+        <div class="card">
+            <div class="card-head"><i class="fas fa-star"></i> Bondades de este acceso</div>
+            <div class="card-body">
+                <p class="muted" style="margin-top:0">Todo pensado para el día del torneo:</p>
+                <ul class="benefits-list">
+                    <?php foreach ($beneficios_sistema as $b): ?>
+                        <li><?= htmlspecialchars($b, ENT_QUOTES, 'UTF-8') ?></li>
+                    <?php endforeach; ?>
+                </ul>
+            </div>
+        </div>
+    </div>
+
+    <div id="panel-proximo" class="panel">
+        <div class="card">
+            <div class="card-head"><i class="fas fa-info-circle"></i> Qué verás al iniciar</div>
+            <div class="card-body">
+                <p class="card-sub"><strong><?= $es_equipos ? 'Torneo por equipos' : ($es_parejas ? 'Torneo por parejas' : 'Torneo individual') ?></strong></p>
+                <ul class="que-vera">
+                    <?php foreach ($que_vera_items as $qv): ?>
+                        <li><?= htmlspecialchars($qv, ENT_QUOTES, 'UTF-8') ?></li>
+                    <?php endforeach; ?>
+                </ul>
+                <p class="muted" style="margin-top:12px">Vuelve a escanear el QR o pulsa <strong>Actualizar</strong> cuando el organizador publique la primera ronda.</p>
+            </div>
+        </div>
+    </div>
+    <?php endif; ?>
+
+    <?php if ($torneo_iniciado): ?>
     <div id="panel-mesa" class="panel active">
         <div class="card">
             <div class="card-head"><i class="fas fa-map-pin"></i> Tu mesa</div>
@@ -304,14 +461,18 @@ $nombre_yo = (string) ($jug['nombre'] ?? '');
                     </select>
                 </form>
                 <div id="mesa-live"><?= $mesa_html ?></div>
+                <?php if ($grupo_html !== ''): ?>
+                <div id="grupo-live"><?= $grupo_html ?></div>
+                <?php endif; ?>
             </div>
         </div>
     </div>
 
     <div id="panel-resumen" class="panel">
         <div class="card">
-            <div class="card-head"><i class="fas fa-chart-line"></i> Resumen rápido</div>
+            <div class="card-head"><i class="fas fa-chart-line"></i> Tu desempeño</div>
             <div class="card-body">
+                <p class="card-sub"><?= htmlspecialchars($subtitulo_resumen_card, ENT_QUOTES, 'UTF-8') ?></p>
                 <div class="stat-grid">
                     <div class="stat-box yo"><span class="k">Posición</span><div class="v"><?= (int) ($res['posicion'] ?? $resumen_pack['posicion'] ?? 0) ?>º</div></div>
                     <div class="stat-box"><span class="k">Puntos</span><div class="v"><?= (int) ($res['puntos'] ?? 0) ?></div></div>
@@ -325,8 +486,9 @@ $nombre_yo = (string) ($jug['nombre'] ?? '');
 
     <div id="panel-clas" class="panel">
         <div class="card">
-            <div class="card-head"><i class="fas fa-trophy"></i> <?= $es_equipos ? 'Resultados por equipos' : 'Clasificación general' ?></div>
+            <div class="card-head"><i class="fas fa-trophy"></i> <?= $es_equipos ? 'Resultados generales (equipos)' : ($es_parejas ? 'Resultados generales (jugadores)' : 'Resultados generales') ?></div>
             <div class="card-body">
+                <p class="card-sub"><?= htmlspecialchars($subtitulo_clas_card, ENT_QUOTES, 'UTF-8') ?></p>
                 <?php if ($es_equipos): ?>
                     <div class="tab-wrap">
                         <table class="data-tab">
@@ -373,14 +535,23 @@ $nombre_yo = (string) ($jug['nombre'] ?? '');
             </div>
         </div>
     </div>
+    <?php endif; ?>
 </div>
 
+<?php if (!$torneo_iniciado): ?>
+<nav class="bottom-nav" aria-label="Acciones">
+    <button type="button" class="bn-btn outline" data-panel="bienvenida"><i class="fas fa-hand-sparkles"></i> Bienvenida</button>
+    <button type="button" class="bn-btn outline" data-panel="proximo"><i class="fas fa-info-circle"></i> Qué verás</button>
+    <button type="button" class="bn-btn secondary" id="btn-refresh-pre" title="Comprobar si ya comenzó el torneo"><i class="fas fa-sync-alt"></i> Actualizar</button>
+</nav>
+<?php else: ?>
 <nav class="bottom-nav" aria-label="Acciones">
     <button type="button" class="bn-btn outline" data-panel="mesa"><i class="fas fa-map-pin"></i> Mesa</button>
-    <button type="button" class="bn-btn outline" data-panel="resumen"><i class="fas fa-user"></i> Resumen</button>
-    <button type="button" class="bn-btn outline" data-panel="clas"><i class="fas fa-trophy"></i> <?= $es_equipos ? 'Equipos' : 'Clasif.' ?></button>
+    <button type="button" class="bn-btn outline" data-panel="resumen"><i class="fas fa-user"></i> Desempeño</button>
+    <button type="button" class="bn-btn outline" data-panel="clas"><i class="fas fa-trophy"></i> <?= $es_equipos ? 'Equipos' : 'General' ?></button>
     <button type="button" class="bn-btn secondary" id="btn-refresh" title="Actualizar datos de la mesa"><i class="fas fa-sync-alt"></i> Actualizar</button>
 </nav>
+<?php endif; ?>
 
 <style>.visually-hidden { position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0; }</style>
 <script>
@@ -398,9 +569,11 @@ $nombre_yo = (string) ($jug['nombre'] ?? '');
     });
     var sel = document.getElementById('sel-ronda');
     var mesaLive = document.getElementById('mesa-live');
+    var grupoLive = document.getElementById('grupo-live');
     var refreshBtn = document.getElementById('btn-refresh');
+    var refreshPre = document.getElementById('btn-refresh-pre');
     function refreshMesa() {
-        if (!sel || !mesaLive) return;
+        if (!sel || !mesaLive || !refreshBtn) return;
         var ronda = sel.value;
         refreshBtn.disabled = true;
         var url = 'torneo_qr_jugador.php?fmt=json&t=' + encodeURIComponent(token) + '&ronda=' + encodeURIComponent(ronda);
@@ -410,14 +583,24 @@ $nombre_yo = (string) ($jug['nombre'] ?? '');
                 if (data && data.ok && data.mesa_html) {
                     mesaLive.innerHTML = data.mesa_html;
                 }
+                if (data && data.ok && typeof data.grupo_html === 'string' && grupoLive) {
+                    grupoLive.innerHTML = data.grupo_html;
+                }
             })
             .catch(function () {})
             .finally(function () { refreshBtn.disabled = false; });
     }
-    refreshBtn.addEventListener('click', function (e) {
-        e.preventDefault();
-        refreshMesa();
-    });
+    if (refreshBtn) {
+        refreshBtn.addEventListener('click', function (e) {
+            e.preventDefault();
+            refreshMesa();
+        });
+    }
+    if (refreshPre) {
+        refreshPre.addEventListener('click', function () {
+            window.location.reload();
+        });
+    }
 })();
 </script>
 </body>

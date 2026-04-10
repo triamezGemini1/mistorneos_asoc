@@ -1,0 +1,137 @@
+/* Sorteos / premios — vista gestión torneo */
+.rp-wrap {
+  max-width: 960px;
+  margin: 0 auto;
+  padding: 1rem;
+}
+.rp-breadcrumb a.rp-back {
+  color: #0369a1;
+  text-decoration: none;
+  font-weight: 600;
+}
+.rp-title {
+  font-size: 1.35rem;
+  margin: 0.5rem 0;
+  color: #0f172a;
+}
+.rp-lead {
+  color: #475569;
+  margin-bottom: 1.25rem;
+}
+.rp-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 1rem;
+}
+@media (min-width: 768px) {
+  .rp-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+.rp-card {
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 1rem 1.15rem;
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.06);
+}
+.rp-card--full {
+  max-width: 100%;
+}
+.rp-card h2 {
+  font-size: 1rem;
+  margin: 0 0 0.75rem;
+  color: #0f172a;
+}
+.rp-label {
+  display: block;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: #64748b;
+  margin: 0.5rem 0 0.25rem;
+}
+.rp-input {
+  width: 100%;
+  padding: 0.5rem 0.65rem;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  font-size: 0.95rem;
+}
+.rp-check {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  font-size: 0.88rem;
+  color: #334155;
+  margin: 0.75rem 0;
+}
+.rp-hint {
+  font-size: 0.85rem;
+  color: #64748b;
+  margin: 0.5rem 0;
+}
+.rp-btn {
+  border: none;
+  border-radius: 10px;
+  padding: 0.65rem 1rem;
+  font-weight: 700;
+  cursor: pointer;
+  font-size: 0.95rem;
+}
+.rp-btn-primary {
+  background: linear-gradient(135deg, #0284c7, #0369a1);
+  color: #fff;
+  margin-top: 0.5rem;
+}
+.rp-btn-primary:hover {
+  filter: brightness(1.05);
+}
+.rp-stage {
+  min-height: 120px;
+  padding: 0.5rem 0;
+}
+.rp-placeholder,
+.rp-muted {
+  color: #64748b;
+  font-size: 0.92rem;
+}
+.rp-error {
+  color: #b91c1c;
+  font-weight: 600;
+}
+.rp-spin {
+  text-align: center;
+  font-size: 1.2rem;
+  color: #0369a1;
+}
+.rp-winner {
+  padding: 0.45rem 0;
+  border-bottom: 1px solid #f1f5f9;
+  font-size: 1rem;
+}
+.rp-winner:last-child {
+  border-bottom: none;
+}
+.rp-id {
+  color: #94a3b8;
+  font-size: 0.85rem;
+}
+.rp-lote {
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  padding: 0.65rem 0.85rem;
+  margin-bottom: 0.65rem;
+  background: #f8fafc;
+}
+.rp-lote-head {
+  font-size: 0.88rem;
+  margin-bottom: 0.35rem;
+  color: #334155;
+}
+.rp-lote ul {
+  margin: 0;
+  padding-left: 1.1rem;
+}
+.rp-lote li {
+  font-size: 0.9rem;
+}

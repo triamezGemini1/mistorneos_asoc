@@ -1799,6 +1799,23 @@ try {
             $view_data = obtenerDatosNotificacionesTorneo($torneo_id);
             break;
 
+        case 'sorteo_premios':
+            if (!$torneo_id) {
+                throw new Exception('Debe especificar un torneo');
+            }
+            verificarPermisosTorneo($torneo_id, $user_id, $is_admin_general);
+            $torneo = obtenerTorneo($torneo_id, $user_id, $is_admin_general);
+            if (!$torneo) {
+                throw new Exception('Torneo no encontrado o sin permisos');
+            }
+            $view_file = __DIR__ . '/gestion_torneos/sorteo_premios.php';
+            $view_data = obtenerDatosPanel($torneo_id);
+            if (!isset($view_data['torneo']) || !$view_data['torneo']) {
+                $view_data['torneo'] = $torneo;
+            }
+            $view_data['torneo_id'] = $torneo_id;
+            break;
+
         case 'equipos':
             if (!$torneo_id) {
                 throw new Exception('Debe especificar un torneo');
