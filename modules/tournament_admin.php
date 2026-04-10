@@ -667,6 +667,14 @@ if (in_array($menu_action, $acciones_solo_reporte, true)) {
                         <strong>QR Personal</strong>
                     </a>
                     <?php endif; ?>
+
+                    <?php if ($mostrar('sorteo_premios')): ?>
+                    <a href="index.php?page=tournament_admin&torneo_id=<?= $torneo_id ?>&action=sorteo_premios" 
+                       class="menu-item d-block text-decoration-none text-dark <?= $menu_action === 'sorteo_premios' ? 'active' : '' ?>">
+                        <i class="fas fa-dice"></i>
+                        <strong>Sorteos / Premios</strong>
+                    </a>
+                    <?php endif; ?>
                     
                     <?php if ($mostrar('generar_qr')): ?>
                     <a href="index.php?page=tournament_admin&torneo_id=<?= $torneo_id ?>&action=reporte_identificacion_jugadores" 

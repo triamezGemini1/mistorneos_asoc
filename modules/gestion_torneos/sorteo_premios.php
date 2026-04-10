@@ -15,9 +15,14 @@ $nombreTorneo = htmlspecialchars((string) ($torneo['nombre'] ?? 'Torneo'), ENT_Q
 $csrf = CSRF::token();
 $script = basename($_SERVER['PHP_SELF'] ?? '');
 $useStandalone = in_array($script, ['admin_torneo.php', 'panel_torneo.php'], true);
-$backUrl = $useStandalone
-    ? $script . '?torneo_id=' . $tid . '&action=panel'
-    : 'index.php?page=torneo_gestion&action=panel&torneo_id=' . $tid;
+$pageCtx = (string) ($_GET['page'] ?? '');
+if ($pageCtx === 'tournament_admin') {
+    $backUrl = 'index.php?page=tournament_admin&torneo_id=' . $tid . '&action=dashboard';
+} elseif ($useStandalone) {
+    $backUrl = $script . '?torneo_id=' . $tid . '&action=panel';
+} else {
+    $backUrl = 'index.php?page=torneo_gestion&action=panel&torneo_id=' . $tid;
+}
 ?>
 <link rel="stylesheet" href="assets/css/raffle-premium.css">
 <div class="rp-wrap">

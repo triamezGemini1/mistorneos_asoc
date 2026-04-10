@@ -431,18 +431,19 @@ tailwind.config = {
                                     <i class="fas fa-plus-circle"></i> Agregar Mesa
                                 </a>
                             <?php endif; ?>
-
-                            <a href="index.php?page=tournament_admin&torneo_id=<?php echo (int)($torneo['id'] ?? 0); ?>&action=generar_qr" 
-                               class="tw-btn bg-violet-600 hover:bg-violet-700 text-white w-full text-center" target="_blank" rel="noopener">
-                                <i class="fas fa-qrcode"></i> Generar e imprimir QR del torneo
-                            </a>
                         <?php else: ?>
-                            <!-- Sin rondas generadas -->
+                            <!-- Sin rondas: asignaciones de mesas no disponibles aún -->
                             <div class="bg-gray-50 rounded-lg p-3 text-center text-gray-500 text-sm">
                                 <i class="fas fa-info-circle mr-2"></i>
-                                Genera la primera ronda para ver estas opciones
+                                Genera la primera ronda para ver asignaciones de mesas y operador
                             </div>
                         <?php endif; ?>
+
+                        <a href="index.php?page=tournament_admin&torneo_id=<?php echo (int)($torneo['id'] ?? 0); ?>&action=generar_qr#qr-personal-jugador" 
+                           class="tw-btn bg-violet-600 hover:bg-violet-700 text-white w-full text-center" target="_blank" rel="noopener">
+                            <i class="fas fa-qrcode"></i> Generar e imprimir QR del torneo
+                        </a>
+                        <p class="text-xs text-gray-500 text-center mb-0">Incluye QR genéricos y <strong>QR personal</strong> por jugador.</p>
                     </div>
                 </div>
             </div>
