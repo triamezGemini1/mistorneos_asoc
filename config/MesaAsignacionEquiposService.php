@@ -272,31 +272,43 @@ public function generarAsignacionRonda($torneo_id, $proxima_ronda, $total_rondas
 } 
 
 
-private function registrarMesaCuadruple($torneo_id, $mesa, $ronda, $u1, $u2, $u3, $u4, $autorId) 
-{
-    $pdo = DB::pdo();
-    $sql = "INSERT INTO partiresul (id_torneo, id_usuario, partida, mesa, secuencia, registrado, registrado_por, fecha_partida) 
-            VALUES (?, ?, ?, ?, ?, 0, ?, CURRENT_TIMESTAMP)";
-    $stmt = $pdo->prepare($sql);
-    
-    $stmt.execute([$torneo_id, $u1, $ronda, $mesa, 1, $autorId]);
-    $stmt.execute([$torneo_id, $u2, $ronda, $mesa, 2, $autorId]);
-    $stmt.execute([$torneo_id, $u3, $ronda, $mesa, 3, $autorId]);
-    $stmt.execute([$torneo_id, $u4, $ronda, $mesa, 4, $autorId]);
-}
-
-private function registrarMesaIncompleta($torneo_id, $mesa, $ronda, $jugadores) 
-{
-    $pdo = DB::pdo();
-    $autorId = isset($_SESSION['id_usuario']) ? $_SESSION['id_usuario'] : 1;
-
-    foreach ($jugadores as $jugador) {
+/**
+     * Inserta los 4 registros de una mesa completa.
+     * Corregido para evitar el error 'registrado_por' y errores de sintaxis en el execute.
+     */
+    private function registrarMesaCuadruple($torneo_id, $mesa, $ronda, $u1, $u2, $u3, $u4, $autorId) 
+    {
+        $pdo = DB::pdo();
         $sql = "INSERT INTO partiresul (id_torneo, id_usuario, partida, mesa, secuencia, registrado, registrado_por, fecha_partida) 
-                VALUES (?, ?, ?, 0, 1, 0, ?, CURRENT_TIMESTAMP)";
+                VALUES (?, ?, ?, ?, ?, 0, ?, CURRENT_TIMESTAMP)";
+        
         $stmt = $pdo->prepare($sql);
-        $stmt->execute([$torneo_id, $jugador['id_usuario'], $ronda, $autorId]);
+        
+        // Ejecución corregida: usamos -> para el método execute y pasamos el autorId
+        $stmt->execute([$torneo_id, $u1, $ronda, $mesa, 1, $autorId]);
+        $stmt->execute([$torneo_id, $u2, $ronda, $mesa, 2, $autorId]);
+        $stmt->execute([$torneo_id, $u3, $ronda, $mesa, 3, $autorId]);
+        $stmt->execute([$torneo_id, $u4, $ronda, $mesa, 4, $autorId]);
     }
-}
+
+    /**
+     * Registra jugadores sobrantes en la mesa 0 (BYE por equipos).
+     */
+    private function registrarMesaIncompleta($torneo_id, $mesa, $ronda, $jugadores) 
+    {
+        $pdo = DB::pdo();
+        $autorId = isset($_SESSION['id_usuario']) ? $_SESSION['id_usuario'] : 1;
+
+        foreach ($jugadores as $jugador) {
+            $sql = "INSERT INTO partiresul (id_torneo, id_usuario, partida, mesa, secuencia, registrado, registrado_por, fecha_partida) 
+                    VALUES (?, ?, ?, 0, 1, 0, ?, CURRENT_TIMESTAMP)";
+            $stmt = $pdo->prepare($sql);
+            $stmt->execute([$torneo_id, $jugador['id_usuario'], $ronda, $autorId]);
+        }
+    }
+ // <--- Verifica que esta sea la ÚNICA llave que cierra la clase al final del archivo
+
+
     /**
      * Ronda 1: 4 segmentos de N jugadores; mesa i = [seg0[i], seg1[i], seg2[i], seg3[i]].
      *
