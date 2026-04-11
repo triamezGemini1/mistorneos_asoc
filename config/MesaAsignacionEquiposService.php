@@ -279,30 +279,33 @@ public function generarAsignacionRonda($torneo_id, $proxima_ronda, $total_rondas
 private function registrarMesaCuadruple($torneo_id, $mesa, $ronda, $u1, $u2, $u3, $u4) 
 {
     $pdo = DB::pdo();
-    $sql = "INSERT INTO partiresul (id_torneo, id_usuario, partida, mesa, secuencia, registrado, fecha_partida) VALUES (?, ?, ?, ?, ?, 0, CURRENT_TIMESTAMP)";
+    
+    // Obtenemos el ID del usuario que está operando, o usamos 1 por defecto
+    $autorId = isset($_SESSION['id_usuario']) ? $_SESSION['id_usuario'] : 1;
+
+    // Añadimos 'registrado_por' a la consulta SQL
+    $sql = "INSERT INTO partiresul (id_torneo, id_usuario, partida, mesa, secuencia, registrado, registrado_por, fecha_partida) 
+            VALUES (?, ?, ?, ?, ?, 0, ?, CURRENT_TIMESTAMP)";
+    
     $stmt = $pdo->prepare($sql);
     
-    // Pareja A (Compañeros: secuencia 1 y 2)
-    $stmt->execute([$torneo_id, $u1, $ronda, $mesa, 1]);
-    $stmt->execute([$torneo_id, $u2, $ronda, $mesa, 2]);
-    
-    // Pareja B (Compañeros: secuencia 3 y 4)
-    $stmt->execute([$torneo_id, $u3, $ronda, $mesa, 3]);
-    $stmt->execute([$torneo_id, $u4, $ronda, $mesa, 4]);
-
+    // Pasamos el $autorId como el sexto parámetro
+    $stmt->execute([$torneo_id, $u1, $ronda, $mesa, 1, $autorId]);
+    $stmt->execute([$torneo_id, $u2, $ronda, $mesa, 2, $autorId]);
+    $stmt->execute([$torneo_id, $u3, $ronda, $mesa, 3, $autorId]);
+    $stmt->execute([$torneo_id, $u4, $ronda, $mesa, 4, $autorId]);
 }
 
 private function registrarMesaIncompleta($torneo_id, $mesa, $ronda, $jugadores) 
 {
     $pdo = DB::pdo();
-    
-    // Si no hay 4 jugadores, los enviamos a la mesa 0 (BYE)
-    // para que el sistema les asigne sus puntos de descanso automáticamente.
+    $autorId = isset($_SESSION['id_usuario']) ? $_SESSION['id_usuario'] : 1;
+
     foreach ($jugadores as $jugador) {
-        $sql = "INSERT INTO partiresul (id_torneo, id_usuario, partida, mesa, secuencia, registrado, fecha_partida) 
-                VALUES (?, ?, ?, 0, 1, 0, CURRENT_TIMESTAMP)";
+        $sql = "INSERT INTO partiresul (id_torneo, id_usuario, partida, mesa, secuencia, registrado, registrado_por, fecha_partida) 
+                VALUES (?, ?, ?, 0, 1, 0, ?, CURRENT_TIMESTAMP)";
         $stmt = $pdo->prepare($sql);
-        $stmt->execute([$torneo_id, $jugador['id_usuario'], $ronda]);
+        $stmt->execute([$torneo_id, $jugador['id_usuario'], $ronda, $autorId]);
     }
 }
     /**
