@@ -204,96 +204,85 @@ public function generarAsignacionRonda($torneo_id, $proxima_ronda, $total_rondas
 {
     $pdo = DB::pdo();
     $numeroMesaActual = 1;
+    $autorId = isset($_SESSION['id_usuario']) ? $_SESSION['id_usuario'] : 1;
 
-    // 1. Obtener todos los equipos ordenados por su clasificación oficial
-    $queryEquipos = "SELECT codigo_equipo FROM equipos WHERE id_torneo = ? AND estatus = 0 ORDER BY posicion ASC";
-    $stmtE = $pdo->prepare($queryEquipos);
+    // 1. Obtener equipos por clasificación oficial
+    $queryE = "SELECT codigo_equipo FROM equipos WHERE id_torneo = ? AND estatus = 0 ORDER BY posicion ASC";
+    $stmtE = $pdo->prepare($queryE);
     $stmtE->execute([$torneo_id]);
     $listaEquipos = $stmtE->fetchAll(PDO::FETCH_COLUMN);
 
-    if (empty($listaEquipos)) return ['success' => false, 'message' => 'No hay equipos para asignar'];
+    if (empty($listaEquipos)) return ['success' => false];
 
-    // 2. Agrupación en bloques de 4 con ajuste de remanentes
+    // 2. Agrupación: Bloques de 4, excepto el último que absorbe sobrantes
     $bloques = [];
-    $tempBloque = [];
-    foreach ($listaEquipos as $cod) {
-        $tempBloque[] = $cod;
-        if (count($tempBloque) === 4) {
-            $bloques[] = $tempBloque;
-            $tempBloque = [];
-        }
+    $totalEquipos = count($listaEquipos);
+    $procesados = 0;
+
+    while ($procesados < $totalEquipos) {
+        $restantes = $totalEquipos - $procesados;
+        
+        // Si quedan entre 1 y 3 equipos sobrantes, se unen al último bloque ya creado
+        if ($restantes < 4 && !empty($bloques)) {
+            $ultimoIdx = count($bloques) - 1;
+            $sobrantes = array_slice($listaEquipos, $procesados);
+            $bloques[$ultimoIdx] = array_merge($bloques[$ultimoIdx], $sobrantes);
+            break;
+        } 
+        
+        // Si quedan 4 o más, o es el primer bloque, tomamos 4
+        $bloques[] = array_slice($listaEquipos, $procesados, 4);
+        $procesados += 4;
     }
 
-    // REGLA ESPECIAL: Si sobran equipos (1, 2 o 3), se fusionan con el último bloque de 4
-    if (!empty($tempBloque)) {
-        if (empty($bloques)) {
-            $bloques[] = $tempBloque; // Caso: menos de 4 equipos en total
-        } else {
-            $ultimoIndice = count($bloques) - 1;
-            $bloques[$ultimoIndice] = array_merge($bloques[$ultimoIndice], $tempBloque);
-        }
-    }
-
-    // 3. Procesar cada bloque (normalmente de 4, o más si es el último)
+    // 3. Procesar cada bloque y cada Rango (1 al 4)
     foreach ($bloques as $bloqueEquipos) {
-        // En cada bloque, procesamos los 4 rangos de jugadores
         for ($rango = 1; $rango <= 4; $rango++) {
             
-            // Obtenemos a los jugadores de los equipos del bloque para este rango específico
-            // Los ordenamos por su desempeño individual para determinar quién es el 1, 2, 3 y 4 del grupo
             $placeholders = implode(',', array_fill(0, count($bloqueEquipos), '?'));
-            $queryJugadores = "SELECT id_usuario FROM inscritos 
-                              WHERE torneo_id = ? AND numero = ? AND codigo_equipo IN ($placeholders)
-                              ORDER BY CAST(ganados AS SIGNED) DESC, CAST(efectividad AS SIGNED) DESC, CAST(puntos AS SIGNED) DESC";
+            $queryJ = "SELECT id_usuario FROM inscritos 
+                       WHERE torneo_id = ? AND numero = ? AND codigo_equipo IN ($placeholders)
+                       ORDER BY CAST(ganados AS SIGNED) DESC, CAST(efectividad AS SIGNED) DESC, CAST(puntos AS SIGNED) DESC";
             
-            $stmtJ = $pdo->prepare($queryJugadores);
+            $stmtJ = $pdo->prepare($queryJ);
             $stmtJ->execute(array_merge([$torneo_id, $rango], $bloqueEquipos));
             $jugadoresGrupo = $stmtJ->fetchAll(PDO::FETCH_ASSOC);
 
-            // 4. Asignar mesas dentro del bloque de jugadores del mismo rango
+            // 4. Asignación de Mesas (1+2 vs 3+4)
+            // Al ser grupos que pueden ser de 5, 6 o 7, el bucle toma parejas hasta agotar
             for ($i = 0; $i < count($jugadoresGrupo); $i += 4) {
                 $j1 = $jugadoresGrupo[$i] ?? null;
-                $j2 = $jugadoresGrupo[$i + 1] ?? null;
-                $j3 = $jugadoresGrupo[$i + 2] ?? null;
-                $j4 = $jugadoresGrupo[$i + 3] ?? null;
+                $j2 = $jugadoresGrupo[$i+1] ?? null;
+                $j3 = $jugadoresGrupo[$i+2] ?? null;
+                $j4 = $jugadoresGrupo[$i+3] ?? null;
 
                 if ($j1 && $j2 && $j3 && $j4) {
-                    $this->registrarMesaCuadruple(
-                        $torneo_id, $numeroMesaActual, $proxima_ronda, 
-                        $j1['id_usuario'], $j2['id_usuario'], 
-                        $j3['id_usuario'], $j4['id_usuario']
-                    );
+                    $this->registrarMesaCuadruple($torneo_id, $numeroMesaActual, $proxima_ronda, 
+                                                 $j1['id_usuario'], $j2['id_usuario'], 
+                                                 $j3['id_usuario'], $j4['id_usuario'], $autorId);
                     $numeroMesaActual++;
-                } else if ($j1) {
-                    // Si el grupo no es múltiplo de 4, manejamos los que sobran
-                    $this->registrarMesaIncompleta($torneo_id, $numeroMesaActual, $proxima_ronda, array_filter([$j1, $j2, $j3, $j4]));
                 }
+                // Nota: Al ser equipos completos de 4 jugadores, si el bloque de equipos
+                // es >= 4, el grupo de jugadores siempre será múltiplo de 4. No habrá BYE.
             }
         }
     }
 
-    return ['success' => true, 'message' => 'Ronda generada por Bloques de Equipos y Rangos'];
+    return ['success' => true, 'message' => 'Ronda generada sin BYE por integración de sobrantes'];
 } 
 
 
-private function registrarMesaCuadruple($torneo_id, $mesa, $ronda, $u1, $u2, $u3, $u4) 
+private function registrarMesaCuadruple($torneo_id, $mesa, $ronda, $u1, $u2, $u3, $u4, $autorId) 
 {
     $pdo = DB::pdo();
-    
-    // Obtenemos el ID del usuario que está operando, o usamos 1 por defecto
-    $autorId = isset($_SESSION['id_usuario']) ? $_SESSION['id_usuario'] : 1;
-
-    // Añadimos 'registrado_por' a la consulta SQL
     $sql = "INSERT INTO partiresul (id_torneo, id_usuario, partida, mesa, secuencia, registrado, registrado_por, fecha_partida) 
             VALUES (?, ?, ?, ?, ?, 0, ?, CURRENT_TIMESTAMP)";
-    
     $stmt = $pdo->prepare($sql);
     
-    // Pasamos el $autorId como el sexto parámetro
-    $stmt->execute([$torneo_id, $u1, $ronda, $mesa, 1, $autorId]);
-    $stmt->execute([$torneo_id, $u2, $ronda, $mesa, 2, $autorId]);
-    $stmt->execute([$torneo_id, $u3, $ronda, $mesa, 3, $autorId]);
-    $stmt->execute([$torneo_id, $u4, $ronda, $mesa, 4, $autorId]);
+    $stmt.execute([$torneo_id, $u1, $ronda, $mesa, 1, $autorId]);
+    $stmt.execute([$torneo_id, $u2, $ronda, $mesa, 2, $autorId]);
+    $stmt.execute([$torneo_id, $u3, $ronda, $mesa, 3, $autorId]);
+    $stmt.execute([$torneo_id, $u4, $ronda, $mesa, 4, $autorId]);
 }
 
 private function registrarMesaIncompleta($torneo_id, $mesa, $ronda, $jugadores) 
