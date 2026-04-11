@@ -173,7 +173,7 @@ $pageTitle = isset($titulo) ? (string) $titulo : ('Cuadrícula - Ronda ' . (int)
     </div>
     <script>
 (function () {
-    var ROTACION_MS = 30 * 60 * 1000;
+    var ROTACION_MS = 10 * 1000;
     var series = document.querySelectorAll('.cuadricula-serie');
     var meta = document.getElementById('cuadriculaMeta');
     var idx = 0;
