@@ -547,11 +547,6 @@ tailwind.config = {
                             <i class="fas fa-sitemap"></i> Vincular Torneos (Evento)
                         </a>
 
-                        <a href="<?php echo $base_url . ($use_standalone ? '?' : '&'); ?>action=sorteo_premios&torneo_id=<?php echo (int)$torneo['id']; ?>"
-                           class="tw-btn bg-pink-600 hover:bg-pink-700 text-white">
-                            <i class="fas fa-dice"></i> Sorteos / Premios
-                        </a>
-
                         <?php if ($ultima_ronda > 0): ?>
                             <!-- Eliminar última ronda al final de Operaciones -->
                             <form method="POST" action="<?php echo $use_standalone ? $base_url : 'index.php?page=torneo_gestion'; ?>"

@@ -32,18 +32,6 @@ final class PublicInfoTorneoMesasService
         return $out;
     }
 
-    /** True si ya existe al menos una fila en partiresul (ronda generada). */
-    public static function torneoTienePartidasGeneradas(\PDO $pdo, int $torneoId): bool
-    {
-        if ($torneoId < 1) {
-            return false;
-        }
-        $st = $pdo->prepare('SELECT 1 FROM partiresul WHERE id_torneo = ? LIMIT 1');
-        $st->execute([$torneoId]);
-
-        return (bool) $st->fetchColumn();
-    }
-
     public static function estaInscrito(\PDO $pdo, int $torneoId, int $idUsuario): bool
     {
         $st = $pdo->prepare(
