@@ -73,13 +73,16 @@ class MesaAsignacionEquiposService
      */
     private function generarRonda1($torneo_id, $estrategia)
     {
-        // equipo_jugadores + inscritos: esquema canónico (equipos_usuarios no existe en esta BD)
+        // Miembros del equipo: tabla equipos + inscritos (codigo_equipo), sin tabla puente equipo_jugadores
         $sql = "SELECT u.id AS id_usuario, e.id AS id_equipo, e.nombre_equipo AS nombre_equipo
                 FROM equipos e
-                INNER JOIN equipo_jugadores ej ON ej.id_equipo = e.id AND ej.estatus = 1 AND ej.id_inscrito IS NOT NULL
-                INNER JOIN inscritos i ON i.id = ej.id_inscrito AND i.torneo_id = e.id_torneo
+                INNER JOIN inscritos i ON i.torneo_id = e.id_torneo
+                    AND i.codigo_equipo = e.codigo_equipo
+                    AND i.estatus != 4
                 INNER JOIN usuarios u ON u.id = i.id_usuario
                 WHERE e.id_torneo = ?
+                  AND e.estatus = 0
+                  AND e.codigo_equipo IS NOT NULL AND e.codigo_equipo != ''
                 ORDER BY e.id ASC, u.id ASC";
         
         $stmt = $this->pdo->prepare($sql);
@@ -356,9 +359,11 @@ class MesaAsignacionEquiposService
 WITH eu_base AS (
   SELECT e.id AS id_equipo, e.nombre_equipo AS nombre, i.id_usuario
   FROM equipos e
-  INNER JOIN equipo_jugadores ej ON ej.id_equipo = e.id AND ej.estatus = 1 AND ej.id_inscrito IS NOT NULL
-  INNER JOIN inscritos i ON i.id = ej.id_inscrito AND i.torneo_id = e.id_torneo
+  INNER JOIN inscritos i ON i.torneo_id = e.id_torneo
+    AND i.codigo_equipo = e.codigo_equipo
+    AND i.estatus != 4
   WHERE e.id_torneo = ? AND e.estatus = 0
+    AND e.codigo_equipo IS NOT NULL AND e.codigo_equipo != ''
 ),
 jugador_agg AS (
   SELECT
