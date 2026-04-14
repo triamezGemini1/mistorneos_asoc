@@ -2,7 +2,12 @@
 
 /**
  * Servicio de Asignación de Mesas para Torneos de Equipos de Dominó — V4
- * * PRIORIDADES DE ASIGNACIÓN:
+ *
+ * Tabla equipos (referencia): id, id_torneo, id_club, nombre_equipo, codigo_equipo, consecutivo_club,
+ * estatus (0=activo, 1=inactivo), ganados, perdidos, efectividad, puntos, gff, posicion, sancion,
+ * creado_por, fechas. Los jugadores se resuelven vía inscritos: mismo torneo y codigo_equipo que equipos.
+ *
+ * PRIORIDADES DE ASIGNACIÓN:
  * 1. Número dentro del equipo (Rango 1-4 según rendimiento individual desde partiresul: JG, efectividad, PF).
  * 2. Lista maestra del bloque: todos los rango 1 (por ranking de equipo), luego rango 2, etc.; mesas 1..N
  *    se llenan en orden: cada atleta va a la primera mesa con hueco sin otro jugador de su equipo.
