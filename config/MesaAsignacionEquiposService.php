@@ -427,16 +427,43 @@ ORDER BY er.rn_equipo ASC, jr.posicion_equipo ASC
 ";
     }
 
+    /**
+     * Usuario que registra la asignación (misma lógica que MesaRepository / legacy).
+     */
+    private function resolveRegistradoPorUsuarioId(): int
+    {
+        if (session_status() === PHP_SESSION_ACTIVE) {
+            $admin = $_SESSION['admin_user'] ?? null;
+            if (is_array($admin) && !empty($admin['id'])) {
+                return max(1, (int) $admin['id']);
+            }
+            $user = $_SESSION['user'] ?? null;
+            if (is_array($user) && !empty($user['id'])) {
+                return max(1, (int) $user['id']);
+            }
+        }
+        if (class_exists('Auth', false) && method_exists('Auth', 'id')) {
+            $id = (int) Auth::id();
+            return $id > 0 ? $id : 1;
+        }
+        return 1;
+    }
+
+    /**
+     * Esquema estándar partiresul (sin id_equipo / fecha_registro; igual que MesaRepositoryPersistTrait).
+     */
     private function guardarAsignacionRonda($torneo_id, $ronda, $mesas)
     {
         $this->pdo->beginTransaction();
         try {
-            // Limpiar si ya existe
             $stmt = $this->pdo->prepare("DELETE FROM partiresul WHERE id_torneo = ? AND partida = ?");
             $stmt->execute([$torneo_id, $ronda]);
 
-            $sql = "INSERT INTO partiresul (id_torneo, partida, mesa, secuencia, id_usuario, id_equipo, fecha_registro) 
-                    VALUES (?, ?, ?, ?, ?, ?, NOW())";
+            $registradoPor = $this->resolveRegistradoPorUsuarioId();
+            $sql = "INSERT INTO partiresul
+                    (id_torneo, id_usuario, partida, mesa, secuencia, fecha_partida, registrado, registrado_por,
+                     resultado1, resultado2, efectividad, ff)
+                    VALUES (?, ?, ?, ?, ?, NOW(), 0, ?, 0, 0, 0, 0)";
             $stmt = $this->pdo->prepare($sql);
 
             foreach ($mesas as $indexMesa => $jugadores) {
@@ -444,12 +471,12 @@ ORDER BY er.rn_equipo ASC, jr.posicion_equipo ASC
                 foreach ($jugadores as $indexJugador => $j) {
                     $secuencia = $indexJugador + 1;
                     $stmt->execute([
-                        $torneo_id, 
-                        $ronda, 
-                        $numMesa, 
-                        $secuencia, 
-                        $j['id_usuario'], 
-                        $j['id_equipo']
+                        $torneo_id,
+                        (int) ($j['id_usuario'] ?? 0),
+                        $ronda,
+                        $numMesa,
+                        $secuencia,
+                        $registradoPor,
                     ]);
                 }
             }
