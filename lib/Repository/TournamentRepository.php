@@ -141,18 +141,26 @@ class TournamentRepository
      */
     public function create(array $data): int
     {
-        $stmt = $this->pdo->prepare(
-            "INSERT INTO tournaments (nombre, fechator, lugar, club_responsable, modalidad, clase, created_at) 
-             VALUES (?, ?, ?, ?, ?, ?, NOW())"
-        );
-        $stmt->execute([
+        $cols = $this->pdo->query("SHOW COLUMNS FROM tournaments")->fetchAll(PDO::FETCH_COLUMN);
+        $hasParentEventId = is_array($cols) && in_array('parent_event_id', $cols, true);
+        $sql = "INSERT INTO tournaments (nombre, fechator, lugar, club_responsable, modalidad, clase, created_at";
+        $vals = "VALUES (?, ?, ?, ?, ?, ?, NOW()";
+        $params = [
             $data['nombre'],
             $data['fechator'],
             $data['lugar'] ?? null,
             $data['club_responsable'] ?? null,
             $data['modalidad'] ?? null,
-            $data['clase'] ?? null
-        ]);
+            $data['clase'] ?? null,
+        ];
+        if ($hasParentEventId) {
+            $sql .= ", parent_event_id";
+            $vals .= ", ?";
+            $params[] = 0;
+        }
+        $sql .= ") " . $vals . ")";
+        $stmt = $this->pdo->prepare($sql);
+        $stmt->execute($params);
         return (int) $this->pdo->lastInsertId();
     }
 

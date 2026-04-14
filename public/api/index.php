@@ -208,7 +208,15 @@ try {
       if ($method === 'POST') {
         require_roles(['admin_general','admin_torneo']);
         $b = get_json_body();
-        $stmt = DB::pdo()->prepare("INSERT INTO tournaments (nombre,fechator,clase,modalidad,tiempo,puntos,rondas,estatus,costo,ranking,pareclub,club_responsable) VALUES (:n,:f,:cl,:mo,:ti,:po,:ro,:es,:co,:ra,:pc,:cr)");
+        $tournamentCols = DB::pdo()->query("SHOW COLUMNS FROM tournaments")->fetchAll(PDO::FETCH_COLUMN);
+        $hasParentEventId = is_array($tournamentCols) && in_array('parent_event_id', $tournamentCols, true);
+        $insT = "INSERT INTO tournaments (nombre,fechator,clase,modalidad,tiempo,puntos,rondas,estatus,costo,ranking,pareclub,club_responsable";
+        $insV = "VALUES (:n,:f,:cl,:mo,:ti,:po,:ro,:es,:co,:ra,:pc,:cr";
+        if ($hasParentEventId) {
+          $insT .= ",parent_event_id";
+          $insV .= ",0";
+        }
+        $stmt = DB::pdo()->prepare($insT . ") " . $insV . ")");
         $stmt->execute([
           ':n'=>V::str($b['nombre'] ?? '',1,255),
           ':f'=>V::date($b['fechator'] ?? null),

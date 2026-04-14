@@ -33,10 +33,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $estatus = 1;
             $now = date('Y-m-d H:i:s');
 
+            $cols = $pdo->query("SHOW COLUMNS FROM tournaments")->fetchAll(PDO::FETCH_COLUMN);
+            $hasParentEventId = is_array($cols) && in_array('parent_event_id', $cols, true);
             $sql = "INSERT INTO tournaments (
                 nombre, clase, modalidad, tiempo, puntos, rondas, costo, estatus,
-                entidad, uuid, afiche, normas, invitacion, fechator, created_at, last_updated
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+                entidad, uuid, afiche, normas, invitacion, fechator, created_at, last_updated";
+            $sql .= $hasParentEventId ? ", parent_event_id" : "";
+            $sql .= ") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?";
+            $sql .= $hasParentEventId ? ", 0" : "";
+            $sql .= ")";
             $stmt = $pdo->prepare($sql);
             $stmt->execute([
                 $nombre, $clase, $modalidad, $tiempo, $puntos, $rondas, $costo, $estatus,

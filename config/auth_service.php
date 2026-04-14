@@ -31,11 +31,35 @@ class AuthService {
             return;
         }
         $login_url = self::loginUrl();
+        $returnRel = self::buildLoginReturnUrl();
+        if ($returnRel !== '') {
+            $login_url .= (strpos($login_url, '?') !== false ? '&' : '?') . 'return_url=' . rawurlencode($returnRel);
+        }
         if (function_exists('getenv') && getenv('SESSION_DEBUG')) {
             error_log('[SESSION] AuthService::requireAuth -> redirect a login | url=' . $login_url);
         }
         header('Location: ' . $login_url, true, 302);
         exit;
+    }
+
+    /**
+     * URL relativa segura para login.php?return_url=? (misma validaci?n de caracteres que en login.php).
+     * Solo front controller index.php con query no vac?o (ej. page=torneo_gestion).
+     */
+    private static function buildLoginReturnUrl(): string {
+        $script = basename($_SERVER['SCRIPT_NAME'] ?? '');
+        if ($script !== 'index.php') {
+            return '';
+        }
+        $q = isset($_SERVER['QUERY_STRING']) ? (string) $_SERVER['QUERY_STRING'] : '';
+        if ($q === '') {
+            return '';
+        }
+        $candidate = 'index.php?' . $q;
+        if (!preg_match('#^[a-zA-Z0-9_\-/\.\?=&]+$#', $candidate)) {
+            return '';
+        }
+        return $candidate;
     }
 
     /**

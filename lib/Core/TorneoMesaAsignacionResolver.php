@@ -52,7 +52,10 @@ class TorneoMesaAsignacionResolver
                     require_once $root . '/config/MesaAsignacionEquiposService.php';
                 }
             }
-            return new MesaAsignacionEquiposService();
+            if (!class_exists('DB', false) || !method_exists('DB', 'pdo')) {
+                throw new RuntimeException('TorneoMesaAsignacionResolver: DB::pdo() no disponible para MesaAsignacionEquiposService');
+            }
+            return new MesaAsignacionEquiposService(DB::pdo());
         }
         if (in_array($modalidad, self::MODALIDAD_PAREJAS_FIJAS, true)) {
             if (self::esDesktopCore()) {

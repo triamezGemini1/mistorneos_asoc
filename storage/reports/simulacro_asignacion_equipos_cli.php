@@ -32,10 +32,9 @@ function fmtJug(array $j, array $clasiequiPorInscrito = []): string
 }
 
 $tid = isset($argv[1]) ? (int) $argv[1] : 10;
-$svc = new MesaAsignacionEquiposService();
-$ref = new ReflectionClass($svc);
-
 $pdo = DB::pdo();
+$svc = new MesaAsignacionEquiposService($pdo);
+$ref = new ReflectionClass($svc);
 $clasiequiPorInscrito = [];
 $stCl = $pdo->prepare('SELECT id, clasiequi FROM inscritos WHERE torneo_id = ?');
 $stCl->execute([$tid]);
