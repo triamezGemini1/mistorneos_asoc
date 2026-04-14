@@ -73,10 +73,12 @@ class MesaAsignacionEquiposService
      */
     private function generarRonda1($torneo_id, $estrategia)
     {
-        $sql = "SELECT u.id as id_usuario, e.id as id_equipo, e.nombre_equipo AS nombre_equipo
+        // equipo_jugadores + inscritos: esquema canónico (equipos_usuarios no existe en esta BD)
+        $sql = "SELECT u.id AS id_usuario, e.id AS id_equipo, e.nombre_equipo AS nombre_equipo
                 FROM equipos e
-                JOIN equipos_usuarios eu ON e.id = eu.id_equipo
-                JOIN usuarios u ON eu.id_usuario = u.id
+                INNER JOIN equipo_jugadores ej ON ej.id_equipo = e.id AND ej.estatus = 1 AND ej.id_inscrito IS NOT NULL
+                INNER JOIN inscritos i ON i.id = ej.id_inscrito AND i.torneo_id = e.id_torneo
+                INNER JOIN usuarios u ON u.id = i.id_usuario
                 WHERE e.id_torneo = ?
                 ORDER BY e.id ASC, u.id ASC";
         
@@ -352,9 +354,10 @@ class MesaAsignacionEquiposService
 
         return "
 WITH eu_base AS (
-  SELECT e.id AS id_equipo, e.nombre_equipo AS nombre, eu.id_usuario
+  SELECT e.id AS id_equipo, e.nombre_equipo AS nombre, i.id_usuario
   FROM equipos e
-  INNER JOIN equipos_usuarios eu ON eu.id_equipo = e.id
+  INNER JOIN equipo_jugadores ej ON ej.id_equipo = e.id AND ej.estatus = 1 AND ej.id_inscrito IS NOT NULL
+  INNER JOIN inscritos i ON i.id = ej.id_inscrito AND i.torneo_id = e.id_torneo
   WHERE e.id_torneo = ? AND e.estatus = 0
 ),
 jugador_agg AS (
