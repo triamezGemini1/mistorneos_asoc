@@ -99,6 +99,12 @@ $page_title = 'Reportes de inscritos — ' . (string) ($torneo['nombre'] ?? 'Tor
         <div class="p-5">
             <section class="border border-slate-200 rounded-xl p-4 bg-white mb-6">
                 <h2 class="text-xl font-extrabold text-slate-800 mb-4">Reportes de inscritos</h2>
+                <div class="mb-3">
+                    <a href="<?php echo htmlspecialchars(AppHelpers::torneoGestionUrl('carga_excel_tablas', $tid_report), ENT_QUOTES, 'UTF-8'); ?>"
+                       class="tw-btn btn-compact bg-indigo-700 hover:bg-indigo-800 text-white justify-center font-bold">
+                        <i class="fas fa-upload mr-2"></i> Carga Excel a tablas
+                    </a>
+                </div>
                 <div class="flex flex-wrap items-center gap-2">
                     <a href="<?php echo htmlspecialchars($url_pdf_det, ENT_QUOTES, 'UTF-8'); ?>" target="_blank" rel="noopener"
                        class="tw-btn btn-compact bg-rose-600 hover:bg-rose-700 text-white justify-center font-bold">

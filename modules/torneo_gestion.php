@@ -388,6 +388,69 @@ function torneoGestionAlertaGeneroVsTorneo(string $generoTorneoInferido, $sexoUs
 }
 
 /**
+ * Header normalizado para mapeo de columnas.
+ */
+function tgNormalizeHeader(string $s): string
+{
+    $s = strtolower(trim($s));
+    $s = str_replace(['á', 'é', 'í', 'ó', 'ú', 'ñ'], ['a', 'e', 'i', 'o', 'u', 'n'], $s);
+    $s = preg_replace('/[^a-z0-9]+/', '_', $s);
+    return trim((string)$s, '_');
+}
+
+/**
+ * Lee filas tabulares desde CSV/TXT/XLSX.
+ *
+ * @return array{headers:array<int,string>, rows:array<int,array<int,string>>}
+ */
+function tgReadRowsFromUpload(string $tmpPath, string $originalName): array
+{
+    $ext = strtolower(pathinfo($originalName, PATHINFO_EXTENSION));
+    if ($ext === 'csv' || $ext === 'txt') {
+        $raw = (string)@file_get_contents($tmpPath);
+        if ($raw === '') {
+            return ['headers' => [], 'rows' => []];
+        }
+        if (strncmp($raw, "\xEF\xBB\xBF", 3) === 0) {
+            $raw = substr($raw, 3);
+        }
+        $lines = preg_split('/\r\n|\r|\n/', $raw) ?: [];
+        $lines = array_values(array_filter($lines, static fn ($l) => trim((string)$l) !== ''));
+        if ($lines === []) {
+            return ['headers' => [], 'rows' => []];
+        }
+        $first = (string)$lines[0];
+        $delim = ',';
+        if (substr_count($first, "\t") >= 2) {
+            $delim = "\t";
+        } elseif (substr_count($first, ';') >= 2 && substr_count($first, ',') < 2) {
+            $delim = ';';
+        }
+        $all = [];
+        foreach ($lines as $line) {
+            $row = $delim === "\t" ? explode("\t", $line) : str_getcsv($line, $delim, '"', '\\');
+            $all[] = array_map(static fn ($c) => trim((string)$c), $row);
+        }
+        $headers = array_map(static fn ($h) => (string)$h, (array)($all[0] ?? []));
+        $rows = array_slice($all, 1);
+        return ['headers' => $headers, 'rows' => $rows];
+    }
+
+    if ($ext === 'xlsx') {
+        require_once __DIR__ . '/../lib/CargaMasivaXlsxReader.php';
+        $all = CargaMasivaXlsxReader::leerHojas($tmpPath);
+        if ($all === []) {
+            throw new Exception('No se pudieron leer filas del .xlsx');
+        }
+        $headers = array_map(static fn ($h) => (string)$h, (array)($all[0] ?? []));
+        $rows = array_slice($all, 1);
+        return ['headers' => $headers, 'rows' => $rows];
+    }
+
+    throw new Exception('Formato no soportado. Use .xlsx, .csv o .txt');
+}
+
+/**
  * Base URL del entry point para enlaces del selector de torneos asociados (válida bajo /public/, beta, etc.).
  */
 function torneoGestionContextSwitchBaseUrl(): string {
@@ -1668,6 +1731,248 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
             exit;
 
+        case 'carga_excel_tablas_procesar':
+            $tid = (int)($_POST['torneo_id'] ?? 0);
+            if ($tid <= 0) {
+                $_SESSION['error'] = 'Torneo no especificado.';
+                header('Location: ' . buildRedirectUrl('index'));
+                exit;
+            }
+            verificarPermisosTorneo($tid, $user_id, $is_admin_general);
+            if (!isset($_FILES['archivo']) || !is_uploaded_file($_FILES['archivo']['tmp_name'] ?? '')) {
+                $_SESSION['error'] = 'Adjunte un archivo para procesar.';
+                header('Location: ' . buildRedirectUrl('carga_excel_tablas', ['torneo_id' => $tid]));
+                exit;
+            }
+
+            $tabla = strtolower(trim((string)($_POST['tabla_destino'] ?? '')));
+            $permitidas = ['inscritos', 'equipos', 'partiresul'];
+            if (!in_array($tabla, $permitidas, true)) {
+                $_SESSION['error'] = 'Tabla destino no válida.';
+                header('Location: ' . buildRedirectUrl('carga_excel_tablas', ['torneo_id' => $tid]));
+                exit;
+            }
+
+            $columnasSeleccionadas = array_values(array_unique(array_map(
+                static fn ($c) => tgNormalizeHeader((string)$c),
+                (array)($_POST['columnas'] ?? [])
+            )));
+            if ($columnasSeleccionadas === []) {
+                $_SESSION['error'] = 'Seleccione al menos una columna.';
+                header('Location: ' . buildRedirectUrl('carga_excel_tablas', ['torneo_id' => $tid]));
+                exit;
+            }
+
+            try {
+                $archivo = tgReadRowsFromUpload((string)$_FILES['archivo']['tmp_name'], (string)($_FILES['archivo']['name'] ?? 'archivo.xlsx'));
+                $headers = $archivo['headers'];
+                $rows = $archivo['rows'];
+                if ($headers === [] || $rows === []) {
+                    throw new Exception('El archivo no contiene cabecera o filas de datos.');
+                }
+
+                $headerMap = [];
+                foreach ($headers as $i => $h) {
+                    $headerMap[tgNormalizeHeader((string)$h)] = $i;
+                }
+
+                $assocRows = [];
+                foreach ($rows as $r) {
+                    $assoc = [];
+                    foreach ($headerMap as $hk => $idx) {
+                        $assoc[$hk] = trim((string)($r[$idx] ?? ''));
+                    }
+                    $isEmpty = true;
+                    foreach ($assoc as $v) {
+                        if ($v !== '') {
+                            $isEmpty = false;
+                            break;
+                        }
+                    }
+                    if (!$isEmpty) {
+                        $assocRows[] = $assoc;
+                    }
+                }
+                if ($assocRows === []) {
+                    throw new Exception('No hay filas útiles para procesar.');
+                }
+
+                $pdo = DB::pdo();
+                $pdo->beginTransaction();
+                $ok = 0;
+                $errores = [];
+
+                if ($tabla === 'inscritos') {
+                    $upCols = array_values(array_intersect($columnasSeleccionadas, ['id_club', 'codigo_equipo', 'estatus', 'cedula', 'numfvd']));
+                    if ($upCols === []) {
+                        throw new Exception('Para inscritos seleccione al menos un campo editable (id_club, codigo_equipo, estatus, cedula, numfvd).');
+                    }
+                    foreach ($assocRows as $i => $row) {
+                        $idUsuario = (int)($row['id_usuario'] ?? 0);
+                        if ($idUsuario <= 0) {
+                            $errores[] = 'Fila ' . ($i + 2) . ': id_usuario es obligatorio.';
+                            continue;
+                        }
+                        $setParts = [];
+                        $params = [];
+                        foreach ($upCols as $c) {
+                            if (!array_key_exists($c, $row)) {
+                                continue;
+                            }
+                            $setParts[] = "$c = ?";
+                            $params[] = $row[$c];
+                        }
+                        if ($setParts === []) {
+                            continue;
+                        }
+                        $params[] = $tid;
+                        $params[] = $idUsuario;
+                        $sql = "UPDATE inscritos SET " . implode(', ', $setParts) . " WHERE torneo_id = ? AND id_usuario = ?";
+                        $st = $pdo->prepare($sql);
+                        $st->execute($params);
+                        if ($st->rowCount() > 0) {
+                            $ok++;
+                            continue;
+                        }
+                        $insertCols = ['torneo_id', 'id_usuario'];
+                        $insertVals = [$tid, $idUsuario];
+                        foreach ($upCols as $c) {
+                            if (array_key_exists($c, $row)) {
+                                $insertCols[] = $c;
+                                $insertVals[] = $row[$c];
+                            }
+                        }
+                        $ph = implode(',', array_fill(0, count($insertCols), '?'));
+                        $sqlIns = "INSERT INTO inscritos (" . implode(',', $insertCols) . ") VALUES ($ph)";
+                        $stIns = $pdo->prepare($sqlIns);
+                        $stIns->execute($insertVals);
+                        $ok += 1;
+                    }
+                } elseif ($tabla === 'equipos') {
+                    $upCols = array_values(array_intersect($columnasSeleccionadas, ['nombre_equipo', 'id_club', 'estatus', 'ganados', 'perdidos', 'efectividad', 'puntos']));
+                    if ($upCols === []) {
+                        throw new Exception('Para equipos seleccione al menos un campo editable.');
+                    }
+                    foreach ($assocRows as $i => $row) {
+                        $codigo = trim((string)($row['codigo_equipo'] ?? ''));
+                        if ($codigo === '') {
+                            $errores[] = 'Fila ' . ($i + 2) . ': codigo_equipo es obligatorio.';
+                            continue;
+                        }
+                        $setParts = [];
+                        $params = [];
+                        foreach ($upCols as $c) {
+                            if (!array_key_exists($c, $row)) {
+                                continue;
+                            }
+                            $setParts[] = "$c = ?";
+                            $params[] = $row[$c];
+                        }
+                        if ($setParts === []) {
+                            continue;
+                        }
+                        $params[] = $tid;
+                        $params[] = $codigo;
+                        $sql = "UPDATE equipos SET " . implode(', ', $setParts) . " WHERE torneo_id = ? AND codigo_equipo = ?";
+                        $st = $pdo->prepare($sql);
+                        $st->execute($params);
+                        if ($st->rowCount() > 0) {
+                            $ok++;
+                            continue;
+                        }
+                        $insertCols = ['torneo_id', 'codigo_equipo'];
+                        $insertVals = [$tid, $codigo];
+                        foreach ($upCols as $c) {
+                            if (array_key_exists($c, $row)) {
+                                $insertCols[] = $c;
+                                $insertVals[] = $row[$c];
+                            }
+                        }
+                        $ph = implode(',', array_fill(0, count($insertCols), '?'));
+                        $sqlIns = "INSERT INTO equipos (" . implode(',', $insertCols) . ") VALUES ($ph)";
+                        $stIns = $pdo->prepare($sqlIns);
+                        $stIns->execute($insertVals);
+                        $ok += 1;
+                    }
+                } else {
+                    require_once __DIR__ . '/../lib/Tournament/Handlers/TournamentActionHandler.php';
+                    $grupos = [];
+                    foreach ($assocRows as $i => $row) {
+                        $partida = (int)($row['partida'] ?? 0);
+                        $mesa = (int)($row['mesa'] ?? 0);
+                        $secuencia = (int)($row['secuencia'] ?? 0);
+                        if ($partida <= 0 || $mesa <= 0 || $secuencia <= 0) {
+                            $errores[] = 'Fila ' . ($i + 2) . ': partida, mesa y secuencia son obligatorias.';
+                            continue;
+                        }
+                        $k = $partida . ':' . $mesa;
+                        if (!isset($grupos[$k])) {
+                            $grupos[$k] = ['partida' => $partida, 'mesa' => $mesa, 'rows' => []];
+                        }
+                        $grupos[$k]['rows'][$secuencia] = $row;
+                    }
+
+                    foreach ($grupos as $grupo) {
+                        $partida = (int)$grupo['partida'];
+                        $mesa = (int)$grupo['mesa'];
+                        $stMesa = $pdo->prepare("SELECT id, id_usuario, secuencia, resultado1, resultado2, ff, sancion, tarjeta, chancleta, zapato FROM partiresul WHERE torneo_id = ? AND partida = ? AND mesa = ? ORDER BY secuencia ASC");
+                        $stMesa->execute([$tid, $partida, $mesa]);
+                        $dbRows = $stMesa->fetchAll(PDO::FETCH_ASSOC);
+                        if (count($dbRows) !== 4) {
+                            $errores[] = "Ronda $partida mesa $mesa: se esperaban 4 jugadores en partiresul.";
+                            continue;
+                        }
+
+                        $jugadores = [];
+                        foreach ($dbRows as $db) {
+                            $sec = (int)$db['secuencia'];
+                            $src = $grupo['rows'][$sec] ?? [];
+                            $jugadores[] = [
+                                'id' => (int)$db['id'],
+                                'id_usuario' => (int)$db['id_usuario'],
+                                'secuencia' => $sec,
+                                'resultado1' => in_array('resultado1', $columnasSeleccionadas, true) ? (int)($src['resultado1'] ?? $db['resultado1']) : (int)$db['resultado1'],
+                                'resultado2' => in_array('resultado2', $columnasSeleccionadas, true) ? (int)($src['resultado2'] ?? $db['resultado2']) : (int)$db['resultado2'],
+                                'ff' => in_array('ff', $columnasSeleccionadas, true) ? (int)($src['ff'] ?? $db['ff']) : (int)$db['ff'],
+                                'sancion' => in_array('sancion', $columnasSeleccionadas, true) ? (int)($src['sancion'] ?? $db['sancion']) : (int)$db['sancion'],
+                                'tarjeta' => in_array('tarjeta', $columnasSeleccionadas, true) ? (int)($src['tarjeta'] ?? $db['tarjeta']) : (int)$db['tarjeta'],
+                                'chancleta' => (int)$db['chancleta'],
+                                'zapato' => (int)$db['zapato'],
+                            ];
+                        }
+
+                        \Tournament\Handlers\TournamentActionHandler::aplicarResultadosMesaCore(
+                            $pdo,
+                            $tid,
+                            $partida,
+                            $mesa,
+                            $jugadores,
+                            (int)(Auth::id() ?: 0),
+                            'Carga Excel'
+                        );
+                        $ok++;
+                    }
+                }
+
+                actualizarEstadisticasInscritos($tid);
+                recalcularPosiciones($tid);
+                $pdo->commit();
+
+                $msg = "Carga aplicada en tabla {$tabla}. Registros procesados: {$ok}.";
+                if ($errores !== []) {
+                    $msg .= ' Observaciones: ' . implode(' | ', array_slice($errores, 0, 8));
+                }
+                $_SESSION['success'] = $msg;
+            } catch (Throwable $e) {
+                if (isset($pdo) && $pdo instanceof PDO && $pdo->inTransaction()) {
+                    $pdo->rollBack();
+                }
+                $_SESSION['error'] = 'Error en carga Excel: ' . $e->getMessage();
+            }
+
+            header('Location: ' . buildRedirectUrl('carga_excel_tablas', ['torneo_id' => $tid]));
+            exit;
+
         case 'generar_ronda':
             $torneo_id = (int)($_POST['torneo_id'] ?? 0);
             generarRonda($torneo_id, $user_id, $is_admin_general);
@@ -1945,6 +2250,19 @@ try {
                 $view_data['torneo'] = $torneo;
             }
             $view_data['torneo_id'] = $torneo_id;
+            break;
+
+        case 'carga_excel_tablas':
+            if (!$torneo_id) {
+                throw new Exception('Debe especificar un torneo');
+            }
+            verificarPermisosTorneo($torneo_id, $user_id, $is_admin_general);
+            $torneo = obtenerTorneo($torneo_id, $user_id, $is_admin_general);
+            if (!$torneo) {
+                throw new Exception('Torneo no encontrado o sin permisos');
+            }
+            $view_file = __DIR__ . '/gestion_torneos/carga_excel_tablas.php';
+            $view_data = ['torneo' => $torneo, 'torneo_id' => $torneo_id];
             break;
         
         case 'vincular_torneos':
