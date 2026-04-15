@@ -1,7 +1,8 @@
 <?php
 
 /**
- * Op Especiales — carga especial / simulación (solo tournaments.estatus = 9).
+ * Op Especiales — carga automática y auditoría analítica solo con tournaments.estatus = 9.
+ * Swap entre mesas y reemplazo de id_usuario en partiresul: disponibles para cualquier torneo (con permisos).
  */
 
 declare(strict_types=1);
@@ -19,9 +20,9 @@ use Tournament\Handlers\RoundManagerHandler;
 Auth::requireRole(['admin_general', 'admin_torneo', 'admin_club']);
 
 $torneo_id = (int) ($_POST['torneo_id'] ?? $_GET['torneo_id'] ?? 0);
-$view = trim((string) ($_GET['view'] ?? 'carga'));
+$view = trim((string) ($_GET['view'] ?? 'swap'));
 if (! in_array($view, ['carga', 'swap', 'auditoria'], true)) {
-    $view = 'carga';
+    $view = 'swap';
 }
 
 if ($torneo_id <= 0) {
@@ -41,14 +42,30 @@ try {
     exit;
 }
 
-if (! OpEspecialesHelper::esCargaEspecial($torneo)) {
-    header('Location: index.php?page=torneo_gestion&action=panel&torneo_id=' . $torneo_id . '&error=' . urlencode('Operaciones Especiales solo está disponible con estatus de torneo «Carga especial / simulación» (9).'));
-    exit;
-}
+$es_carga_especial = OpEspecialesHelper::esCargaEspecial($torneo);
 
 $pdo = DB::pdo();
 $uid = (int) Auth::id();
 $modalidad = (int) ($torneo['modalidad'] ?? 0);
+
+if (! class_exists('AppHelpers', false) && is_readable(__DIR__ . '/../lib/app_helpers.php')) {
+    require_once __DIR__ . '/../lib/app_helpers.php';
+}
+/** @param array<string, scalar> $extra query adicional (p. ej. view, ronda) */
+$opEspHref = function (array $extra = []) use ($torneo_id): string {
+    $q = array_merge(['page' => 'op_especiales', 'torneo_id' => $torneo_id], $extra);
+    if (class_exists('AppHelpers', false)) {
+        return AppHelpers::url('index.php', $q);
+    }
+
+    return 'index.php?' . http_build_query($q);
+};
+
+if (($_SERVER['REQUEST_METHOD'] ?? '') !== 'POST' && ! $es_carga_especial && in_array($view, ['carga', 'auditoria'], true)) {
+    $_SESSION['info'] = 'La carga automática por ronda y la auditoría analítica solo están disponibles si el torneo tiene estatus «Carga especial / simulación» (9).';
+    header('Location: ' . $opEspHref(['view' => 'swap']));
+    exit;
+}
 
 /**
  * @return list<int>
@@ -70,9 +87,16 @@ function op_especiales_parse_ids_from_post(string $key): array
 
 if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
     CSRF::validate();
+    $view_redirect = trim((string) ($_POST['return_view'] ?? $_GET['view'] ?? 'swap'));
+    if (! in_array($view_redirect, ['carga', 'swap', 'auditoria'], true)) {
+        $view_redirect = 'swap';
+    }
     $action = trim((string) ($_POST['op_action'] ?? ''));
 
     try {
+        if (in_array($action, ['aplicar_ff', 'aplicar_tarjetas', 'carga_masiva', 'generar_siguiente'], true) && ! OpEspecialesHelper::esCargaEspecial($torneo)) {
+            throw new \RuntimeException('La carga automática y la generación asistida desde esta pantalla solo están disponibles con estatus de torneo «Carga especial / simulación» (9).');
+        }
         if ($action === 'aplicar_ff') {
             $ronda = (int) ($_POST['ronda'] ?? 0);
             $ids = op_especiales_parse_ids_from_post('ids_partiresul_text');
@@ -135,7 +159,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
         $_SESSION['error'] = $e->getMessage();
     }
 
-    header('Location: index.php?page=op_especiales&torneo_id=' . $torneo_id . '&view=' . urlencode($view));
+    header('Location: ' . $opEspHref(['view' => $view_redirect]));
     exit;
 }
 
@@ -144,26 +168,39 @@ $stR->execute([$torneo_id]);
 $ultima_ronda = (int) $stR->fetchColumn();
 $rondas_opts = range(1, max(1, (int) ($torneo['rondas'] ?? 9)));
 
-$audit = OpEspecialesHelper::reporteAuditoria($torneo_id);
+$audit = ['integridad' => [], 'gdu' => [], 'ff_incoherente' => []];
+if ($es_carga_especial && $view === 'auditoria') {
+    $audit = OpEspecialesHelper::reporteAuditoria($torneo_id);
+}
 
 $ronda_lista = (int) ($_GET['ronda'] ?? ($ultima_ronda > 0 ? $ultima_ronda : 1));
-$stFilas = $pdo->prepare(
-    'SELECT id, partida, mesa, secuencia, id_usuario, resultado1, resultado2, ff, tarjeta, sancion,
-            registrado
-     FROM partiresul WHERE id_torneo = ? AND partida = ? AND mesa > 0
-     ORDER BY mesa ASC, secuencia ASC'
-);
-$stFilas->execute([$torneo_id, $ronda_lista]);
-$filas_ronda = $stFilas->fetchAll(PDO::FETCH_ASSOC);
+$filas_ronda = [];
+if ($es_carga_especial && $view === 'carga') {
+    $stFilas = $pdo->prepare(
+        'SELECT id, partida, mesa, secuencia, id_usuario, resultado1, resultado2, ff, tarjeta, sancion,
+                registrado
+         FROM partiresul WHERE id_torneo = ? AND partida = ? AND mesa > 0
+         ORDER BY mesa ASC, secuencia ASC'
+    );
+    $stFilas->execute([$torneo_id, $ronda_lista]);
+    $filas_ronda = $stFilas->fetchAll(PDO::FETCH_ASSOC);
+}
 
 $page_title = 'Op Especiales — ' . htmlspecialchars((string) ($torneo['nombre'] ?? 'Torneo'));
 ?>
 <div class="container-fluid">
   <h1 class="h3 mb-3"><i class="fas fa-flask text-warning me-2"></i>Operaciones Especiales</h1>
   <p class="text-muted">Torneo <strong><?= htmlspecialchars((string) ($torneo['nombre'] ?? '')) ?></strong>
-    <span class="badge bg-secondary">estatus 9 · simulación</span>
+    <?php if ($es_carga_especial): ?>
+      <span class="badge bg-secondary">Carga automática / análisis: estatus 9</span>
+    <?php else: ?>
+      <span class="badge bg-info text-dark">Estatus torneo: <?= (int) ($torneo['estatus'] ?? 0) ?> · Swap/reemplazo disponibles</span>
+    <?php endif; ?>
   </p>
 
+  <?php if (! empty($_SESSION['info'])): ?>
+    <div class="alert alert-info alert-dismissible fade show"><?= htmlspecialchars((string) $_SESSION['info']) ?><?php unset($_SESSION['info']); ?></div>
+  <?php endif; ?>
   <?php if (! empty($_SESSION['success'])): ?>
     <div class="alert alert-success alert-dismissible fade show"><?= htmlspecialchars((string) $_SESSION['success']) ?><?php unset($_SESSION['success']); ?></div>
   <?php endif; ?>
@@ -171,16 +208,36 @@ $page_title = 'Op Especiales — ' . htmlspecialchars((string) ($torneo['nombre'
     <div class="alert alert-danger alert-dismissible fade show"><?= htmlspecialchars((string) $_SESSION['error']) ?><?php unset($_SESSION['error']); ?></div>
   <?php endif; ?>
 
-  <ul class="nav nav-tabs mb-3">
+  <div class="d-flex flex-wrap gap-2 mb-3" role="navigation" aria-label="Secciones Op Especiales">
+    <?php if ($es_carga_especial): ?>
+    <a class="btn btn-lg <?= $view === 'carga' ? 'btn-primary' : 'btn-outline-primary' ?>" href="<?= htmlspecialchars($opEspHref(['view' => 'carga']), ENT_QUOTES, 'UTF-8') ?>">
+      <i class="fas fa-layer-group me-1"></i> Carga por ronda (estatus 9)
+    </a>
+    <?php endif; ?>
+    <a class="btn btn-lg <?= $view === 'swap' ? 'btn-primary' : 'btn-outline-primary' ?>" href="<?= htmlspecialchars($opEspHref(['view' => 'swap']), ENT_QUOTES, 'UTF-8') ?>">
+      <i class="fas fa-exchange-alt me-1"></i> Swap y reemplazo ID
+    </a>
+    <?php if ($es_carga_especial): ?>
+    <a class="btn btn-lg <?= $view === 'auditoria' ? 'btn-primary' : 'btn-outline-primary' ?>" href="<?= htmlspecialchars($opEspHref(['view' => 'auditoria']), ENT_QUOTES, 'UTF-8') ?>">
+      <i class="fas fa-clipboard-check me-1"></i> Auditoría (estatus 9)
+    </a>
+    <?php endif; ?>
+  </div>
+
+  <ul class="nav nav-tabs mb-3 flex-nowrap overflow-auto">
+    <?php if ($es_carga_especial): ?>
     <li class="nav-item">
-      <a class="nav-link <?= $view === 'carga' ? 'active' : '' ?>" href="index.php?page=op_especiales&torneo_id=<?= (int) $torneo_id ?>&view=carga">Carga por ronda</a>
+      <a class="nav-link <?= $view === 'carga' ? 'active' : '' ?>" href="<?= htmlspecialchars($opEspHref(['view' => 'carga']), ENT_QUOTES, 'UTF-8') ?>">Carga por ronda</a>
     </li>
+    <?php endif; ?>
     <li class="nav-item">
-      <a class="nav-link <?= $view === 'swap' ? 'active' : '' ?>" href="index.php?page=op_especiales&torneo_id=<?= (int) $torneo_id ?>&view=swap">Swap / reemplazo ID</a>
+      <a class="nav-link <?= $view === 'swap' ? 'active' : '' ?>" href="<?= htmlspecialchars($opEspHref(['view' => 'swap']), ENT_QUOTES, 'UTF-8') ?>">Swap / reemplazo ID</a>
     </li>
+    <?php if ($es_carga_especial): ?>
     <li class="nav-item">
-      <a class="nav-link <?= $view === 'auditoria' ? 'active' : '' ?>" href="index.php?page=op_especiales&torneo_id=<?= (int) $torneo_id ?>&view=auditoria">Auditoría</a>
+      <a class="nav-link <?= $view === 'auditoria' ? 'active' : '' ?>" href="<?= htmlspecialchars($opEspHref(['view' => 'auditoria']), ENT_QUOTES, 'UTF-8') ?>">Auditoría</a>
     </li>
+    <?php endif; ?>
   </ul>
 
   <?php if ($view === 'carga'): ?>
@@ -189,8 +246,9 @@ $page_title = 'Op Especiales — ' . htmlspecialchars((string) ($torneo['nombre'
         <div class="card">
           <div class="card-header">Forfait (FF) y penalización</div>
           <div class="card-body">
-            <form method="post" class="needs-validation">
+            <form method="post" class="needs-validation" action="<?= htmlspecialchars($opEspHref(['view' => $view]), ENT_QUOTES, 'UTF-8') ?>">
               <?= CSRF::input() ?>
+              <input type="hidden" name="return_view" value="<?= htmlspecialchars($view, ENT_QUOTES, 'UTF-8') ?>">
               <input type="hidden" name="op_action" value="aplicar_ff">
               <input type="hidden" name="torneo_id" value="<?= (int) $torneo_id ?>">
               <div class="mb-2">
@@ -219,8 +277,9 @@ $page_title = 'Op Especiales — ' . htmlspecialchars((string) ($torneo['nombre'
         <div class="card">
           <div class="card-header">Tarjetas administrativas</div>
           <div class="card-body">
-            <form method="post">
+            <form method="post" action="<?= htmlspecialchars($opEspHref(['view' => $view]), ENT_QUOTES, 'UTF-8') ?>">
               <?= CSRF::input() ?>
+              <input type="hidden" name="return_view" value="<?= htmlspecialchars($view, ENT_QUOTES, 'UTF-8') ?>">
               <input type="hidden" name="op_action" value="aplicar_tarjetas">
               <input type="hidden" name="torneo_id" value="<?= (int) $torneo_id ?>">
               <div class="mb-2">
@@ -256,8 +315,9 @@ $page_title = 'Op Especiales — ' . htmlspecialchars((string) ($torneo['nombre'
     <div class="card mt-4">
       <div class="card-header">Carga masiva de resultados base</div>
       <div class="card-body">
-        <form method="post" class="row g-2 align-items-end" onsubmit="return confirm('Se rellenarán todas las mesas completas (4 jugadores) de la ronda con un marcador simulado AC vs BD. ¿Continuar?');">
+        <form method="post" class="row g-2 align-items-end" action="<?= htmlspecialchars($opEspHref(['view' => $view]), ENT_QUOTES, 'UTF-8') ?>" onsubmit="return confirm('Se rellenarán todas las mesas completas (4 jugadores) de la ronda con un marcador simulado AC vs BD. ¿Continuar?');">
           <?= CSRF::input() ?>
+          <input type="hidden" name="return_view" value="<?= htmlspecialchars($view, ENT_QUOTES, 'UTF-8') ?>">
           <input type="hidden" name="op_action" value="carga_masiva">
           <input type="hidden" name="torneo_id" value="<?= (int) $torneo_id ?>">
           <div class="col-auto">
@@ -278,8 +338,9 @@ $page_title = 'Op Especiales — ' . htmlspecialchars((string) ($torneo['nombre'
     <div class="card mt-4">
       <div class="card-header">Cerrar ronda y generar emparejamientos (Power Pairing / asignación por modalidad)</div>
       <div class="card-body">
-        <form method="post" onsubmit="return confirm('Se generará la siguiente ronda si todas las mesas de la última ronda están registradas. ¿Continuar?');">
+        <form method="post" action="<?= htmlspecialchars($opEspHref(['view' => $view]), ENT_QUOTES, 'UTF-8') ?>" onsubmit="return confirm('Se generará la siguiente ronda si todas las mesas de la última ronda están registradas. ¿Continuar?');">
           <?= CSRF::input() ?>
+          <input type="hidden" name="return_view" value="<?= htmlspecialchars($view, ENT_QUOTES, 'UTF-8') ?>">
           <input type="hidden" name="op_action" value="generar_siguiente">
           <input type="hidden" name="torneo_id" value="<?= (int) $torneo_id ?>">
           <?php if ($modalidad === 3): ?>
@@ -310,8 +371,9 @@ $page_title = 'Op Especiales — ' . htmlspecialchars((string) ($torneo['nombre'
       <div class="card-header">Intercambiar dos jugadores entre dos mesas (por ID de fila en partiresul)</div>
       <div class="card-body">
         <p class="small text-muted">Usa los IDs numéricos de la tabla <code>partiresul</code> (columna <code>id</code>), no códigos de equipo ni de inscripción.</p>
-        <form method="post" class="row g-3">
+        <form method="post" class="row g-3" action="<?= htmlspecialchars($opEspHref(['view' => $view]), ENT_QUOTES, 'UTF-8') ?>">
           <?= CSRF::input() ?>
+          <input type="hidden" name="return_view" value="<?= htmlspecialchars($view, ENT_QUOTES, 'UTF-8') ?>">
           <input type="hidden" name="op_action" value="swap">
           <input type="hidden" name="torneo_id" value="<?= (int) $torneo_id ?>">
           <div class="col-md-3">
@@ -347,8 +409,9 @@ $page_title = 'Op Especiales — ' . htmlspecialchars((string) ($torneo['nombre'
           Sustituye al jugador en las filas de resultados por otro usuario. Si el usuario nuevo no está inscrito en el torneo, se crea la inscripción confirmada (como en inscripción en sitio);
           en modalidad <strong>equipos</strong> se copian <code>codigo_equipo</code> y club del jugador sustituido cuando existan.
         </p>
-        <form method="post" class="row g-3" id="form-reemplazo-usuario">
+        <form method="post" class="row g-3" id="form-reemplazo-usuario" action="<?= htmlspecialchars($opEspHref(['view' => $view]), ENT_QUOTES, 'UTF-8') ?>">
           <?= CSRF::input() ?>
+          <input type="hidden" name="return_view" value="<?= htmlspecialchars($view, ENT_QUOTES, 'UTF-8') ?>">
           <input type="hidden" name="op_action" value="reemplazo_usuario">
           <input type="hidden" name="torneo_id" value="<?= (int) $torneo_id ?>">
           <div class="col-md-4">
@@ -518,7 +581,7 @@ $page_title = 'Op Especiales — ' . htmlspecialchars((string) ($torneo['nombre'
         </table>
       </div>
       <div class="card-footer small">
-        <a class="btn btn-sm btn-outline-secondary" href="index.php?page=op_especiales&torneo_id=<?= (int) $torneo_id ?>&view=carga&ronda=<?= (int) $ronda_lista ?>">Refrescar listado</a>
+        <a class="btn btn-sm btn-outline-secondary" href="<?= htmlspecialchars($opEspHref(['view' => 'carga', 'ronda' => (int) $ronda_lista]), ENT_QUOTES, 'UTF-8') ?>">Refrescar listado</a>
       </div>
     </div>
   <?php endif; ?>

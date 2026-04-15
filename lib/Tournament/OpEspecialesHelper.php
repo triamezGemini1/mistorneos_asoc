@@ -12,8 +12,9 @@ require_once __DIR__ . '/../UserActivationHelper.php';
 require_once __DIR__ . '/../Tournament/Handlers/TournamentActionHandler.php';
 
 /**
- * Operaciones especiales (solo torneos con estatus 9 — carga especial / simulación).
- * Persistencia principal: partiresul; equipos vía joins; “mesas por ronda” = filas partiresul (partida + mesa).
+ * Operaciones sobre partiresul / inscritos.
+ * Carga masiva, FF, tarjetas y auditoría analítica usados desde op_especiales solo con estatus 9
+ * ({@see esCargaEspecial}). Swap y reemplazo de id_usuario están disponibles para cualquier torneo con permisos.
  */
 final class OpEspecialesHelper
 {

@@ -47,7 +47,7 @@ final class RoundManagerHandler
             return 'index.php?page=tournament_admin&torneo_id=' . $torneoId . '&action=generar_rondas';
         }
         if (($options['redirect_base'] ?? '') === 'op_especiales') {
-            return 'index.php?page=op_especiales&torneo_id=' . $torneoId;
+            return 'index.php?page=op_especiales&torneo_id=' . $torneoId . '&view=carga';
         }
         if (function_exists('buildRedirectUrl')) {
             return buildRedirectUrl('panel', ['torneo_id' => $torneoId]);

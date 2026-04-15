@@ -369,9 +369,21 @@ tailwind.config = {
                         <a href="index.php?page=invitations&filter_torneo=<?= (int)($torneo['id'] ?? 0) ?>" class="tw-btn bg-slate-600 hover:bg-slate-700 text-white w-full text-center">
                             <i class="fas fa-envelope mr-2"></i> Invitaciones por club
                         </a>
+                        <?php
+                        $tid_op = (int)($torneo['id'] ?? 0);
+                        $href_op_swap = class_exists('AppHelpers', false)
+                            ? AppHelpers::url('index.php', ['page' => 'op_especiales', 'torneo_id' => $tid_op, 'view' => 'swap'])
+                            : ('index.php?page=op_especiales&torneo_id=' . $tid_op . '&view=swap');
+                        $href_op_carga = class_exists('AppHelpers', false)
+                            ? AppHelpers::url('index.php', ['page' => 'op_especiales', 'torneo_id' => $tid_op, 'view' => 'carga'])
+                            : ('index.php?page=op_especiales&torneo_id=' . $tid_op . '&view=carga');
+                        ?>
+                        <a href="<?php echo htmlspecialchars($href_op_swap, ENT_QUOTES, 'UTF-8'); ?>" class="tw-btn bg-purple-800 hover:bg-purple-900 text-white w-full text-center border border-purple-600">
+                            <i class="fas fa-exchange-alt mr-2"></i> Swap y reemplazo ID (partiresul)
+                        </a>
                         <?php if ((int)($torneo['estatus'] ?? 0) === 9): ?>
-                        <a href="<?php echo htmlspecialchars(class_exists('AppHelpers', false) ? AppHelpers::url('index.php', ['page' => 'op_especiales', 'torneo_id' => (int)($torneo['id'] ?? 0)]) : ('index.php?page=op_especiales&torneo_id=' . (int)($torneo['id'] ?? 0)), ENT_QUOTES, 'UTF-8'); ?>" class="tw-btn bg-violet-600 hover:bg-violet-700 text-white w-full text-center">
-                            <i class="fas fa-flask mr-2"></i> Op Especiales (simulación)
+                        <a href="<?php echo htmlspecialchars($href_op_carga, ENT_QUOTES, 'UTF-8'); ?>" class="tw-btn bg-violet-600 hover:bg-violet-700 text-white w-full text-center">
+                            <i class="fas fa-flask mr-2"></i> Carga automática y análisis (estatus 9)
                         </a>
                         <?php endif; ?>
                         <!-- Inscripciones: un solo bloque (Gestionar + Inscribir en sitio) -->
