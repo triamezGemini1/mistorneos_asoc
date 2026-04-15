@@ -164,7 +164,8 @@ final class ImportacionTorneoExternoService
         int $torneo_id,
         int $registrado_por,
         string $fechaTorneoYmd,
-        array $rows
+        array $rows,
+        bool $omitirAuditoriaGdu = false
     ): array {
         if ($rows === []) {
             return ['insertados' => 0, 'errores' => ['Archivo vacío'], 'auditoria_por_ronda' => []];
@@ -458,47 +459,49 @@ final class ImportacionTorneoExternoService
         }
 
         $auditoriaPorRonda = [];
-        /* Auditoría de las rondas 1..N según el torneo (carga completa), no solo las que tuvieron INSERT en este lote. */
-        $partidasLista = range(1, $limiteRondasTorneo);
-        $gduTorneoCompleto = [];
-        try {
-            require_once __DIR__ . '/Tournament/OpEspecialesHelper.php';
-            $gduTorneoCompleto = \Tournament\OpEspecialesHelper::obtenerReporteAnomalias($torneo_id);
-        } catch (Throwable $e) {
-            error_log('ImportacionTorneoExternoService obtenerReporteAnomalias: ' . $e->getMessage());
-            $errores[] = 'Auditoría GDU no disponible: ' . $e->getMessage();
-        }
-        foreach ($partidasLista as $pnum) {
+        if (! $omitirAuditoriaGdu) {
+            /* Auditoría de las rondas 1..N según el torneo (carga completa), no solo las que tuvieron INSERT en este lote. */
+            $partidasLista = range(1, $limiteRondasTorneo);
+            $gduTorneoCompleto = [];
             try {
-                $chk = self::validarPostCargaRondaPartiresul($pdo, $torneo_id, (int) $pnum, $gduTorneoCompleto);
+                require_once __DIR__ . '/Tournament/OpEspecialesHelper.php';
+                $gduTorneoCompleto = \Tournament\OpEspecialesHelper::obtenerReporteAnomalias($torneo_id);
             } catch (Throwable $e) {
-                error_log('ImportacionTorneoExternoService validarPostCargaRondaPartiresul: ' . $e->getMessage());
+                error_log('ImportacionTorneoExternoService obtenerReporteAnomalias: ' . $e->getMessage());
+                $errores[] = 'Auditoría GDU no disponible: ' . $e->getMessage();
+            }
+            foreach ($partidasLista as $pnum) {
+                try {
+                    $chk = self::validarPostCargaRondaPartiresul($pdo, $torneo_id, (int) $pnum, $gduTorneoCompleto);
+                } catch (Throwable $e) {
+                    error_log('ImportacionTorneoExternoService validarPostCargaRondaPartiresul: ' . $e->getMessage());
+                    $auditoriaPorRonda[] = [
+                        'partida' => (int) $pnum,
+                        'gdu' => 0,
+                        'mesas_incompletas' => 0,
+                        'detalle' => 'Validación post-carga falló: ' . $e->getMessage(),
+                    ];
+                    continue;
+                }
+                $nGdu = count($chk['gdu']);
+                $nInc = count($chk['mesas_incompletas']);
+                $det = '';
+                if ($nGdu > 0) {
+                    $det .= 'GDU: ' . $nGdu . ' anomalía(s). ';
+                }
+                if ($nInc > 0) {
+                    $det .= 'Mesas incompletas: ' . $nInc . '. ';
+                }
+                if ($det === '') {
+                    $det = 'Sin anomalías GDU ni mesas incompletas en esta ronda.';
+                }
                 $auditoriaPorRonda[] = [
                     'partida' => (int) $pnum,
-                    'gdu' => 0,
-                    'mesas_incompletas' => 0,
-                    'detalle' => 'Validación post-carga falló: ' . $e->getMessage(),
+                    'gdu' => $nGdu,
+                    'mesas_incompletas' => $nInc,
+                    'detalle' => trim($det),
                 ];
-                continue;
             }
-            $nGdu = count($chk['gdu']);
-            $nInc = count($chk['mesas_incompletas']);
-            $det = '';
-            if ($nGdu > 0) {
-                $det .= 'GDU: ' . $nGdu . ' anomalía(s). ';
-            }
-            if ($nInc > 0) {
-                $det .= 'Mesas incompletas: ' . $nInc . '. ';
-            }
-            if ($det === '') {
-                $det = 'Sin anomalías GDU ni mesas incompletas en esta ronda.';
-            }
-            $auditoriaPorRonda[] = [
-                'partida' => (int) $pnum,
-                'gdu' => $nGdu,
-                'mesas_incompletas' => $nInc,
-                'detalle' => trim($det),
-            ];
         }
 
         if (isset($statsF2['_ids_atletas']) && is_array($statsF2['_ids_atletas'])) {
@@ -515,9 +518,10 @@ final class ImportacionTorneoExternoService
     }
 
     /**
-     * Dos archivos. Archivo 1: cédula → id_usuario (usuarios); opcional pareja; opcional columna usuario (id del otro
-     * sistema) para mapear resultado.usuario → id_usuario. Archivo 2: partida, mesa, secuencia, r1/r2, usuario (externo)
-     * o cédula o pareja+jugador. El valor "usuario" del export NO es id de Mistorneos: se traduce con el archivo 1.
+     * Dos archivos — flujo lineal (sin matriz ni auditoría GDU en la inserción):
+     * - Archivo 1: por fila, cédula → id_usuario; inscripción en inscritos; número de pareja del archivo en inscritos.numero.
+     * - Archivo 2: por fila de resultados, una fila hacia partiresul si se resuelve identidad (externo, cédula o primer
+     *   inscrito con ese inscritos.numero). No se agrupan ni duplican filas por pareja.
      *
      * @return array{insertados: int, errores: list<string>, homologacion_sin_usuario: int, resultados_sin_resolver: int, cedulas_no_encontradas: list<string>}
      */
@@ -874,15 +878,10 @@ final class ImportacionTorneoExternoService
             $hdrRes[] = 'efectividad';
         }
         /**
-         * Matriz en memoria (sin INSERT todavía): [ id_usuario string ] => lista de partidas con datos de origen.
-         * Se rellena solo después de: (1) parseo completo del archivo en $staged, (2) resolución por lote de cédulas.
+         * Importación lineal: una fila de origen → como mucho una fila hacia partiresul (sin matriz ni duplicar por pareja).
          *
-         * @var array<string, list<array{ronda: int, mesa: int, secuencia: int, result1: int, result2: int, sancionp: int, tarjeta: int, ff: int, efectividad?: int}>>
+         * @var list<array{id_map: int, ced: string, nom: string, nac: string, pkey: string, fm: array<string, int>}>
          */
-        $matrizAtletas = [];
-        $vectorPorUsuario = [];
-
-        /** @var list<array{id_map: int, ced: string, nom: string, nac: string, pkey: string, fm: array<string, int>}> */
         $staged = [];
         for ($r = 1; $r < count($rowsResultados); $r++) {
             $row = $rowsResultados[$r];
@@ -905,13 +904,12 @@ final class ImportacionTorneoExternoService
                 }
             }
             $pkey = '';
-            $idsDesdePareja = [];
             if ($idUsuario <= 0 && $iPareja >= 0) {
                 $pkey = trim((string) ($row[$iPareja] ?? ''));
                 if ($pkey !== '') {
                     $numLin = self::numeroParejaArchivoAEntero($pkey);
                     if ($numLin > 0) {
-                        $idsDesdePareja = self::idsUsuariosPorTorneoNumeroInscripcion($pdo, $torneo_id, $numLin);
+                        $idUsuario = self::idUsuarioPorTorneoNumeroInscripcion($pdo, $torneo_id, $numLin);
                     }
                 }
             }
@@ -953,33 +951,14 @@ final class ImportacionTorneoExternoService
             if ($iEfectRes >= 0) {
                 $filaMatriz['efectividad'] = \TorneoCampoNumerico::intEstadistica($row[$iEfectRes] ?? 0);
             }
-            $idsParaStaged = [];
-            if ($idUsuario > 0) {
-                $idsParaStaged = [$idUsuario];
-            } elseif ($idsDesdePareja !== []) {
-                $idsParaStaged = $idsDesdePareja;
-            }
-            if ($idsParaStaged === []) {
-                $staged[] = [
-                    'id_map' => 0,
-                    'ced' => $ced,
-                    'nom' => $nomR,
-                    'nac' => $nacR,
-                    'pkey' => $pkey,
-                    'fm' => $filaMatriz,
-                ];
-            } else {
-                foreach ($idsParaStaged as $iduSt) {
-                    $staged[] = [
-                        'id_map' => (int) $iduSt,
-                        'ced' => $ced,
-                        'nom' => $nomR,
-                        'nac' => $nacR,
-                        'pkey' => $pkey,
-                        'fm' => $filaMatriz,
-                    ];
-                }
-            }
+            $staged[] = [
+                'id_map' => $idUsuario,
+                'ced' => $ced,
+                'nom' => $nomR,
+                'nac' => $nacR,
+                'pkey' => $pkey,
+                'fm' => $filaMatriz,
+            ];
         }
 
         $cedulasUnicasResolver = [];
@@ -991,8 +970,7 @@ final class ImportacionTorneoExternoService
                 continue;
             }
             $cedK = $st['ced'];
-            $digK = preg_replace('/\D/', '', $cedK);
-            if ((int) ($cedulaToId[$cedK] ?? $cedulaToId[$digK] ?? 0) > 0) {
+            if ((int) ($cedulaToId[$cedK] ?? $cedulaToId[preg_replace('/\D/', '', $cedK)] ?? 0) > 0) {
                 continue;
             }
             $cedulasUnicasResolver[$cedK] = ['nom' => $st['nom'], 'nac' => $st['nac']];
@@ -1013,112 +991,45 @@ final class ImportacionTorneoExternoService
             }
         }
 
-        foreach ($staged as $st) {
-            $idsResolver = [];
-            $idMap = (int) $st['id_map'];
-            $ced = $st['ced'];
-            if ($idMap > 0) {
-                $idsResolver[] = $idMap;
-            } else {
-                if ($ced !== '') {
-                    $idC = (int) ($cedulaToId[$ced] ?? $cedulaToId[preg_replace('/\D/', '', $ced)] ?? 0);
-                    if ($idC > 0) {
-                        $idsResolver[] = $idC;
-                    }
-                }
-                if ($idsResolver === [] && $st['pkey'] !== '') {
-                    $numLin = self::numeroParejaArchivoAEntero($st['pkey']);
-                    if ($numLin > 0) {
-                        $idsResolver = self::idsUsuariosPorTorneoNumeroInscripcion($pdo, $torneo_id, $numLin);
-                    }
-                }
-            }
-            if ($idsResolver === []) {
-                $stats['resultados_sin_resolver']++;
-                continue;
-            }
-            foreach ($idsResolver as $idUsuario) {
-                if ($st['pkey'] !== '' && (($idUsuarioToClavePareja[$idUsuario] ?? '') === '')) {
-                    $idUsuarioToClavePareja[$idUsuario] = $st['pkey'];
-                }
-                $sid = (string) $idUsuario;
-                if (! isset($matrizAtletas[$sid])) {
-                    $matrizAtletas[$sid] = [];
-                }
-                $matrizAtletas[$sid][] = $st['fm'];
-                $fm = $st['fm'];
-                $vectorPorUsuario[$idUsuario] = [
-                    'torneo_id' => $torneo_id,
-                    'partida' => (int) ($fm['ronda'] ?? 0),
-                    'mesa' => (int) ($fm['mesa'] ?? 0),
-                    'secuencia' => (int) ($fm['secuencia'] ?? 0),
-                    'resultado1' => (int) ($fm['result1'] ?? 0),
-                    'resultado2' => (int) ($fm['result2'] ?? 0),
-                    'ff' => (int) ($fm['ff'] ?? 0),
-                    'sancion' => (int) ($fm['sancionp'] ?? 0),
-                ];
-            }
-        }
-
-        $rondasArchivo = 0;
-        foreach ($matrizAtletas as $filasM) {
-            foreach ($filasM as $it) {
-                $rondasArchivo = max($rondasArchivo, (int) ($it['ronda'] ?? 0));
-            }
-        }
-        if ($rondasArchivo < 1) {
-            $stR = $pdo->prepare('SELECT COALESCE(NULLIF(rondas, 0), 9) AS r FROM tournaments WHERE id = ? LIMIT 1');
-            $stR->execute([$torneo_id]);
-            $rondasArchivo = max(1, (int) ($stR->fetchColumn() ?: 9));
-        }
-        $N = count($matrizAtletas);
-        $totalFilasMatriz = 0;
-        foreach ($matrizAtletas as $filasM) {
-            $totalFilasMatriz += count($filasM);
-        }
-        $stats['matriz_homologados_n'] = $N;
-        $stats['matriz_rondas'] = $rondasArchivo;
-        $stats['matriz_total_partidas_esperadas'] = $totalFilasMatriz;
-        $stats['matriz_total_filas'] = $totalFilasMatriz;
-        $stats['mensaje_homologacion_matriz'] = $N > 0
-            ? ($totalFilasMatriz . ' filas a insertar en partiresul (' . $N . ' atletas con al menos una fila)')
-            : '';
-
-        ksort($matrizAtletas, SORT_STRING);
-        foreach ($matrizAtletas as $uidStr => $filasM) {
-            usort($filasM, static function (array $a, array $b): int {
-                if (($a['ronda'] ?? 0) !== ($b['ronda'] ?? 0)) {
-                    return ($a['ronda'] ?? 0) <=> ($b['ronda'] ?? 0);
-                }
-                if (($a['mesa'] ?? 0) !== ($b['mesa'] ?? 0)) {
-                    return ($a['mesa'] ?? 0) <=> ($b['mesa'] ?? 0);
-                }
-
-                return ($a['secuencia'] ?? 0) <=> ($b['secuencia'] ?? 0);
-            });
-            $matrizAtletas[$uidStr] = $filasM;
-        }
-        foreach (array_keys($matrizAtletas) as $uidStr) {
-            $uid = (int) $uidStr;
-            $claveP = $idUsuarioToClavePareja[$uid] ?? '';
-            self::asegurarInscritoYAsignarParejaDesdeHomologacion($pdo, $torneo_id, $uid, $claveP, $registrado_por, $stats);
-        }
-
         $nuevasFilas = [];
         $nuevasFilas[] = $hdrRes;
         $incluirEfect = $iEfectRes >= 0;
-        foreach ($matrizAtletas as $uidStr => $filasM) {
-            $uid = (int) $uidStr;
-            foreach ($filasM as $filaMatriz) {
-                $nuevasFilas[] = self::partiresulFilaDesdeMatrizAtleta($uid, $filaMatriz, $incluirEfect);
+        foreach ($staged as $st) {
+            $idUsuario = (int) $st['id_map'];
+            $ced = $st['ced'];
+            if ($idUsuario <= 0 && $ced !== '') {
+                $idUsuario = (int) ($cedulaToId[$ced] ?? $cedulaToId[preg_replace('/\D/', '', $ced)] ?? 0);
             }
+            if ($idUsuario <= 0 && $st['pkey'] !== '') {
+                $numLin = self::numeroParejaArchivoAEntero($st['pkey']);
+                if ($numLin > 0) {
+                    $idUsuario = self::idUsuarioPorTorneoNumeroInscripcion($pdo, $torneo_id, $numLin);
+                }
+            }
+            if ($idUsuario <= 0) {
+                $stats['resultados_sin_resolver']++;
+                continue;
+            }
+            if ($st['pkey'] !== '' && (($idUsuarioToClavePareja[$idUsuario] ?? '') === '')) {
+                $idUsuarioToClavePareja[$idUsuario] = $st['pkey'];
+            }
+            $nuevasFilas[] = self::partiresulFilaDesdeMatrizAtleta($idUsuario, $st['fm'], $incluirEfect);
         }
 
-        $resInsert = self::fase2InsertarPartiresul($pdo, $torneo_id, $registrado_por, $fechaTorneoYmd, $nuevasFilas);
+        $totalFilasOrigen = max(0, count($rowsResultados) - 1);
+        $stats['matriz_homologados_n'] = 0;
+        $stats['matriz_rondas'] = 0;
+        $stats['matriz_total_partidas_esperadas'] = $totalFilasOrigen;
+        $stats['matriz_total_filas'] = $totalFilasOrigen;
+        $stats['mensaje_homologacion_matriz'] = $totalFilasOrigen > 0
+            ? ('Origen: ' . $totalFilasOrigen . ' filas de resultados; destino partiresul: 1 fila por fila resuelta (sin agrupar).')
+            : '';
+
+        $resInsert = self::fase2InsertarPartiresul($pdo, $torneo_id, $registrado_por, $fechaTorneoYmd, $nuevasFilas, true);
         $stats['insertados'] = $resInsert['insertados'];
         $stats['errores'] = $resInsert['errores'];
         $stats['auditoria_por_ronda'] = $resInsert['auditoria_por_ronda'] ?? [];
-        $stats['vector_atletas_mapeados'] = count($vectorPorUsuario);
+        $stats['vector_atletas_mapeados'] = max(0, count($nuevasFilas) - 1);
         $f2rid = $resInsert['resolucion_identidad_fase2'] ?? [];
         foreach ($f2rid as $k => $v) {
             if ($k === '_ids_atletas' || $k === 'atletas_vinculados' || $k === 'rondas_limite_torneo' || $k === 'filas_omitidas_partida_superior_limite') {
@@ -1354,27 +1265,20 @@ final class ImportacionTorneoExternoService
     }
 
     /**
-     * Mismo número de pareja en inscritos.numero (p. ej. parejas fijas): todos los id_usuario activos del torneo.
-     * Cada fila de resultados por pareja se replica en partiresul para cada integrante.
-     *
-     * @return list<int>
+     * Busca un inscrito por torneo e inscritos.numero (= número de pareja del archivo). Una fila de resultados → un insert.
      */
-    private static function idsUsuariosPorTorneoNumeroInscripcion(PDO $pdo, int $torneoId, int $numeroInscripcion): array
+    private static function idUsuarioPorTorneoNumeroInscripcion(PDO $pdo, int $torneoId, int $numeroInscripcion): int
     {
         if ($torneoId <= 0 || $numeroInscripcion <= 0) {
-            return [];
+            return 0;
         }
         require_once __DIR__ . '/InscritosHelper.php';
         $st = $pdo->prepare(
-            'SELECT id_usuario FROM inscritos WHERE torneo_id = ? AND numero = ? AND ' . InscritosHelper::SQL_WHERE_NO_RETIRADO . ' ORDER BY id_usuario ASC'
+            'SELECT id_usuario FROM inscritos WHERE torneo_id = ? AND numero = ? AND ' . InscritosHelper::SQL_WHERE_NO_RETIRADO . ' ORDER BY id_usuario ASC LIMIT 1'
         );
         $st->execute([$torneoId, $numeroInscripcion]);
-        $out = [];
-        while (($u = $st->fetchColumn()) !== false) {
-            $out[] = (int) $u;
-        }
 
-        return $out;
+        return (int) ($st->fetchColumn() ?: 0);
     }
 
     private static function actualizarNumeroInscripcionTorneo(PDO $pdo, int $torneoId, int $idUsuario, int $numero): void
