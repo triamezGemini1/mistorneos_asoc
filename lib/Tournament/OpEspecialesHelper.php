@@ -89,11 +89,6 @@ final class OpEspecialesHelper
     }
 
     /**
-     * Intercambia dos jugadores entre dos mesas de la misma ronda (por id de fila partiresul).
-     *
-     * @throws \RuntimeException
-     */
-    /**
      * Si el usuario no está inscrito (activo) en el torneo, inserta inscripción confirmada como en inscripción en sitio.
      * En modalidad equipos (3) copia codigo_equipo / id_club del jugador de referencia (sustituido) cuando exista.
      *
@@ -324,6 +319,73 @@ final class OpEspecialesHelper
         }
     }
 
+    /**
+     * Intercambia dos jugadores entre dos mesas de la misma ronda a partir de id_usuario en el torneo indicado.
+     * Comprueba primero que ambos existan en partiresul (solo mesas de juego) para esa ronda; si falta alguno o hay ambigüedad, falla sin modificar datos.
+     *
+     * @throws \RuntimeException
+     */
+    public static function swapAtletasPorUsuariosYRonda(
+        int $torneoId,
+        int $ronda,
+        int $idUsuarioA,
+        int $idUsuarioB,
+        int $modalidad
+    ): void {
+        if ($ronda <= 0) {
+            throw new \RuntimeException('Ronda no válida.');
+        }
+        if ($idUsuarioA <= 0 || $idUsuarioB <= 0) {
+            throw new \RuntimeException('Indique dos IDs de usuario válidos (mayores que 0).');
+        }
+        if ($idUsuarioA === $idUsuarioB) {
+            throw new \RuntimeException('Debe indicar dos jugadores distintos.');
+        }
+
+        $pdo = \DB::pdo();
+        $stCnt = $pdo->prepare(
+            'SELECT COUNT(*) FROM partiresul WHERE id_torneo = ? AND partida = ? AND id_usuario = ? AND mesa > 0'
+        );
+        $stCnt->execute([$torneoId, $ronda, $idUsuarioA]);
+        $cA = (int) $stCnt->fetchColumn();
+        $stCnt->execute([$torneoId, $ronda, $idUsuarioB]);
+        $cB = (int) $stCnt->fetchColumn();
+
+        $partes = [];
+        if ($cA === 0) {
+            $partes[] = 'No se encontró el usuario ' . $idUsuarioA . ' en la ronda ' . $ronda . ' de este torneo (sin fila en partiresul con mesa de juego).';
+        } elseif ($cA > 1) {
+            $partes[] = 'El usuario ' . $idUsuarioA . ' tiene más de una fila en la ronda ' . $ronda . '; corrija datos o use intercambio por ID de fila.';
+        }
+        if ($cB === 0) {
+            $partes[] = 'No se encontró el usuario ' . $idUsuarioB . ' en la ronda ' . $ronda . ' de este torneo (sin fila en partiresul con mesa de juego).';
+        } elseif ($cB > 1) {
+            $partes[] = 'El usuario ' . $idUsuarioB . ' tiene más de una fila en la ronda ' . $ronda . '; corrija datos o use intercambio por ID de fila.';
+        }
+        if ($partes !== []) {
+            throw new \RuntimeException(implode(' ', $partes));
+        }
+
+        $st = $pdo->prepare(
+            'SELECT id FROM partiresul WHERE id_torneo = ? AND partida = ? AND id_usuario = ? AND mesa > 0 ORDER BY id ASC LIMIT 1'
+        );
+        $st->execute([$torneoId, $ronda, $idUsuarioA]);
+        $idRowA = (int) $st->fetchColumn();
+        $st->execute([$torneoId, $ronda, $idUsuarioB]);
+        $idRowB = (int) $st->fetchColumn();
+
+        if ($idRowA <= 0 || $idRowB <= 0) {
+            throw new \RuntimeException('No se pudieron resolver las filas en partiresul; no se aplicó ningún cambio.');
+        }
+
+        self::swapAtletasPorIdsPartiresul($torneoId, $ronda, $idRowA, $idRowB, $modalidad);
+    }
+
+    /**
+     * Intercambia dos jugadores entre dos mesas de la misma ronda (por id de fila partiresul).
+     *
+     * @throws \RuntimeException
+     */
     public static function swapAtletasPorIdsPartiresul(
         int $torneoId,
         int $ronda,

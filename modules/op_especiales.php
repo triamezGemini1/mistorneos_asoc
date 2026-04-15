@@ -126,10 +126,10 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
             exit;
         } elseif ($action === 'swap') {
             $ronda = (int) ($_POST['ronda'] ?? 0);
-            $idA = (int) ($_POST['id_partiresul_a'] ?? 0);
-            $idB = (int) ($_POST['id_partiresul_b'] ?? 0);
-            OpEspecialesHelper::swapAtletasPorIdsPartiresul($torneo_id, $ronda, $idA, $idB, $modalidad);
-            $_SESSION['success'] = 'Intercambio aplicado.';
+            $idUa = (int) ($_POST['id_usuario_a'] ?? 0);
+            $idUb = (int) ($_POST['id_usuario_b'] ?? 0);
+            OpEspecialesHelper::swapAtletasPorUsuariosYRonda($torneo_id, $ronda, $idUa, $idUb, $modalidad);
+            $_SESSION['success'] = 'Intercambio aplicado entre usuarios ' . $idUa . ' y ' . $idUb . ' en la ronda ' . $ronda . '.';
         } elseif ($action === 'reemplazo_usuario') {
             $idV = (int) ($_POST['id_usuario_viejo'] ?? 0);
             $idN = (int) ($_POST['id_usuario_nuevo'] ?? 0);
@@ -368,34 +368,37 @@ $page_title = 'Op Especiales — ' . htmlspecialchars((string) ($torneo['nombre'
     </div>
   <?php elseif ($view === 'swap'): ?>
     <div class="card mb-4">
-      <div class="card-header">Intercambiar dos jugadores entre dos mesas (por ID de fila en partiresul)</div>
+      <div class="card-header">Intercambiar dos jugadores entre mesas (misma ronda)</div>
       <div class="card-body">
-        <p class="small text-muted">Usa los IDs numéricos de la tabla <code>partiresul</code> (columna <code>id</code>), no códigos de equipo ni de inscripción.</p>
+        <p class="small text-muted mb-2">
+          Indica la <strong>ronda</strong> y los dos <strong>id_usuario</strong> que están en el torneo actual (ej. ronda 1, usuarios 2525 y 1970).
+          El sistema busca ambos en <code>partiresul</code> para ese torneo y esa ronda antes de intercambiar; si falta alguno o hay más de una fila por usuario en esa ronda, se muestra el error y <strong>no se modifica nada</strong>.
+        </p>
         <form method="post" class="row g-3" action="<?= htmlspecialchars($opEspHref(['view' => $view]), ENT_QUOTES, 'UTF-8') ?>">
           <?= CSRF::input() ?>
           <input type="hidden" name="return_view" value="<?= htmlspecialchars($view, ENT_QUOTES, 'UTF-8') ?>">
           <input type="hidden" name="op_action" value="swap">
           <input type="hidden" name="torneo_id" value="<?= (int) $torneo_id ?>">
           <div class="col-md-3">
-            <label class="form-label">Ronda</label>
-            <select name="ronda" class="form-select">
+            <label class="form-label">Ronda (partida)</label>
+            <select name="ronda" class="form-select" required>
               <?php foreach ($rondas_opts as $r): ?>
                 <option value="<?= (int) $r ?>" <?= $r === $ronda_lista ? 'selected' : '' ?>><?= (int) $r ?></option>
               <?php endforeach; ?>
             </select>
           </div>
           <div class="col-md-4">
-            <label class="form-label">ID fila partiresul (jugador A)</label>
-            <input type="number" name="id_partiresul_a" class="form-control" required min="1">
+            <label class="form-label">ID usuario (jugador 1)</label>
+            <input type="number" name="id_usuario_a" class="form-control" required min="1" placeholder="ej. 2525" autocomplete="off">
           </div>
           <div class="col-md-4">
-            <label class="form-label">ID fila partiresul (jugador B)</label>
-            <input type="number" name="id_partiresul_b" class="form-control" required min="1">
+            <label class="form-label">ID usuario (jugador 2)</label>
+            <input type="number" name="id_usuario_b" class="form-control" required min="1" placeholder="ej. 1970" autocomplete="off">
           </div>
           <div class="col-12">
-            <button type="submit" class="btn btn-primary">Intercambiar</button>
+            <button type="submit" class="btn btn-primary">Intercambiar posiciones</button>
             <?php if ($modalidad === 3): ?>
-              <span class="text-muted small ms-2">Modalidad equipos: no se permitirá duplicar id_equipo en la misma mesa.</span>
+              <span class="text-muted small ms-2">Modalidad equipos: no se permitirá duplicar jugadores del mismo equipo en una mesa.</span>
             <?php endif; ?>
           </div>
         </form>
