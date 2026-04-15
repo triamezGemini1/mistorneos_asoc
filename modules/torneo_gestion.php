@@ -1,4 +1,4 @@
-﻿<?php
+<?php
 /**
  * MÃ³dulo de GestiÃ³n Completa de Torneos
  * Integra funcionalidades de:

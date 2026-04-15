@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace Tournament\Handlers;
 
-use Exception;
 use TorneoMesaAsignacionResolver;
 
 require_once __DIR__ . '/../../PartiresulEstatusSql.php';
@@ -138,9 +137,13 @@ final class RoundManagerHandler
             $ultima_ronda = $mesaService->obtenerUltimaRonda($torneoId);
 
             if ($ultima_ronda > 0) {
-                $todas_completas = $mesaService->todasLasMesasCompletas($torneoId, $ultima_ronda);
+                $todas_completas = method_exists($mesaService, 'todasLasMesasCompletas')
+                    ? $mesaService->todasLasMesasCompletas($torneoId, $ultima_ronda)
+                    : (self::contarMesasIncompletas($torneoId, $ultima_ronda) === 0);
                 if (!$todas_completas) {
-                    $mesas_incompletas = $mesaService->contarMesasIncompletas($torneoId, $ultima_ronda);
+                    $mesas_incompletas = method_exists($mesaService, 'contarMesasIncompletas')
+                        ? $mesaService->contarMesasIncompletas($torneoId, $ultima_ronda)
+                        : self::contarMesasIncompletas($torneoId, $ultima_ronda);
                     $_SESSION['error'] = "No se puede generar una nueva ronda. Faltan resultados en {$mesas_incompletas} mesa(s) de la ronda {$ultima_ronda}";
                     header('Location: ' . self::redirectUrlPanel($torneoId, $options));
                     exit;
@@ -171,7 +174,7 @@ final class RoundManagerHandler
             // Actualizar estadísticas antes de generar nueva ronda
             try {
                 self::syncInscritosStatsBeforeGeneracion($torneoId);
-            } catch (Exception $e) {
+            } catch (\Throwable $e) {
                 $_SESSION['error'] = 'Error al actualizar estadísticas: ' . $e->getMessage();
                 header('Location: ' . self::redirectUrlPanel($torneoId, $options));
                 exit;
@@ -300,13 +303,13 @@ final class RoundManagerHandler
                         $nm = new \NotificationManager($pdo);
                         $nm->programarRondaMasiva($jugadores, $titulo, $proxima_ronda, null, 'nueva_ronda', $torneoId);
                     }
-                } catch (Exception $e) {
+                } catch (\Throwable $e) {
                     error_log('Notificaciones ronda: ' . $e->getMessage());
                 }
             } else {
                 $_SESSION['error'] = (string) ($resultado['message'] ?? 'No se pudo generar la ronda.');
             }
-        } catch (Exception $e) {
+        } catch (\Throwable $e) {
             error_log('Error al generar ronda: ' . $e->getMessage() . "\n" . $e->getTraceAsString());
             $_SESSION['error'] = 'Error al generar ronda: ' . $e->getMessage();
         }
