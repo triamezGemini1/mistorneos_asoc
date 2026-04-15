@@ -779,35 +779,40 @@ final class OpEspecialesHelper
         $wNet = "CASE WHEN ({$wSn}) <= 0 THEN ({$wR1}) ELSE GREATEST(0, ({$wR1}) - ({$wSn})) END";
         $lNet = "CASE WHEN ({$lSn}) <= 0 THEN ({$lR1}) ELSE GREATEST(0, ({$lR1}) - ({$lSn})) END";
 
-        $sql = "SELECT
-                    w.partida AS partida,
-                    w.mesa AS mesa,
-                    w.id_usuario AS id_usuario,
-                    {$wNet} AS pf,
-                    MAX({$lNet}) AS max_pf_perdedor_mesa
-                FROM partiresul w
-                INNER JOIN partiresul l
-                    ON l.id_torneo = w.id_torneo
-                    AND l.partida = w.partida
-                    AND l.mesa = w.mesa
-                    AND l.id <> w.id
-                WHERE w.id_torneo = ?
-                    AND w.mesa > 0
-                    AND {$wReg}
-                    AND {$lReg}
-                    AND NOT ({$wFf1})
-                    AND NOT ({$lFf1})
-                    AND (
-                        (({$wSn}) <= 0 AND ({$wR1}) > ({$wR2}))
-                        OR (({$wSn}) > 0 AND GREATEST(0, ({$wR1}) - ({$wSn})) > ({$wR2}))
-                    )
-                    AND (
-                        (({$lSn}) <= 0 AND ({$lR1}) <= ({$lR2}))
-                        OR (({$lSn}) > 0 AND GREATEST(0, ({$lR1}) - ({$lSn})) <= ({$lR2}))
-                    )
-                GROUP BY w.partida, w.mesa, w.id_usuario, {$wNet}
-                HAVING ({$wNet}) <= MAX({$lNet}) + 0.00001
-                ORDER BY w.partida ASC, w.mesa ASC, w.id_usuario ASC";
+        /* Subconsulta + filtro en WHERE: evita error MySQL «Unknown column 'w.sancion' in 'having clause'»
+           al repetir expresiones con alias de tabla dentro de HAVING (resolución de columnas en HAVING). */
+        $sql = "SELECT sub.partida, sub.mesa, sub.id_usuario, sub.pf, sub.max_pf_perdedor_mesa
+                FROM (
+                    SELECT
+                        w.partida AS partida,
+                        w.mesa AS mesa,
+                        w.id_usuario AS id_usuario,
+                        {$wNet} AS pf,
+                        MAX({$lNet}) AS max_pf_perdedor_mesa
+                    FROM partiresul w
+                    INNER JOIN partiresul l
+                        ON l.id_torneo = w.id_torneo
+                        AND l.partida = w.partida
+                        AND l.mesa = w.mesa
+                        AND l.id <> w.id
+                    WHERE w.id_torneo = ?
+                        AND w.mesa > 0
+                        AND {$wReg}
+                        AND {$lReg}
+                        AND NOT ({$wFf1})
+                        AND NOT ({$lFf1})
+                        AND (
+                            (({$wSn}) <= 0 AND ({$wR1}) > ({$wR2}))
+                            OR (({$wSn}) > 0 AND GREATEST(0, ({$wR1}) - ({$wSn})) > ({$wR2}))
+                        )
+                        AND (
+                            (({$lSn}) <= 0 AND ({$lR1}) <= ({$lR2}))
+                            OR (({$lSn}) > 0 AND GREATEST(0, ({$lR1}) - ({$lSn})) <= ({$lR2}))
+                        )
+                    GROUP BY w.partida, w.mesa, w.id_usuario, {$wNet}
+                ) AS sub
+                WHERE sub.pf <= sub.max_pf_perdedor_mesa + 0.00001
+                ORDER BY sub.partida ASC, sub.mesa ASC, sub.id_usuario ASC";
 
         $st = $pdo->prepare($sql);
         $st->execute([$torneoId]);
