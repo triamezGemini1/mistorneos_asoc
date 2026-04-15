@@ -722,66 +722,7 @@ final class OpEspecialesHelper
             ];
         }
 
-        $gdu = [];
-        $stRondas = $pdo->prepare(
-            "SELECT DISTINCT partida FROM partiresul WHERE id_torneo = ? AND mesa > 0 ORDER BY partida ASC"
-        );
-        $stRondas->execute([$torneoId]);
-        $rondas = $stRondas->fetchAll(\PDO::FETCH_COLUMN);
-        foreach ($rondas as $partida) {
-            $partida = (int) $partida;
-            $stM = $pdo->prepare(
-                "SELECT DISTINCT mesa FROM partiresul WHERE id_torneo = ? AND partida = ? AND mesa > 0"
-            );
-            $stM->execute([$torneoId, $partida]);
-            while ($mesa = $stM->fetchColumn()) {
-                $mesa = (int) $mesa;
-                $stJ = $pdo->prepare(
-                    "SELECT pr.id_usuario, pr.resultado1, pr.resultado2, pr.sancion, pr.ff,
-                            {$r1} AS r1, {$r2} AS r2, {$sn} AS sn
-                     FROM partiresul pr
-                     WHERE pr.id_torneo = ? AND pr.partida = ? AND pr.mesa = ? AND {$reg}"
-                );
-                $stJ->execute([$torneoId, $partida, $mesa]);
-                $rows = $stJ->fetchAll(\PDO::FETCH_ASSOC);
-                if (count($rows) !== 4) {
-                    continue;
-                }
-                $ganadores = [];
-                $perdedoresPf = [];
-                foreach ($rows as $row) {
-                    if (self::filaFfActiva($row)) {
-                        continue;
-                    }
-                    $r1v = (float) $row['r1'];
-                    $r2v = (float) $row['r2'];
-                    $snv = (float) $row['sn'];
-                    $adj = max(0.0, $r1v - $snv);
-                    $gana = ($snv <= 0 && $r1v > $r2v) || ($snv > 0 && $adj > $r2v);
-                    $pf = $r1v;
-                    if ($gana) {
-                        $ganadores[] = ['id_usuario' => (int) $row['id_usuario'], 'pf' => $pf];
-                    } else {
-                        $perdedoresPf[] = $pf;
-                    }
-                }
-                if ($ganadores === [] || $perdedoresPf === []) {
-                    continue;
-                }
-                $maxPer = max($perdedoresPf);
-                foreach ($ganadores as $g) {
-                    if ($g['pf'] <= $maxPer + 0.00001) {
-                        $gdu[] = [
-                            'partida' => $partida,
-                            'mesa' => $mesa,
-                            'id_usuario' => $g['id_usuario'],
-                            'pf' => $g['pf'],
-                            'max_pf_perdedor_mesa' => $maxPer,
-                        ];
-                    }
-                }
-            }
-        }
+        $gdu = self::obtenerReporteAnomalias($torneoId);
 
         $ff_incoherente = [];
         $stFf = $pdo->prepare(
@@ -812,6 +753,78 @@ final class OpEspecialesHelper
             'gdu' => $gdu,
             'ff_incoherente' => $ff_incoherente,
         ];
+    }
+
+    /**
+     * Detecta Anomalía GDU: ganador con PF menor o igual al mejor PF perdedor de su mesa.
+     * Cruza partiresul (ganadores vs perdedores) por torneo/ronda/mesa y excluye FF.
+     *
+     * @return list<array{partida:int, mesa:int, id_usuario:int, pf:float, max_pf_perdedor_mesa:float}>
+     */
+    public static function obtenerReporteAnomalias(int $torneoId): array
+    {
+        $pdo = \DB::pdo();
+        $wReg = \PartiresulEstatusSql::whereRegistradoUno('w');
+        $lReg = \PartiresulEstatusSql::whereRegistradoUno('l');
+        $wFf1 = \PartiresulEstatusSql::whereFfUno('w');
+        $lFf1 = \PartiresulEstatusSql::whereFfUno('l');
+
+        $wR1 = \InscritosHelper::sqlExprColumnaNumerica('w.resultado1');
+        $wR2 = \InscritosHelper::sqlExprColumnaNumerica('w.resultado2');
+        $wSn = \InscritosHelper::sqlExprColumnaNumerica('w.sancion');
+        $lR1 = \InscritosHelper::sqlExprColumnaNumerica('l.resultado1');
+        $lR2 = \InscritosHelper::sqlExprColumnaNumerica('l.resultado2');
+        $lSn = \InscritosHelper::sqlExprColumnaNumerica('l.sancion');
+
+        $sql = "SELECT
+                    w.partida AS partida,
+                    w.mesa AS mesa,
+                    w.id_usuario AS id_usuario,
+                    {$wR1} AS pf,
+                    MAX({$lR1}) AS max_pf_perdedor_mesa
+                FROM partiresul w
+                INNER JOIN partiresul l
+                    ON l.id_torneo = w.id_torneo
+                    AND l.partida = w.partida
+                    AND l.mesa = w.mesa
+                    AND l.id <> w.id
+                WHERE w.id_torneo = ?
+                    AND w.mesa > 0
+                    AND {$wReg}
+                    AND {$lReg}
+                    AND NOT ({$wFf1})
+                    AND NOT ({$lFf1})
+                    AND (
+                        (({$wSn}) <= 0 AND ({$wR1}) > ({$wR2}))
+                        OR (({$wSn}) > 0 AND GREATEST(0, ({$wR1}) - ({$wSn})) > ({$wR2}))
+                    )
+                    AND (
+                        (({$lSn}) <= 0 AND ({$lR1}) <= ({$lR2}))
+                        OR (({$lSn}) > 0 AND GREATEST(0, ({$lR1}) - ({$lSn})) <= ({$lR2}))
+                    )
+                GROUP BY w.partida, w.mesa, w.id_usuario, {$wR1}
+                HAVING ({$wR1}) <= MAX({$lR1}) + 0.00001
+                ORDER BY w.partida ASC, w.mesa ASC, w.id_usuario ASC";
+
+        $st = $pdo->prepare($sql);
+        $st->execute([$torneoId]);
+        $rows = $st->fetchAll(\PDO::FETCH_ASSOC);
+        if (!is_array($rows) || $rows === []) {
+            return [];
+        }
+
+        $out = [];
+        foreach ($rows as $row) {
+            $out[] = [
+                'partida' => (int) ($row['partida'] ?? 0),
+                'mesa' => (int) ($row['mesa'] ?? 0),
+                'id_usuario' => (int) ($row['id_usuario'] ?? 0),
+                'pf' => (float) ($row['pf'] ?? 0),
+                'max_pf_perdedor_mesa' => (float) ($row['max_pf_perdedor_mesa'] ?? 0),
+            ];
+        }
+
+        return $out;
     }
 
     /**
