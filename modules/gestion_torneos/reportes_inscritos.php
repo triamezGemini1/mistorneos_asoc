@@ -95,9 +95,9 @@ $page_title = 'Reportes de inscritos — ' . (string) ($torneo['nombre'] ?? 'Tor
         <div class="p-5">
             <section class="border border-slate-200 rounded-xl p-4 bg-white mb-6">
                 <h2 class="text-xl font-extrabold text-slate-800 mb-4">Reportes de inscritos</h2>
-                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div class="grid grid-cols-3 gap-4">
                     <div class="border border-slate-200 rounded-lg p-3 bg-slate-50">
-                        <div class="grid grid-cols-1 gap-3 justify-items-start">
+                        <div class="flex flex-col gap-3 items-start">
                             <a href="<?php echo htmlspecialchars($url_pdf_det, ENT_QUOTES, 'UTF-8'); ?>" target="_blank" rel="noopener"
                                class="tw-btn btn-compact bg-rose-600 hover:bg-rose-700 text-white justify-center text-sm font-bold px-4 py-2">
                                 <i class="fas fa-file-pdf mr-2"></i> PDF detallado
@@ -109,7 +109,7 @@ $page_title = 'Reportes de inscritos — ' . (string) ($torneo['nombre'] ?? 'Tor
                         </div>
                     </div>
                     <div class="border border-slate-200 rounded-lg p-3 bg-slate-50">
-                        <div class="grid grid-cols-1 gap-3 justify-items-start">
+                        <div class="flex flex-col gap-3 items-start">
                             <a href="<?php echo htmlspecialchars($url_pdf_simple, ENT_QUOTES, 'UTF-8'); ?>" target="_blank" rel="noopener"
                                class="tw-btn btn-compact bg-rose-500 hover:bg-rose-600 text-white justify-center text-sm font-bold px-4 py-2">
                                 <i class="fas fa-file-pdf mr-2"></i> PDF simple
@@ -121,7 +121,7 @@ $page_title = 'Reportes de inscritos — ' . (string) ($torneo['nombre'] ?? 'Tor
                         </div>
                     </div>
                     <div class="border border-slate-200 rounded-lg p-3 bg-slate-50">
-                        <div class="grid grid-cols-1 gap-3 justify-items-start">
+                        <div class="flex flex-col gap-3 items-start">
                             <a href="<?php echo htmlspecialchars($url_pdf_ret, ENT_QUOTES, 'UTF-8'); ?>" target="_blank" rel="noopener"
                                class="tw-btn btn-compact bg-amber-600 hover:bg-amber-700 text-white justify-center text-sm font-bold px-4 py-2">
                                 <i class="fas fa-file-pdf mr-2"></i> PDF retirados
@@ -203,24 +203,15 @@ $page_title = 'Reportes de inscritos — ' . (string) ($torneo['nombre'] ?? 'Tor
 
                 <div class="grid grid-cols-1 xl:grid-cols-4 gap-4 items-end">
                     <div class="xl:col-span-1">
-                        <label class="block text-base font-extrabold text-slate-800 mb-1">Modo rondas</label>
-                        <select name="modo_ronda" class="w-full border-2 border-slate-300 rounded-lg px-3 py-2 text-base font-bold">
-                            <option value="una">Una ronda</option>
-                            <option value="rango">Rango de rondas</option>
-                            <option value="todas">Todas las rondas</option>
+                        <label class="block text-base font-extrabold text-slate-800 mb-1">Rondas a incluir</label>
+                        <select name="rondas_cantidad" class="w-full border-2 border-slate-300 rounded-lg px-2 py-1.5 text-sm font-bold">
+                            <option value="99">Todas las rondas</option>
+                            <option value="1">Última ronda</option>
+                            <option value="2">Últimas 2 rondas</option>
+                            <option value="3">Últimas 3 rondas</option>
+                            <option value="5">Últimas 5 rondas</option>
+                            <option value="10">Últimas 10 rondas</option>
                         </select>
-                    </div>
-                    <div class="xl:col-span-1">
-                        <label class="block text-base font-extrabold text-slate-800 mb-1">Ronda</label>
-                        <input type="number" min="1" name="ronda" class="w-full border-2 border-slate-300 rounded-lg px-3 py-2 text-base font-bold" placeholder="1 o 99=todas">
-                    </div>
-                    <div class="xl:col-span-1">
-                        <label class="block text-base font-extrabold text-slate-800 mb-1">Desde</label>
-                        <input type="number" min="1" name="ronda_desde" class="w-full border-2 border-slate-300 rounded-lg px-3 py-2 text-base font-bold" placeholder="Ej: 1">
-                    </div>
-                    <div class="xl:col-span-1">
-                        <label class="block text-base font-extrabold text-slate-800 mb-1">Hasta</label>
-                        <input type="number" min="1" name="ronda_hasta" class="w-full border-2 border-slate-300 rounded-lg px-3 py-2 text-base font-bold" placeholder="Ej: 5">
                     </div>
                     <div class="xl:col-span-4">
                         <label class="block text-base font-extrabold text-slate-800 mb-1">Resultado del reporte a descargar</label>
@@ -244,11 +235,8 @@ $page_title = 'Reportes de inscritos — ' . (string) ($torneo['nombre'] ?? 'Tor
                     var form = document.getElementById('form-gestor-excel');
                     if (!form) return;
                     var tipo = form.querySelector('select[name="tipo_reporte"]');
-                    var modoRonda = form.querySelector('select[name="modo_ronda"]');
+                    var rondasCantidad = form.querySelector('select[name="rondas_cantidad"]');
                     var grupos = form.querySelectorAll('[data-cols-for]');
-                    var rondaInput = form.querySelector('input[name="ronda"]');
-                    var rondaDesdeInput = form.querySelector('input[name="ronda_desde"]');
-                    var rondaHastaInput = form.querySelector('input[name="ronda_hasta"]');
                     var preview = document.getElementById('preview-columnas');
                     var ordenInput = document.getElementById('columnas_orden');
                     var ordenSeleccion = [];
@@ -303,16 +291,9 @@ $page_title = 'Reportes de inscritos — ' . (string) ($torneo['nombre'] ?? 'Tor
                                 chk.disabled = !allow;
                             });
                         });
-                        var modo = modoRonda ? modoRonda.value : 'una';
                         var usaRondas = (t === 'partiresul_por_ronda');
-                        if (rondaInput) {
-                            rondaInput.disabled = !usaRondas || (modo !== 'una');
-                        }
-                        if (rondaDesdeInput) {
-                            rondaDesdeInput.disabled = !usaRondas || (modo !== 'rango');
-                        }
-                        if (rondaHastaInput) {
-                            rondaHastaInput.disabled = !usaRondas || (modo !== 'rango');
+                        if (rondasCantidad) {
+                            rondasCantidad.disabled = !usaRondas;
                         }
                         rebuildOrdenVisible();
                         renderPreview();
@@ -331,13 +312,7 @@ $page_title = 'Reportes de inscritos — ' . (string) ($torneo['nombre'] ?? 'Tor
                         });
                     });
                     if (tipo) tipo.addEventListener('change', syncCols);
-                    if (modoRonda) modoRonda.addEventListener('change', syncCols);
                     form.addEventListener('submit', function () {
-                        if (modoRonda && tipo && tipo.value === 'partiresul_por_ronda') {
-                            if (modoRonda.value === 'todas' && rondaInput) {
-                                rondaInput.value = '99';
-                            }
-                        }
                         rebuildOrdenVisible();
                         renderPreview();
                     });

@@ -811,9 +811,7 @@ if ($action === 'inscripciones_gestor_excel' && ($_SERVER['REQUEST_METHOD'] ?? '
     }
     $tipoReporte = trim((string)($_GET['tipo_reporte'] ?? 'inscritos_detallado'));
     $rondaFiltro = (int)($_GET['ronda'] ?? 0);
-    $modoRonda = trim((string)($_GET['modo_ronda'] ?? 'una'));
-    $rondaDesde = (int)($_GET['ronda_desde'] ?? 0);
-    $rondaHasta = (int)($_GET['ronda_hasta'] ?? 0);
+    $rondasCantidad = (int)($_GET['rondas_cantidad'] ?? 99);
     $permitidos = ['inscritos_detallado', 'inscritos_por_equipo', 'partiresul_detallado', 'partiresul_por_ronda', 'equipos_detallado'];
     if (!in_array($tipoReporte, $permitidos, true)) {
         $tipoReporte = 'inscritos_detallado';
@@ -911,12 +909,10 @@ if ($action === 'inscripciones_gestor_excel' && ($_SERVER['REQUEST_METHOD'] ?? '
     echo '<tr><td colspan="' . $colsSpan . '" style="font-weight:bold;text-align:center;background:#e2e8f0;font-size:16px;">' . $esc($torneo['nombre'] ?? '') . '</td></tr>';
     $resumenRonda = 'Todas';
     if ($tipoReporte === 'partiresul_por_ronda') {
-        if ($rondaFiltro === 99 || $modoRonda === 'todas') {
+        if ($rondasCantidad === 99 || $rondaFiltro === 99) {
             $resumenRonda = 'Todas';
-        } elseif ($modoRonda === 'rango' && $rondaDesde > 0 && $rondaHasta >= $rondaDesde) {
-            $resumenRonda = $rondaDesde . ' a ' . $rondaHasta;
-        } elseif ($rondaFiltro > 0) {
-            $resumenRonda = (string)$rondaFiltro;
+        } elseif ($rondasCantidad > 0) {
+            $resumenRonda = 'Últimas ' . $rondasCantidad;
         }
     }
     echo '<tr><td colspan="' . $colsSpan . '" style="font-weight:bold;background:#f8fafc;">Reporte: ' . $esc(strtoupper($tipoReporte)) . ' · Rondas: ' . $esc($resumenRonda) . ' · Generado: ' . $esc(date('d/m/Y H:i')) . '</td></tr>';
@@ -1017,15 +1013,18 @@ if ($action === 'inscripciones_gestor_excel' && ($_SERVER['REQUEST_METHOD'] ?? '
         $params = [$torneo_id];
         $whereRonda = '';
         if ($tipoReporte === 'partiresul_por_ronda') {
-            if ($rondaFiltro === 99 || $modoRonda === 'todas') {
+            if ($rondasCantidad === 99 || $rondaFiltro === 99) {
                 $whereRonda = '';
-            } elseif ($modoRonda === 'rango' && $rondaDesde > 0 && $rondaHasta >= $rondaDesde) {
-                $whereRonda = ' AND pr.partida BETWEEN ? AND ? ';
-                $params[] = $rondaDesde;
-                $params[] = $rondaHasta;
-            } elseif ($rondaFiltro > 0) {
-                $whereRonda = ' AND pr.partida = ? ';
-                $params[] = $rondaFiltro;
+            } elseif ($rondasCantidad > 0) {
+                $stMax = $pdo->prepare("SELECT MAX(partida) FROM partiresul WHERE id_torneo = ?");
+                $stMax->execute([$torneo_id]);
+                $maxPartida = (int)$stMax->fetchColumn();
+                if ($maxPartida > 0) {
+                    $desde = max(1, $maxPartida - $rondasCantidad + 1);
+                    $whereRonda = ' AND pr.partida BETWEEN ? AND ? ';
+                    $params[] = $desde;
+                    $params[] = $maxPartida;
+                }
             }
         }
         $st = $pdo->prepare("
