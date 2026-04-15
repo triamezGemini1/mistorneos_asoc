@@ -106,6 +106,28 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
             $idB = (int) ($_POST['id_partiresul_b'] ?? 0);
             OpEspecialesHelper::swapAtletasPorIdsPartiresul($torneo_id, $ronda, $idA, $idB, $modalidad);
             $_SESSION['success'] = 'Intercambio aplicado.';
+        } elseif ($action === 'reemplazo_usuario') {
+            $idV = (int) ($_POST['id_usuario_viejo'] ?? 0);
+            $idN = (int) ($_POST['id_usuario_nuevo'] ?? 0);
+            $alc = trim((string) ($_POST['alcance_rondas'] ?? 'todas'));
+            $rU = (int) ($_POST['ronda_unica'] ?? 0);
+            $rD = (int) ($_POST['ronda_desde'] ?? 0);
+            $rH = (int) ($_POST['ronda_hasta'] ?? 0);
+            $n = OpEspecialesHelper::reemplazarIdUsuarioPartiresul(
+                $torneo_id,
+                $idV,
+                $idN,
+                $alc,
+                $rU > 0 ? $rU : null,
+                $rD > 0 ? $rD : null,
+                $rH > 0 ? $rH : null,
+                $modalidad,
+                $uid
+            );
+            OpEspecialesHelper::sincronizarEstadisticasInscritos($torneo_id);
+            $_SESSION['success'] = $n > 0
+                ? "Reemplazo de id_usuario aplicado en {$n} fila(s) de partiresul."
+                : 'No se actualizó ninguna fila.';
         } else {
             $_SESSION['error'] = 'Acción no reconocida.';
         }
@@ -154,7 +176,7 @@ $page_title = 'Op Especiales — ' . htmlspecialchars((string) ($torneo['nombre'
       <a class="nav-link <?= $view === 'carga' ? 'active' : '' ?>" href="index.php?page=op_especiales&torneo_id=<?= (int) $torneo_id ?>&view=carga">Carga por ronda</a>
     </li>
     <li class="nav-item">
-      <a class="nav-link <?= $view === 'swap' ? 'active' : '' ?>" href="index.php?page=op_especiales&torneo_id=<?= (int) $torneo_id ?>&view=swap">Swap mesas</a>
+      <a class="nav-link <?= $view === 'swap' ? 'active' : '' ?>" href="index.php?page=op_especiales&torneo_id=<?= (int) $torneo_id ?>&view=swap">Swap / reemplazo ID</a>
     </li>
     <li class="nav-item">
       <a class="nav-link <?= $view === 'auditoria' ? 'active' : '' ?>" href="index.php?page=op_especiales&torneo_id=<?= (int) $torneo_id ?>&view=auditoria">Auditoría</a>
@@ -284,9 +306,10 @@ $page_title = 'Op Especiales — ' . htmlspecialchars((string) ($torneo['nombre'
       </div>
     </div>
   <?php elseif ($view === 'swap'): ?>
-    <div class="card">
-      <div class="card-header">Intercambiar dos jugadores entre dos mesas (misma ronda)</div>
+    <div class="card mb-4">
+      <div class="card-header">Intercambiar dos jugadores entre dos mesas (por ID de fila en partiresul)</div>
       <div class="card-body">
+        <p class="small text-muted">Usa los IDs numéricos de la tabla <code>partiresul</code> (columna <code>id</code>), no códigos de equipo ni de inscripción.</p>
         <form method="post" class="row g-3">
           <?= CSRF::input() ?>
           <input type="hidden" name="op_action" value="swap">
@@ -314,6 +337,89 @@ $page_title = 'Op Especiales — ' . htmlspecialchars((string) ($torneo['nombre'
             <?php endif; ?>
           </div>
         </form>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header">Reemplazar <code>id_usuario</code> en partiresul</div>
+      <div class="card-body">
+        <p class="small text-muted mb-3">
+          Sustituye al jugador en las filas de resultados por otro usuario. Si el usuario nuevo no está inscrito en el torneo, se crea la inscripción confirmada (como en inscripción en sitio);
+          en modalidad <strong>equipos</strong> se copian <code>codigo_equipo</code> y club del jugador sustituido cuando existan.
+        </p>
+        <form method="post" class="row g-3" id="form-reemplazo-usuario">
+          <?= CSRF::input() ?>
+          <input type="hidden" name="op_action" value="reemplazo_usuario">
+          <input type="hidden" name="torneo_id" value="<?= (int) $torneo_id ?>">
+          <div class="col-md-4">
+            <label class="form-label">ID usuario sustituido (sale de partiresul)</label>
+            <input type="number" name="id_usuario_viejo" class="form-control" required min="1" value="">
+          </div>
+          <div class="col-md-4">
+            <label class="form-label">ID usuario sustituto (entra en partiresul)</label>
+            <input type="number" name="id_usuario_nuevo" class="form-control" required min="1" value="">
+          </div>
+          <div class="col-12">
+            <label class="form-label d-block">Alcance de rondas</label>
+            <div class="form-check">
+              <input class="form-check-input" type="radio" name="alcance_rondas" id="alc_todas" value="todas" checked>
+              <label class="form-check-label" for="alc_todas">Todas las rondas donde aparezca el usuario sustituido</label>
+            </div>
+            <div class="form-check">
+              <input class="form-check-input" type="radio" name="alcance_rondas" id="alc_una" value="una_ronda">
+              <label class="form-check-label" for="alc_una">Una ronda específica</label>
+            </div>
+            <div class="form-check">
+              <input class="form-check-input" type="radio" name="alcance_rondas" id="alc_rango" value="rango">
+              <label class="form-check-label" for="alc_rango">Rango de rondas (inclusive)</label>
+            </div>
+          </div>
+          <div class="col-md-3" id="wrap-ronda-unica" style="display:none;">
+            <label class="form-label">Ronda</label>
+            <select name="ronda_unica" class="form-select">
+              <?php foreach ($rondas_opts as $r): ?>
+                <option value="<?= (int) $r ?>" <?= $r === $ronda_lista ? 'selected' : '' ?>><?= (int) $r ?></option>
+              <?php endforeach; ?>
+            </select>
+          </div>
+          <div class="col-md-3" id="wrap-rango-desde" style="display:none;">
+            <label class="form-label">Desde ronda</label>
+            <select name="ronda_desde" class="form-select">
+              <?php foreach ($rondas_opts as $r): ?>
+                <option value="<?= (int) $r ?>"><?= (int) $r ?></option>
+              <?php endforeach; ?>
+            </select>
+          </div>
+          <div class="col-md-3" id="wrap-rango-hasta" style="display:none;">
+            <label class="form-label">Hasta ronda</label>
+            <select name="ronda_hasta" class="form-select">
+              <?php foreach ($rondas_opts as $r): ?>
+                <option value="<?= (int) $r ?>"><?= (int) $r ?></option>
+              <?php endforeach; ?>
+            </select>
+          </div>
+          <div class="col-12">
+            <button type="submit" class="btn btn-success" onclick="return confirm('¿Confirmar reemplazo de id_usuario en partiresul según el alcance elegido?');">Aplicar reemplazo</button>
+          </div>
+        </form>
+        <script>
+        (function () {
+          var f = document.getElementById('form-reemplazo-usuario');
+          if (!f) return;
+          var radios = f.querySelectorAll('input[name="alcance_rondas"]');
+          var w1 = document.getElementById('wrap-ronda-unica');
+          var wd = document.getElementById('wrap-rango-desde');
+          var wh = document.getElementById('wrap-rango-hasta');
+          function sync() {
+            var v = f.querySelector('input[name="alcance_rondas"]:checked');
+            v = v ? v.value : 'todas';
+            w1.style.display = v === 'una_ronda' ? '' : 'none';
+            wd.style.display = wh.style.display = v === 'rango' ? '' : 'none';
+          }
+          radios.forEach(function (r) { r.addEventListener('change', sync); });
+          sync();
+        })();
+        </script>
       </div>
     </div>
   <?php else: ?>

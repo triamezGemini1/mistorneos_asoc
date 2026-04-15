@@ -8,6 +8,7 @@ require_once __DIR__ . '/../PartiresulEstatusSql.php';
 require_once __DIR__ . '/../InscritosHelper.php';
 require_once __DIR__ . '/../InscritosPartiresulHelper.php';
 require_once __DIR__ . '/../TorneoCampoNumerico.php';
+require_once __DIR__ . '/../UserActivationHelper.php';
 require_once __DIR__ . '/../Tournament/Handlers/TournamentActionHandler.php';
 
 /**
@@ -91,6 +92,237 @@ final class OpEspecialesHelper
      *
      * @throws \RuntimeException
      */
+    /**
+     * Si el usuario no está inscrito (activo) en el torneo, inserta inscripción confirmada como en inscripción en sitio.
+     * En modalidad equipos (3) copia codigo_equipo / id_club del jugador de referencia (sustituido) cuando exista.
+     *
+     * @throws \RuntimeException
+     */
+    public static function asegurarInscripcionParaReemplazoPartiresul(
+        int $torneoId,
+        int $idUsuarioNuevo,
+        int $idUsuarioReferencia,
+        int $modalidad,
+        int $operadorId
+    ): void {
+        if ($idUsuarioNuevo <= 0) {
+            throw new \RuntimeException('ID de usuario nuevo no válido.');
+        }
+        $pdo = \DB::pdo();
+        $st = $pdo->prepare(
+            'SELECT id FROM inscritos WHERE id_usuario = ? AND torneo_id = ? AND ' . \InscritosHelper::SQL_WHERE_NO_RETIRADO
+        );
+        $st->execute([$idUsuarioNuevo, $torneoId]);
+        if ($st->fetch()) {
+            return;
+        }
+        $stU = $pdo->prepare('SELECT id FROM usuarios WHERE id = ? LIMIT 1');
+        $stU->execute([$idUsuarioNuevo]);
+        if (!$stU->fetch()) {
+            throw new \RuntimeException('El usuario de reemplazo no existe en la plataforma (usuarios).');
+        }
+
+        $id_club = null;
+        $codigo_equipo = '';
+        if ($modalidad === 3 && $idUsuarioReferencia > 0) {
+            $stRef = $pdo->prepare(
+                'SELECT codigo_equipo, id_club FROM inscritos WHERE id_usuario = ? AND torneo_id = ? AND '
+                . \InscritosHelper::SQL_WHERE_NO_RETIRADO . ' LIMIT 1'
+            );
+            $stRef->execute([$idUsuarioReferencia, $torneoId]);
+            $ref = $stRef->fetch(\PDO::FETCH_ASSOC);
+            if ($ref) {
+                $codigo_equipo = trim((string) ($ref['codigo_equipo'] ?? ''));
+                if (! empty($ref['id_club'])) {
+                    $id_club = (int) $ref['id_club'];
+                }
+            }
+        }
+        if ($id_club === null || $id_club <= 0) {
+            $stT = $pdo->prepare('SELECT club_responsable FROM tournaments WHERE id = ?');
+            $stT->execute([$torneoId]);
+            $cr = $stT->fetchColumn();
+            if (! empty($cr) && (int) $cr > 0) {
+                $id_club = (int) $cr;
+            } else {
+                $stUc = $pdo->prepare('SELECT club_id FROM usuarios WHERE id = ?');
+                $stUc->execute([$idUsuarioNuevo]);
+                $id_club = (int) ($stUc->fetchColumn() ?: 0) ?: null;
+            }
+        }
+
+        if ($modalidad === 3) {
+            $ce = $codigo_equipo;
+            if ($ce === '' || $ce === '000-000') {
+                throw new \RuntimeException(
+                    'Modalidad equipos: no se pudo determinar código de equipo desde el jugador sustituido. Inscriba al nuevo jugador en el equipo o indique un usuario ya inscrito en este torneo.'
+                );
+            }
+        }
+
+        $datos = [
+            'id_usuario' => $idUsuarioNuevo,
+            'torneo_id' => $torneoId,
+            'id_club' => $id_club,
+            'estatus' => 1,
+            'inscrito_por' => $operadorId,
+            'numero' => 0,
+        ];
+        if ($modalidad === 3 && $codigo_equipo !== '') {
+            $datos['codigo_equipo'] = $codigo_equipo;
+        }
+
+        \InscritosHelper::insertarInscrito($pdo, $datos);
+        \UserActivationHelper::activateUser($pdo, $idUsuarioNuevo);
+    }
+
+    /**
+     * Reemplaza id_usuario (todas las filas en el alcance). Opcional alta en inscritos si falta.
+     *
+     * @param 'una_ronda'|'rango'|'todas' $alcance
+     *
+     * @return int Filas actualizadas en partiresul
+     *
+     * @throws \RuntimeException
+     */
+    public static function reemplazarIdUsuarioPartiresul(
+        int $torneoId,
+        int $idUsuarioViejo,
+        int $idUsuarioNuevo,
+        string $alcance,
+        ?int $rondaUnica,
+        ?int $rondaDesde,
+        ?int $rondaHasta,
+        int $modalidad,
+        int $operadorId
+    ): int {
+        if ($idUsuarioViejo <= 0 || $idUsuarioNuevo <= 0) {
+            throw new \RuntimeException('IDs de usuario no válidos.');
+        }
+        if ($idUsuarioViejo === $idUsuarioNuevo) {
+            throw new \RuntimeException('El usuario sustituto debe ser distinto al sustituido.');
+        }
+
+        $alcance = strtolower(trim($alcance));
+        if (! in_array($alcance, ['una_ronda', 'rango', 'todas'], true)) {
+            throw new \RuntimeException('Alcance no válido.');
+        }
+
+        $pdo = \DB::pdo();
+        $stOld = $pdo->prepare('SELECT id FROM usuarios WHERE id IN (?, ?)');
+        $stOld->execute([$idUsuarioViejo, $idUsuarioNuevo]);
+        if (count($stOld->fetchAll()) < 2) {
+            throw new \RuntimeException('Ambos usuarios deben existir en la tabla usuarios.');
+        }
+
+        $partSql = '';
+        $paramsPref = [$torneoId, $idUsuarioViejo];
+        if ($alcance === 'una_ronda') {
+            $r = (int) ($rondaUnica ?? 0);
+            if ($r <= 0) {
+                throw new \RuntimeException('Indique una ronda válida.');
+            }
+            $partSql = ' AND partida = ? ';
+            $paramsPref[] = $r;
+        } elseif ($alcance === 'rango') {
+            $d = (int) ($rondaDesde ?? 0);
+            $h = (int) ($rondaHasta ?? 0);
+            if ($d <= 0 || $h <= 0 || $d > $h) {
+                throw new \RuntimeException('Rango de rondas no válido (desde/hasta).');
+            }
+            $partSql = ' AND partida >= ? AND partida <= ? ';
+            $paramsPref[] = $d;
+            $paramsPref[] = $h;
+        }
+
+        $stMesas = $pdo->prepare(
+            'SELECT DISTINCT partida, mesa FROM partiresul WHERE id_torneo = ? AND id_usuario = ? AND mesa > 0' . $partSql
+            . ' ORDER BY partida, mesa'
+        );
+        $stMesas->execute($paramsPref);
+        $pares = $stMesas->fetchAll(\PDO::FETCH_ASSOC);
+        if ($pares === []) {
+            throw new \RuntimeException(
+                'No hay filas del usuario sustituido en partiresul para el alcance indicado (solo mesas de juego).'
+            );
+        }
+
+        self::asegurarInscripcionParaReemplazoPartiresul(
+            $torneoId,
+            $idUsuarioNuevo,
+            $idUsuarioViejo,
+            $modalidad,
+            $operadorId
+        );
+
+        foreach ($pares as $pm) {
+            $partida = (int) $pm['partida'];
+            $mesa = (int) $pm['mesa'];
+            self::validarMesaTrasReemplazoUnUsuario(
+                $pdo,
+                $torneoId,
+                $partida,
+                $mesa,
+                $idUsuarioViejo,
+                $idUsuarioNuevo,
+                $modalidad
+            );
+        }
+
+        $updParams = [$idUsuarioNuevo, $torneoId, $idUsuarioViejo];
+        $updSql = 'UPDATE partiresul SET id_usuario = ? WHERE id_torneo = ? AND id_usuario = ? AND mesa > 0' . $partSql;
+        $stUp = $pdo->prepare($updSql);
+        $stUp->execute(array_merge($updParams, array_slice($paramsPref, 2)));
+
+        return $stUp->rowCount();
+    }
+
+    /**
+     * @throws \RuntimeException
+     */
+    private static function validarMesaTrasReemplazoUnUsuario(
+        \PDO $pdo,
+        int $torneoId,
+        int $partida,
+        int $mesa,
+        int $uidOld,
+        int $uidNew,
+        int $modalidad
+    ): void {
+        $stU = $pdo->prepare(
+            'SELECT id_usuario FROM partiresul WHERE id_torneo = ? AND partida = ? AND mesa = ? ORDER BY secuencia'
+        );
+        $stU->execute([$torneoId, $partida, $mesa]);
+        $uids = array_map('intval', $stU->fetchAll(\PDO::FETCH_COLUMN));
+        if ($uids === []) {
+            return;
+        }
+        $uids2 = array_map(static fn (int $u): int => $u === $uidOld ? $uidNew : $u, $uids);
+        if (count(array_unique($uids2)) < count($uids2)) {
+            throw new \RuntimeException(
+                "El reemplazo dejaría al jugador nuevo repetido en la misma mesa (ronda {$partida}, mesa {$mesa})."
+            );
+        }
+        if ($modalidad === 3) {
+            $seen = [];
+            foreach ($uids2 as $u) {
+                if ($u <= 0) {
+                    continue;
+                }
+                $e = self::idEquipoDeUsuario($torneoId, $u);
+                if ($e === null) {
+                    continue;
+                }
+                if (isset($seen[$e])) {
+                    throw new \RuntimeException(
+                        "Modalidad equipos: en ronda {$partida}, mesa {$mesa}, habría dos jugadores del mismo equipo."
+                    );
+                }
+                $seen[$e] = true;
+            }
+        }
+    }
+
     public static function swapAtletasPorIdsPartiresul(
         int $torneoId,
         int $ronda,
