@@ -23,6 +23,7 @@ if (!isset($base_url) || !isset($use_standalone)) {
     $use_standalone = in_array($script_actual, ['admin_torneo.php', 'panel_torneo.php']);
     $base_url = $use_standalone ? $script_actual : 'index.php?page=torneo_gestion';
 }
+$ctx_switch_base_url = function_exists('torneoGestionContextSwitchBaseUrl') ? torneoGestionContextSwitchBaseUrl() : $base_url;
 $context_switcher = isset($context_switcher) && is_array($context_switcher)
     ? $context_switcher
     : ['active_tournament_id' => (int)($torneo['id'] ?? 0), 'items' => []];
@@ -641,7 +642,7 @@ if (!empty($context_switcher['items']) && is_array($context_switcher['items'])) 
                 $tcs = [
                     'items' => $context_switcher['items'],
                     'active_id' => (int) ($context_switcher['active_tournament_id'] ?? 0),
-                    'base_url' => $base_url,
+                    'base_url' => $ctx_switch_base_url,
                     'sep' => $use_standalone ? '?' : '&',
                     'ronda_base' => (int) $ronda,
                     'map_max' => $map_max_partida_switch,
@@ -649,7 +650,7 @@ if (!empty($context_switcher['items']) && is_array($context_switcher['items'])) 
                     'theme' => 'on_light',
                     'select_id' => 'torneo-asociado-select-hojas',
                     'show_info' => false,
-                    'show_select' => false,
+                    'show_select' => true,
                     'show_pill_meta' => false,
                     'select_class' => 'tcs-select-control',
                     'select_label_class' => 'mb-0 mr-1',

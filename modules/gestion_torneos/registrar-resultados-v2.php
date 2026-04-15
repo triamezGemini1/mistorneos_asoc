@@ -5,6 +5,7 @@
 $script_actual = basename($_SERVER['PHP_SELF'] ?? '');
 $use_standalone = in_array($script_actual, ['admin_torneo.php', 'panel_torneo.php']);
 $base_url = $use_standalone ? $script_actual : 'index.php?page=torneo_gestion';
+$ctx_switch_base_url = function_exists('torneoGestionContextSwitchBaseUrl') ? torneoGestionContextSwitchBaseUrl() : $base_url;
 $action_param = $use_standalone ? '?' : '&';
 $esTorneoParejas = in_array((int)($torneo['modalidad'] ?? 0), [2, 4], true);
 $context_switcher = isset($context_switcher) && is_array($context_switcher)
@@ -839,13 +840,13 @@ $contextLabel = $contextGenero === 'F' ? 'Femenino' : 'Masculino';
                         $tcs = [
                             'items' => $context_switcher['items'],
                             'active_id' => (int) ($context_switcher['active_tournament_id'] ?? 0),
-                            'base_url' => $base_url,
+                            'base_url' => $ctx_switch_base_url,
                             'sep' => $use_standalone ? '?' : '&',
                             'ronda_base' => (int) $ronda,
                             'map_max' => $map_max_partida_switch,
                             'mode' => 'registrar_resultados',
                             'theme' => 'on_light',
-                            'show_select' => false,
+                            'show_select' => true,
                             'show_info' => false,
                             'show_pill_meta' => false,
                             'aria_label' => 'Torneos asociados (mismo evento)',

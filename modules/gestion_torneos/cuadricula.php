@@ -11,6 +11,7 @@ if (!isset($base_url) || !isset($use_standalone)) {
     $use_standalone = in_array($script_actual, ['admin_torneo.php', 'panel_torneo.php'], true);
     $base_url = $use_standalone ? $script_actual : 'index.php?page=torneo_gestion';
 }
+$ctx_switch_base_url = function_exists('torneoGestionContextSwitchBaseUrl') ? torneoGestionContextSwitchBaseUrl() : $base_url;
 
 $letras = [1 => 'A', 2 => 'C', 3 => 'B', 4 => 'D'];
 
@@ -142,13 +143,13 @@ $pageTitle = isset($titulo) ? (string) $titulo : ('Cuadrícula - Ronda ' . (int)
                 $tcs = [
                     'items' => $context_switcher['items'],
                     'active_id' => (int) ($context_switcher['active_tournament_id'] ?? 0),
-                    'base_url' => $base_url,
+                    'base_url' => $ctx_switch_base_url,
                     'sep' => $use_standalone ? '?' : '&',
                     'ronda_base' => (int) ($numRonda ?? 0),
                     'map_max' => $map_max_partida_switch,
                     'mode' => 'cuadricula',
                     'theme' => 'on_dark',
-                    'show_select' => false,
+                    'show_select' => true,
                     'show_info' => false,
                     'show_pill_meta' => false,
                     'pill_row_class' => 'cuadricula-tcs-pills',

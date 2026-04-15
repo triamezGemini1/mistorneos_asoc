@@ -362,7 +362,20 @@ function torneoGestionAlertaGeneroVsTorneo(string $generoTorneoInferido, $sexoUs
 }
 
 /**
+ * Base URL del entry point para enlaces del selector de torneos asociados (válida bajo /public/, beta, etc.).
+ */
+function torneoGestionContextSwitchBaseUrl(): string {
+    if (class_exists('AppHelpers', false) && method_exists('AppHelpers', 'getRequestEntryUrl')) {
+        return rtrim(AppHelpers::getRequestEntryUrl(), '/') . '/index.php?page=torneo_gestion';
+    }
+
+    return 'index.php?page=torneo_gestion';
+}
+
+/**
  * Obtiene contexto de torneos unificados para el switch (N torneos).
+ * Incluye el torneo raíz del evento (id = evento) aunque su parent_event_id sea NULL,
+ * y todos los torneos con parent_event_id = ese id (hermanos).
  */
 function obtenerContextoTorneoUnificado(int $torneoId): array {
     if ($torneoId <= 0) {
@@ -375,62 +388,58 @@ function obtenerContextoTorneoUnificado(int $torneoId): array {
         return ['active_tournament_id' => $torneoId, 'items' => []];
     }
 
-    $stmt = $pdo->prepare("SELECT id, nombre, parent_event_id FROM tournaments WHERE id = ? LIMIT 1");
+    $stmt = $pdo->prepare('SELECT id, nombre, parent_event_id FROM tournaments WHERE id = ? LIMIT 1');
     $stmt->execute([$torneoId]);
     $actual = $stmt->fetch(PDO::FETCH_ASSOC);
     if (!$actual) {
         return ['active_tournament_id' => 0, 'items' => []];
     }
 
-    // Seguridad: sin parent_event_id no hay agrupaciÃ³n de hermanos.
-    $parentEventId = isset($actual['parent_event_id']) ? (int)$actual['parent_event_id'] : 0;
-    if ($parentEventId <= 0) {
-        return ['active_tournament_id' => (int)$actual['id'], 'items' => []];
-    }
+    $parentCol = isset($actual['parent_event_id']) ? (int) $actual['parent_event_id'] : 0;
+    // ID del evento raíz en BD: si el torneo actual es hijo, el raíz es parent_event_id; si es padre u hoja sin padre, el raíz es su propio id para agrupar hijos.
+    $eventRootId = $parentCol > 0 ? $parentCol : (int) $actual['id'];
 
-    // Prioridad primaria solicitada: agrupar por parent_event_id.
-    $st = $pdo->prepare("
+    $st = $pdo->prepare('
         SELECT id, nombre, parent_event_id
         FROM tournaments
-        WHERE parent_event_id = ?
+        WHERE parent_event_id = ? OR id = ?
         ORDER BY id ASC
-    ");
-    $st->execute([$parentEventId]);
+    ');
+    $st->execute([$eventRootId, $eventRootId]);
     $candidatos = $st->fetchAll(PDO::FETCH_ASSOC) ?: [];
 
     $items = [];
     foreach ($candidatos as $cand) {
-        $id = (int)($cand['id'] ?? 0);
-        if ($id <= 0 || !Auth::canAccessTournament($id)) {
+        $id = (int) ($cand['id'] ?? 0);
+        if ($id <= 0 || ! Auth::canAccessTournament($id)) {
             continue;
         }
-        $nombreCand = (string)($cand['nombre'] ?? '');
+        $nombreCand = (string) ($cand['nombre'] ?? '');
         $genero = detectarGeneroTorneoPorNombre($nombreCand);
         $items[$id] = [
             'id' => $id,
             'nombre' => $nombreCand,
             'genero' => $genero,
-            'parent_event_id' => isset($cand['parent_event_id']) ? (int)$cand['parent_event_id'] : null,
+            'parent_event_id' => isset($cand['parent_event_id']) ? (int) $cand['parent_event_id'] : null,
         ];
     }
 
-    if (!isset($items[(int)$actual['id']])) {
-        $actualGenero = detectarGeneroTorneoPorNombre((string)($actual['nombre'] ?? ''));
-        $items[(int)$actual['id']] = [
-            'id' => (int)$actual['id'],
-            'nombre' => (string)($actual['nombre'] ?? ''),
+    if (! isset($items[(int) $actual['id']])) {
+        $actualGenero = detectarGeneroTorneoPorNombre((string) ($actual['nombre'] ?? ''));
+        $items[(int) $actual['id']] = [
+            'id' => (int) $actual['id'],
+            'nombre' => (string) ($actual['nombre'] ?? ''),
             'genero' => $actualGenero,
-            'parent_event_id' => isset($actual['parent_event_id']) ? (int)$actual['parent_event_id'] : null,
+            'parent_event_id' => isset($actual['parent_event_id']) ? (int) $actual['parent_event_id'] : null,
         ];
     }
 
     if (count($items) <= 1) {
-        return ['active_tournament_id' => (int)$actual['id'], 'items' => []];
+        return ['active_tournament_id' => (int) $actual['id'], 'items' => []];
     }
 
-    // Orden consistente por creaciÃ³n.
     usort($items, static function (array $a, array $b): int {
-        return ((int)($a['id'] ?? 0)) <=> ((int)($b['id'] ?? 0));
+        return ((int) ($a['id'] ?? 0)) <=> ((int) ($b['id'] ?? 0));
     });
 
     foreach ($items as $i => &$it) {
@@ -439,7 +448,7 @@ function obtenerContextoTorneoUnificado(int $torneoId): array {
     unset($it);
 
     return [
-        'active_tournament_id' => (int)$actual['id'],
+        'active_tournament_id' => (int) $actual['id'],
         'items' => array_values($items),
     ];
 }
@@ -504,7 +513,7 @@ function torneoContextSwitchHref(
     array $extra = []
 ): string {
     if ($mode === 'panel') {
-        return $baseUrl . $sep . 'action=panel&switch_torneo_id=' . $switchTorneoId . '&return_action=panel';
+        return $baseUrl . $sep . 'action=panel&torneo_id=' . $switchTorneoId . '&switch_torneo_id=' . $switchTorneoId . '&return_action=panel';
     }
     $maxDest = (int) ($mapMaxPartida[$switchTorneoId] ?? 0);
     $ronda = $maxDest > 0 ? $maxDest : 1;

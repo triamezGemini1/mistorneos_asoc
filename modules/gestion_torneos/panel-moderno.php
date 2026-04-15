@@ -13,6 +13,7 @@ if (!class_exists('AppHelpers', false)) {
 $script_actual = basename($_SERVER['PHP_SELF'] ?? '');
 $use_standalone = in_array($script_actual, ['admin_torneo.php', 'panel_torneo.php']);
 $base_url = $use_standalone ? $script_actual : 'index.php?page=torneo_gestion';
+$ctx_switch_base_url = function_exists('torneoGestionContextSwitchBaseUrl') ? torneoGestionContextSwitchBaseUrl() : $base_url;
 
 // Asegurar que $torneo esté disponible (viene de extract($view_data) en torneo_gestion.php)
 // Si no está disponible después del extract, intentar obtenerlo
@@ -184,7 +185,7 @@ tailwind.config = {
                 $tcs = [
                     'items' => $context_switcher['items'],
                     'active_id' => (int)($context_switcher['active_tournament_id'] ?? 0),
-                    'base_url' => $base_url,
+                    'base_url' => $ctx_switch_base_url,
                     'sep' => $use_standalone ? '?' : '&',
                     'ronda_base' => 0,
                     'map_max' => [],
@@ -192,7 +193,7 @@ tailwind.config = {
                     'theme' => 'on_dark',
                     'select_id' => 'torneo-asociado-select-panel',
                     'show_info' => false,
-                    'show_select' => false,
+                    'show_select' => true,
                     'aria_label' => 'Selector de torneos asociados',
                     'pill_row_class' => 'panel-header-context__pills',
                 ];
