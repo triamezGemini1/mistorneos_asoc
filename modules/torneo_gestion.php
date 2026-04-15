@@ -240,7 +240,7 @@ function torneoGestionInscripcionesEquiposAgrupadas(PDO $pdo, int $torneoId): ar
     $stmt = $pdo->prepare("
         SELECT i.id_usuario, {$exprInsNumfvd} AS inscrito_numfvd, {$exprInsCedula} AS cedula_inscrita,
                TRIM(COALESCE(i.codigo_equipo, '')) AS codigo_equipo,
-               COALESCE(u.nombre, u_alt.nombre) AS usuario_nombre,
+               COALESCE(NULLIF(TRIM(u.nombre), ''), NULLIF(TRIM(u_alt.nombre), ''), CONCAT('ID ', CAST(i.id_usuario AS CHAR))) AS usuario_nombre,
                COALESCE(u.cedula, u_alt.cedula) AS usuario_cedula,
                COALESCE(u.numfvd, u_alt.numfvd, 0) AS usuario_numfvd,
                COALESCE(u.sexo, u_alt.sexo) AS usuario_sexo,
@@ -795,6 +795,248 @@ if ($action === 'inscripciones_export_xls' && ($_SERVER['REQUEST_METHOD'] ?? '')
                     . '</tr>';
             }
         }
+    }
+    echo '</table></body></html>';
+    exit;
+}
+if ($action === 'inscripciones_gestor_excel' && ($_SERVER['REQUEST_METHOD'] ?? '') === 'GET' && $torneo_id) {
+    verificarPermisosTorneo($torneo_id, $user_id, $is_admin_general);
+    $pdo = DB::pdo();
+    $stmtT = $pdo->prepare('SELECT id, nombre FROM tournaments WHERE id = ? LIMIT 1');
+    $stmtT->execute([$torneo_id]);
+    $torneo = $stmtT->fetch(PDO::FETCH_ASSOC);
+    if (!$torneo) {
+        http_response_code(404);
+        exit('Torneo no encontrado');
+    }
+    $tipoReporte = trim((string)($_GET['tipo_reporte'] ?? 'inscritos_detallado'));
+    $rondaFiltro = (int)($_GET['ronda'] ?? 0);
+    $permitidos = ['inscritos_detallado', 'inscritos_por_equipo', 'partiresul_detallado', 'partiresul_por_ronda', 'equipos_detallado'];
+    if (!in_array($tipoReporte, $permitidos, true)) {
+        $tipoReporte = 'inscritos_detallado';
+    }
+    $columnasDisponibles = [
+        'inscritos_detallado' => [
+            'asociacion_nombre' => 'Asociación',
+            'equipo_nombre' => 'Equipo',
+            'codigo_equipo' => 'Código equipo',
+            'id_usuario' => 'ID usuario',
+            'numfvd' => 'NUMFVD',
+            'cedula' => 'Cédula',
+            'usuario_nombre' => 'Nombre usuario',
+            'usuario_sexo' => 'Sexo',
+            'usuario_telefono' => 'Teléfono',
+        ],
+        'inscritos_por_equipo' => [
+            'asociacion_nombre' => 'Asociación',
+            'equipo_nombre' => 'Equipo',
+            'codigo_equipo' => 'Código equipo',
+            'id_usuario' => 'ID usuario',
+            'numfvd' => 'NUMFVD',
+            'cedula' => 'Cédula',
+            'usuario_nombre' => 'Nombre usuario',
+            'usuario_sexo' => 'Sexo',
+            'usuario_telefono' => 'Teléfono',
+        ],
+        'partiresul_detallado' => [
+            'partida' => 'Ronda',
+            'mesa' => 'Mesa',
+            'secuencia' => 'Secuencia',
+            'id_usuario' => 'ID usuario',
+            'usuario_nombre' => 'Nombre usuario',
+            'resultado1' => 'Resultado1',
+            'resultado2' => 'Resultado2',
+            'ff' => 'FF',
+            'tarjeta' => 'Tarjeta',
+            'sancion' => 'Sanción',
+            'registrado' => 'Registrado',
+        ],
+        'partiresul_por_ronda' => [
+            'partida' => 'Ronda',
+            'mesa' => 'Mesa',
+            'secuencia' => 'Secuencia',
+            'id_usuario' => 'ID usuario',
+            'usuario_nombre' => 'Nombre usuario',
+            'resultado1' => 'Resultado1',
+            'resultado2' => 'Resultado2',
+            'ff' => 'FF',
+            'tarjeta' => 'Tarjeta',
+            'sancion' => 'Sanción',
+            'registrado' => 'Registrado',
+        ],
+        'equipos_detallado' => [
+            'codigo_equipo' => 'Código equipo',
+            'nombre_equipo' => 'Nombre equipo',
+            'id_club' => 'ID club',
+            'club_nombre' => 'Club',
+            'ganados' => 'Ganados',
+            'perdidos' => 'Perdidos',
+            'efectividad' => 'Efectividad',
+            'puntos' => 'Puntos',
+            'sancion' => 'Sanción',
+            'posicion' => 'Posición',
+            'estatus' => 'Estatus',
+            'fecha_actualizacion' => 'Actualización',
+        ],
+    ];
+    $columnasSolicitadas = array_map('strval', (array)($_GET['columnas'] ?? []));
+    $columnasValidas = array_keys($columnasDisponibles[$tipoReporte]);
+    $columnasSeleccionadas = array_values(array_intersect($columnasValidas, $columnasSolicitadas));
+    if ($columnasSeleccionadas === []) {
+        $columnasSeleccionadas = $columnasValidas;
+    }
+    $esc = static fn ($v): string => htmlspecialchars((string)$v, ENT_QUOTES, 'UTF-8');
+    $filename = 'reporte_' . $tipoReporte . '_torneo_' . $torneo_id . '_' . date('Y-m-d_His') . '.xls';
+    header('Content-Type: application/vnd.ms-excel; charset=utf-8');
+    header('Content-Disposition: attachment; filename="' . $filename . '"');
+    header('Pragma: no-cache');
+    header('Expires: 0');
+    echo '<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8"><title>Reporte</title></head><body>';
+    echo '<table border="1" cellpadding="5" cellspacing="0">';
+    $colsSpan = max(1, count($columnasSeleccionadas));
+    echo '<tr><td colspan="' . $colsSpan . '" style="font-weight:bold;text-align:center;background:#e2e8f0;font-size:16px;">' . $esc($torneo['nombre'] ?? '') . '</td></tr>';
+    echo '<tr><td colspan="' . $colsSpan . '" style="font-weight:bold;background:#f8fafc;">Reporte: ' . $esc(strtoupper($tipoReporte)) . ' · Generado: ' . $esc(date('d/m/Y H:i')) . '</td></tr>';
+    $printHeader = static function (array $keys, array $labels, callable $esc): void {
+        echo '<tr style="font-weight:bold;background:#f8fafc;">';
+        foreach ($keys as $k) {
+            echo '<td>' . $esc($labels[$k] ?? $k) . '</td>';
+        }
+        echo '</tr>';
+    };
+    $printRows = static function (array $rows, array $keys, callable $esc): void {
+        foreach ($rows as $r) {
+            echo '<tr>';
+            foreach ($keys as $k) {
+                echo '<td>' . $esc($r[$k] ?? '') . '</td>';
+            }
+            echo '</tr>';
+        }
+    };
+
+    if ($tipoReporte === 'inscritos_detallado' || $tipoReporte === 'inscritos_por_equipo') {
+        $usuarioTelefonoCoalesce = usuariosTelefonoCoalesceDosAliases($pdo);
+        $exprInsNumfvd = inscritosColumnExists($pdo, 'numfvd') ? 'COALESCE(i.numfvd, 0)' : '0';
+        $exprInsCedula = inscritosColumnExists($pdo, 'cedula') ? 'i.cedula' : "''";
+        $orden = $tipoReporte === 'inscritos_por_equipo'
+            ? 'asociacion_nombre ASC, codigo_equipo ASC, usuario_nombre ASC'
+            : 'asociacion_nombre ASC, usuario_nombre ASC';
+        $st = $pdo->prepare("
+            SELECT
+                i.id_usuario,
+                {$exprInsNumfvd} AS inscrito_numfvd,
+                {$exprInsCedula} AS cedula_inscrita,
+                TRIM(COALESCE(i.codigo_equipo, '')) AS codigo_equipo,
+                COALESCE(NULLIF(TRIM(u.nombre), ''), NULLIF(TRIM(u_alt.nombre), ''), CONCAT('ID ', CAST(i.id_usuario AS CHAR))) AS usuario_nombre,
+                COALESCE(u.cedula, u_alt.cedula) AS usuario_cedula,
+                COALESCE(u.numfvd, u_alt.numfvd, 0) AS usuario_numfvd,
+                COALESCE(u.sexo, u_alt.sexo) AS usuario_sexo,
+                {$usuarioTelefonoCoalesce} AS usuario_telefono,
+                COALESCE(NULLIF(TRIM(c.nombre), ''), 'Sin asociación') AS asociacion_nombre,
+                COALESCE(NULLIF(TRIM(e.nombre_equipo), ''), NULLIF(TRIM(i.codigo_equipo), ''), 'Sin equipo') AS equipo_nombre
+            FROM inscritos i
+            LEFT JOIN usuarios u ON u.id = i.id_usuario
+            LEFT JOIN usuarios u_alt ON u.id IS NULL
+                AND u_alt.numfvd = i.id_usuario
+                AND EXISTS (SELECT 1 FROM tournaments tx WHERE tx.id = i.torneo_id AND tx.club_responsable = 7)
+            LEFT JOIN equipos e ON e.id_torneo = i.torneo_id AND e.codigo_equipo = i.codigo_equipo AND e.estatus = 0
+            LEFT JOIN clubes c ON c.id = COALESCE(e.id_club, i.id_club)
+            WHERE i.torneo_id = ?
+            ORDER BY {$orden}
+        ");
+        $st->execute([$torneo_id]);
+        $rawRows = $st->fetchAll(PDO::FETCH_ASSOC);
+        $rows = [];
+        foreach ($rawRows as $r) {
+            $numfvd = (int)($r['usuario_numfvd'] ?? 0);
+            if ($numfvd <= 0) {
+                $numfvd = (int)($r['inscrito_numfvd'] ?? 0);
+            }
+            $rows[] = [
+                'asociacion_nombre' => $r['asociacion_nombre'] ?? '',
+                'equipo_nombre' => $r['equipo_nombre'] ?? '',
+                'codigo_equipo' => $r['codigo_equipo'] ?? '',
+                'id_usuario' => (int)($r['id_usuario'] ?? 0),
+                'numfvd' => $numfvd,
+                'cedula' => $r['usuario_cedula'] ?? $r['cedula_inscrita'] ?? '',
+                'usuario_nombre' => $r['usuario_nombre'] ?? '',
+                'usuario_sexo' => $r['usuario_sexo'] ?? '',
+                'usuario_telefono' => $r['usuario_telefono'] ?? '',
+            ];
+        }
+        $printHeader($columnasSeleccionadas, $columnasDisponibles[$tipoReporte], $esc);
+        $printRows($rows, $columnasSeleccionadas, $esc);
+    } elseif ($tipoReporte === 'equipos_detallado') {
+        $st = $pdo->prepare("
+            SELECT
+                e.codigo_equipo,
+                e.nombre_equipo,
+                e.id_club,
+                COALESCE(c.nombre, '') AS club_nombre,
+                e.ganados,
+                e.perdidos,
+                e.efectividad,
+                e.puntos,
+                e.sancion,
+                e.posicion,
+                e.estatus,
+                e.fecha_actualizacion
+            FROM equipos e
+            LEFT JOIN clubes c ON c.id = e.id_club
+            WHERE e.id_torneo = ?
+            ORDER BY e.posicion ASC, e.codigo_equipo ASC
+        ");
+        $st->execute([$torneo_id]);
+        $rows = $st->fetchAll(PDO::FETCH_ASSOC);
+        $printHeader($columnasSeleccionadas, $columnasDisponibles[$tipoReporte], $esc);
+        $printRows($rows, $columnasSeleccionadas, $esc);
+    } else {
+        $params = [$torneo_id];
+        $whereRonda = '';
+        if ($tipoReporte === 'partiresul_por_ronda' && $rondaFiltro > 0) {
+            $whereRonda = ' AND pr.partida = ? ';
+            $params[] = $rondaFiltro;
+        }
+        $st = $pdo->prepare("
+            SELECT
+                pr.partida,
+                pr.mesa,
+                pr.secuencia,
+                pr.id_usuario,
+                COALESCE(NULLIF(TRIM(u.nombre), ''), NULLIF(TRIM(u_alt.nombre), ''), CONCAT('ID ', CAST(pr.id_usuario AS CHAR))) AS usuario_nombre,
+                pr.resultado1,
+                pr.resultado2,
+                pr.ff,
+                pr.tarjeta,
+                pr.sancion,
+                pr.registrado
+            FROM partiresul pr
+            LEFT JOIN usuarios u ON u.id = pr.id_usuario
+            LEFT JOIN usuarios u_alt ON u.id IS NULL
+                AND u_alt.numfvd = pr.id_usuario
+                AND EXISTS (SELECT 1 FROM tournaments tx WHERE tx.id = pr.id_torneo AND tx.club_responsable = 7)
+            WHERE pr.id_torneo = ? {$whereRonda}
+            ORDER BY pr.partida ASC, pr.mesa ASC, pr.secuencia ASC
+        ");
+        $st->execute($params);
+        $rows = $st->fetchAll(PDO::FETCH_ASSOC);
+        $norm = [];
+        foreach ($rows as $r) {
+            $norm[] = [
+                'partida' => (int)($r['partida'] ?? 0),
+                'mesa' => (int)($r['mesa'] ?? 0),
+                'secuencia' => (int)($r['secuencia'] ?? 0),
+                'id_usuario' => (int)($r['id_usuario'] ?? 0),
+                'usuario_nombre' => $r['usuario_nombre'] ?? '',
+                'resultado1' => $r['resultado1'] ?? '',
+                'resultado2' => $r['resultado2'] ?? '',
+                'ff' => $r['ff'] ?? '',
+                'tarjeta' => $r['tarjeta'] ?? '',
+                'sancion' => $r['sancion'] ?? '',
+                'registrado' => $r['registrado'] ?? '',
+            ];
+        }
+        $printHeader($columnasSeleccionadas, $columnasDisponibles[$tipoReporte], $esc);
+        $printRows($norm, $columnasSeleccionadas, $esc);
     }
     echo '</table></body></html>';
     exit;
