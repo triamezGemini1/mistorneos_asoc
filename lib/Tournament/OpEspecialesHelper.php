@@ -323,6 +323,8 @@ final class OpEspecialesHelper
      * Intercambia dos jugadores entre dos mesas de la misma ronda a partir de id_usuario en el torneo indicado.
      * Comprueba primero que ambos existan en partiresul (solo mesas de juego) para esa ronda; si falta alguno o hay ambigüedad, falla sin modificar datos.
      *
+     * @return array{ronda: int, cambios: list<array{id_usuario: int, id_partiresul: int, mesa_desde: int, mesa_hasta: int}>}
+     *
      * @throws \RuntimeException
      */
     public static function swapAtletasPorUsuariosYRonda(
@@ -331,7 +333,7 @@ final class OpEspecialesHelper
         int $idUsuarioA,
         int $idUsuarioB,
         int $modalidad
-    ): void {
+    ): array {
         if ($ronda <= 0) {
             throw new \RuntimeException('Ronda no válida.');
         }
@@ -367,18 +369,41 @@ final class OpEspecialesHelper
         }
 
         $st = $pdo->prepare(
-            'SELECT id FROM partiresul WHERE id_torneo = ? AND partida = ? AND id_usuario = ? AND mesa > 0 ORDER BY id ASC LIMIT 1'
+            'SELECT id, mesa FROM partiresul WHERE id_torneo = ? AND partida = ? AND id_usuario = ? AND mesa > 0 ORDER BY id ASC LIMIT 1'
         );
         $st->execute([$torneoId, $ronda, $idUsuarioA]);
-        $idRowA = (int) $st->fetchColumn();
+        $rowA = $st->fetch(\PDO::FETCH_ASSOC);
         $st->execute([$torneoId, $ronda, $idUsuarioB]);
-        $idRowB = (int) $st->fetchColumn();
+        $rowB = $st->fetch(\PDO::FETCH_ASSOC);
 
-        if ($idRowA <= 0 || $idRowB <= 0) {
+        if (! $rowA || ! $rowB) {
             throw new \RuntimeException('No se pudieron resolver las filas en partiresul; no se aplicó ningún cambio.');
         }
 
+        $idRowA = (int) $rowA['id'];
+        $idRowB = (int) $rowB['id'];
+        $mesaA = (int) $rowA['mesa'];
+        $mesaB = (int) $rowB['mesa'];
+
         self::swapAtletasPorIdsPartiresul($torneoId, $ronda, $idRowA, $idRowB, $modalidad);
+
+        return [
+            'ronda' => $ronda,
+            'cambios' => [
+                [
+                    'id_usuario' => $idUsuarioA,
+                    'id_partiresul' => $idRowA,
+                    'mesa_desde' => $mesaA,
+                    'mesa_hasta' => $mesaB,
+                ],
+                [
+                    'id_usuario' => $idUsuarioB,
+                    'id_partiresul' => $idRowB,
+                    'mesa_desde' => $mesaB,
+                    'mesa_hasta' => $mesaA,
+                ],
+            ],
+        ];
     }
 
     /**

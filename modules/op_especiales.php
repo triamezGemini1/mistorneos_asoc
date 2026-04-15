@@ -128,8 +128,9 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
             $ronda = (int) ($_POST['ronda'] ?? 0);
             $idUa = (int) ($_POST['id_usuario_a'] ?? 0);
             $idUb = (int) ($_POST['id_usuario_b'] ?? 0);
-            OpEspecialesHelper::swapAtletasPorUsuariosYRonda($torneo_id, $ronda, $idUa, $idUb, $modalidad);
-            $_SESSION['success'] = 'Intercambio aplicado entre usuarios ' . $idUa . ' y ' . $idUb . ' en la ronda ' . $ronda . '.';
+            $resumenSwap = OpEspecialesHelper::swapAtletasPorUsuariosYRonda($torneo_id, $ronda, $idUa, $idUb, $modalidad);
+            $_SESSION['op_especiales_swap_resumen'] = $resumenSwap;
+            $_SESSION['success'] = 'Intercambio aplicado. Revise el detalle de mesas en el formulario.';
         } elseif ($action === 'reemplazo_usuario') {
             $idV = (int) ($_POST['id_usuario_viejo'] ?? 0);
             $idN = (int) ($_POST['id_usuario_nuevo'] ?? 0);
@@ -367,9 +368,50 @@ $page_title = 'Op Especiales — ' . htmlspecialchars((string) ($torneo['nombre'
       </div>
     </div>
   <?php elseif ($view === 'swap'): ?>
+    <?php
+    $swap_resumen = $_SESSION['op_especiales_swap_resumen'] ?? null;
+    if (is_array($swap_resumen)) {
+        unset($_SESSION['op_especiales_swap_resumen']);
+    } else {
+        $swap_resumen = null;
+    }
+    ?>
     <div class="card mb-4">
       <div class="card-header">Intercambiar dos jugadores entre mesas (misma ronda)</div>
       <div class="card-body">
+        <?php if ($swap_resumen !== null && ! empty($swap_resumen['cambios'])): ?>
+        <div class="alert alert-success border border-success mb-3">
+          <div class="fw-bold mb-2">
+            Cambio realizado — ronda <?= (int) ($swap_resumen['ronda'] ?? 0) ?>
+            (torneo #<?= (int) $torneo_id ?>)
+          </div>
+          <div class="table-responsive">
+            <table class="table table-sm table-bordered mb-0 bg-white">
+              <thead class="table-light">
+                <tr>
+                  <th scope="col">id_usuario</th>
+                  <th scope="col">id fila partiresul</th>
+                  <th scope="col">Mesa desde</th>
+                  <th scope="col">Mesa hasta</th>
+                </tr>
+              </thead>
+              <tbody>
+                <?php foreach ($swap_resumen['cambios'] as $sc): ?>
+                <tr>
+                  <td><?= (int) ($sc['id_usuario'] ?? 0) ?></td>
+                  <td><?= (int) ($sc['id_partiresul'] ?? 0) ?></td>
+                  <td><?= (int) ($sc['mesa_desde'] ?? 0) ?></td>
+                  <td><?= (int) ($sc['mesa_hasta'] ?? 0) ?></td>
+                </tr>
+                <?php endforeach; ?>
+              </tbody>
+            </table>
+          </div>
+          <p class="small text-muted mb-0 mt-2">
+            Por cada <code>id_usuario</code>: mesa donde jugaba antes del cambio (desde) y mesa donde quedó después (hasta). El <code>id</code> de <code>partiresul</code> es la fila/casillero que ocupa en el cuadro.
+          </p>
+        </div>
+        <?php endif; ?>
         <p class="small text-muted mb-2">
           Indica la <strong>ronda</strong> y los dos <strong>id_usuario</strong> que están en el torneo actual (ej. ronda 1, usuarios 2525 y 1970).
           El sistema busca ambos en <code>partiresul</code> para ese torneo y esa ronda antes de intercambiar; si falta alguno o hay más de una fila por usuario en esa ronda, se muestra el error y <strong>no se modifica nada</strong>.
