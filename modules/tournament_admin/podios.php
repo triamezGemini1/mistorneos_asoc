@@ -10,7 +10,7 @@ require_once __DIR__ . '/../../lib/PartiresulEstatusSql.php';
 $wRegPr1Pod = \PartiresulEstatusSql::whereRegistradoUno('pr1');
 $wFf0Pr1Pod = \PartiresulEstatusSql::whereFfCero('pr1');
 $wFfOppPod = \PartiresulEstatusSql::whereFfUno('pr_oponente');
-$wFfCompPod = \PartiresulEstatusSql::whereFfUno('pr_compañero');
+$wFfCompPod = \PartiresulEstatusSql::whereFfUno('pr_companero');
 $wRegPrTarPod = \PartiresulEstatusSql::whereRegistradoUno('pr');
 
 // Asegurar que las posiciones estén actualizadas
@@ -64,13 +64,13 @@ try {
                             (pr1.secuencia IN (1, 2) AND pr_oponente.secuencia IN (3, 4)) OR
                             (pr1.secuencia IN (3, 4) AND pr_oponente.secuencia IN (1, 2))
                         )
-                    LEFT JOIN `partiresul` pr_compañero ON pr1.id_torneo = pr_compañero.id_torneo 
-                        AND pr1.partida = pr_compañero.partida 
-                        AND pr1.mesa = pr_compañero.mesa
-                        AND pr_compañero.id_usuario != pr1.id_usuario
+                    LEFT JOIN `partiresul` pr_companero ON pr1.id_torneo = pr_companero.id_torneo 
+                        AND pr1.partida = pr_companero.partida 
+                        AND pr1.mesa = pr_companero.mesa
+                        AND pr_companero.id_usuario != pr1.id_usuario
                         AND (
-                            (pr1.secuencia IN (1, 2) AND pr_compañero.secuencia IN (1, 2) AND pr_compañero.secuencia != pr1.secuencia) OR
-                            (pr1.secuencia IN (3, 4) AND pr_compañero.secuencia IN (3, 4) AND pr_compañero.secuencia != pr1.secuencia)
+                            (pr1.secuencia IN (1, 2) AND pr_companero.secuencia IN (1, 2) AND pr_companero.secuencia != pr1.secuencia) OR
+                            (pr1.secuencia IN (3, 4) AND pr_companero.secuencia IN (3, 4) AND pr_companero.secuencia != pr1.secuencia)
                         )
                     WHERE pr1.id_usuario = i.id_usuario
                         AND pr1.id_torneo = ?
