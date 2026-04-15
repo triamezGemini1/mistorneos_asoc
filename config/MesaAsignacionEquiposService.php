@@ -500,4 +500,49 @@ ORDER BY er.rn_equipo ASC, jr.posicion_equipo ASC
         $result = $stmt->fetch(PDO::FETCH_ASSOC);
         return (int)($result['ultima_ronda'] ?? 0);
     }
+
+    /**
+     * Próxima ronda a generar (misma firma que otros servicios de mesa).
+     */
+    public function obtenerProximaRonda($torneoId)
+    {
+        return $this->obtenerUltimaRonda($torneoId) + 1;
+    }
+
+    /**
+     * Todas las mesas de juego (mesa &gt; 0) tienen resultados registrados.
+     * Misma lógica que {@see MesaAsignacionService::todasLasMesasCompletas} (registrado VARCHAR-safe).
+     */
+    public function todasLasMesasCompletas($torneoId, $ronda)
+    {
+        $noReg = PartiresulEstatusSql::whereRegistradoNoCompleto();
+        $sql = "SELECT COUNT(DISTINCT mesa) as mesas_incompletas
+                FROM partiresul
+                WHERE id_torneo = ? AND partida = ? AND mesa > 0
+                AND {$noReg}";
+
+        $stmt = $this->pdo->prepare($sql);
+        $stmt->execute([$torneoId, $ronda]);
+        $result = $stmt->fetch(PDO::FETCH_ASSOC);
+
+        return (int) ($result['mesas_incompletas'] ?? 0) === 0;
+    }
+
+    /**
+     * Mesas sin registrar (misma consulta que {@see RoundManagerHandler::contarMesasIncompletas}).
+     */
+    public function contarMesasIncompletas($torneoId, $ronda)
+    {
+        $noReg = PartiresulEstatusSql::whereRegistradoNoCompleto();
+        $sql = "SELECT COUNT(DISTINCT mesa) as mesas_incompletas
+                FROM partiresul
+                WHERE id_torneo = ? AND partida = ? AND mesa > 0
+                AND {$noReg}";
+
+        $stmt = $this->pdo->prepare($sql);
+        $stmt->execute([$torneoId, $ronda]);
+        $result = $stmt->fetch(PDO::FETCH_ASSOC);
+
+        return (int) ($result['mesas_incompletas'] ?? 0);
+    }
 }
