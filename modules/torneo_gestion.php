@@ -2606,7 +2606,7 @@ function obtenerDatosPosiciones($torneo_id) {
     $wRegPr1 = PartiresulEstatusSql::whereRegistradoUno('pr1');
     $wFf0Pr1 = PartiresulEstatusSql::whereFfCero('pr1');
     $wFfOpp = PartiresulEstatusSql::whereFfUno('pr_oponente');
-    $wFfComp = PartiresulEstatusSql::whereFfUno('pr_compaÃ±ero');
+    $wFfComp = PartiresulEstatusSql::whereFfUno('pr_companero');
     $wRegPbye = PartiresulEstatusSql::whereRegistradoUno('pbye');
     $wRegPrTar = PartiresulEstatusSql::whereRegistradoUno('pr');
     
@@ -2631,13 +2631,13 @@ function obtenerDatosPosiciones($torneo_id) {
                             (pr1.secuencia IN (1, 2) AND pr_oponente.secuencia IN (3, 4)) OR
                             (pr1.secuencia IN (3, 4) AND pr_oponente.secuencia IN (1, 2))
                         )
-                    LEFT JOIN `partiresul` pr_compaÃ±ero ON pr1.id_torneo = pr_compaÃ±ero.id_torneo 
-                        AND pr1.partida = pr_compaÃ±ero.partida 
-                        AND pr1.mesa = pr_compaÃ±ero.mesa
-                        AND pr_compaÃ±ero.id_usuario != pr1.id_usuario
+                    LEFT JOIN `partiresul` pr_companero ON pr1.id_torneo = pr_companero.id_torneo 
+                        AND pr1.partida = pr_companero.partida 
+                        AND pr1.mesa = pr_companero.mesa
+                        AND pr_companero.id_usuario != pr1.id_usuario
                         AND (
-                            (pr1.secuencia IN (1, 2) AND pr_compaÃ±ero.secuencia IN (1, 2) AND pr_compaÃ±ero.secuencia != pr1.secuencia) OR
-                            (pr1.secuencia IN (3, 4) AND pr_compaÃ±ero.secuencia IN (3, 4) AND pr_compaÃ±ero.secuencia != pr1.secuencia)
+                            (pr1.secuencia IN (1, 2) AND pr_companero.secuencia IN (1, 2) AND pr_companero.secuencia != pr1.secuencia) OR
+                            (pr1.secuencia IN (3, 4) AND pr_companero.secuencia IN (3, 4) AND pr_companero.secuencia != pr1.secuencia)
                         )
                     WHERE pr1.id_usuario = i.id_usuario
                         AND pr1.id_torneo = ?
@@ -5800,7 +5800,7 @@ function recalcularPosiciones($torneo_id) {
         $rg = InscritosHelper::sqlExprColumnaNumerica('ganados');
         $re = InscritosHelper::sqlExprColumnaNumerica('efectividad');
         $rp = InscritosHelper::sqlExprColumnaNumerica('puntos');
-        $stmt = $pdo->prepare("SELECT id, id_usuario, 
+        $stmt = $pdo->prepare("SELECT id, id_usuario, codigo_equipo, clasiequi,
                                $rg as ganados, 
                                $re as efectividad, 
                                $rp as puntos
@@ -5824,27 +5824,37 @@ function recalcularPosiciones($torneo_id) {
         $posicion = 1;
         $actualizados = 0;
         $puntosRankingActualizados = 0;
+        $rankingPorClasificacion = [];
         
         foreach ($inscritos as $inscrito) {
             $id = (int)$inscrito['id'];
             $ganados = (int)($inscrito['ganados'] ?? 0);
+            $clasiequi = (int)($inscrito['clasiequi'] ?? 0);
             
             // Calcular puntos de ranking segÃºn la posiciÃ³n actual
             $ptosrnk = 1; // Por defecto, punto por participaciÃ³n
-            
-            if ($posicion <= $limitePosiciones) {
-                // Obtener configuraciÃ³n de ranking para esta posiciÃ³n y tipo de torneo
-                $stmt = $pdo->prepare("SELECT puntos_posicion, puntos_por_partida_ganada 
-                                       FROM clasiranking 
-                                       WHERE tipo_torneo = ? AND clasificacion = ? 
-                                       LIMIT 1");
-                $stmt->execute([$tipoTorneo, $posicion]);
-                $ranking = $stmt->fetch(PDO::FETCH_ASSOC);
-                
+
+            // En modalidad equipos, el componente "puntos por clasificaciÃ³n" debe venir de la
+            // clasificaciÃ³n del equipo (clasiequi), no de la posiciÃ³n individual del integrante.
+            $clasificacionRanking = $posicion;
+            if ($tipoTorneo === 3 && $clasiequi > 0) {
+                $clasificacionRanking = $clasiequi;
+            }
+
+            if ($clasificacionRanking <= $limitePosiciones) {
+                if (!array_key_exists($clasificacionRanking, $rankingPorClasificacion)) {
+                    $stmt = $pdo->prepare("SELECT puntos_posicion, puntos_por_partida_ganada 
+                                           FROM clasiranking 
+                                           WHERE tipo_torneo = ? AND clasificacion = ? 
+                                           LIMIT 1");
+                    $stmt->execute([$tipoTorneo, $clasificacionRanking]);
+                    $rankingPorClasificacion[$clasificacionRanking] = $stmt->fetch(PDO::FETCH_ASSOC) ?: null;
+                }
+                $ranking = $rankingPorClasificacion[$clasificacionRanking];
                 if ($ranking) {
                     $puntosPorPosicion = (int)$ranking['puntos_posicion'];
                     $puntosPorPartidaGanada = (int)$ranking['puntos_por_partida_ganada'];
-                    // ptosrnk = puntos por posiciÃ³n + (partidas ganadas Ã— puntos por partida ganada) + 1 punto por participaciÃ³n
+                    // Se mantiene el resto del cÃ¡lculo: ganados del jugador + participaciÃ³n.
                     $ptosrnk = $puntosPorPosicion + ($ganados * $puntosPorPartidaGanada) + 1;
                 }
             }

@@ -10,11 +10,6 @@ require_once __DIR__ . '/../../lib/PartiresulEstatusSql.php';
 require_once __DIR__ . '/../../lib/ResultadosReporteData.php';
 require_once __DIR__ . '/../../lib/Tournament/Services/PaginationService.php';
 
-// Asegurar que las posiciones estén actualizadas
-if (function_exists('recalcularPosiciones')) {
-    recalcularPosiciones($torneo_id);
-}
-
 $pdo = DB::pdo();
 $es_parejas = in_array((int)($torneo['modalidad'] ?? 0), [2, 4], true);
 
@@ -147,7 +142,7 @@ try {
             " . \ResultadosReporteData::sqlGffSubquery() . " AS gff,
             i.sancion,
             i.tarjeta,
-            (SELECT COUNT(*) FROM partiresul pr_bye WHERE pr_bye.id_usuario = i.id_usuario AND pr_bye.id_torneo = i.torneo_id AND " . \PartiresulEstatusSql::whereRegistradoUno('pr_bye') . ' AND pr_bye.mesa = 0 AND pr_bye.resultado1 > pr_bye.resultado2) as partidas_bye,
+            (SELECT COUNT(*) FROM partiresul pr_bye WHERE pr_bye.id_usuario = i.id_usuario AND pr_bye.id_torneo = i.torneo_id AND " . \PartiresulEstatusSql::whereRegistradoUno('pr_bye') . " AND pr_bye.mesa = 0 AND pr_bye.resultado1 > pr_bye.resultado2) as partidas_bye,
             u.nombre as nombre_completo,
             u.username,
             u.sexo,
