@@ -545,6 +545,11 @@ final class ImportacionTorneoExternoService
             'inscripciones_nuevas' => 0,
             'resultados_celdas_rellenadas_pareja' => 0,
             'resultados_celdas_rellenadas_usuario' => 0,
+            'matriz_homologados_n' => 0,
+            'matriz_rondas' => 0,
+            'matriz_total_partidas_esperadas' => 0,
+            'matriz_total_filas' => 0,
+            'mensaje_homologacion_matriz' => '',
         ];
         if ($rowsHomologacion === [] || $rowsResultados === []) {
             $stats['errores'][] = 'Faltan filas en archivo de homologación o de resultados.';
@@ -653,6 +658,8 @@ final class ImportacionTorneoExternoService
 
         $cedulaToId = [];
         $parejaToIds = [];
+        /** @var array<int, string> id_usuario → clave pareja del archivo (homologación unificada / matriz) */
+        $idUsuarioToClavePareja = [];
         $extUsuarioToId = [];
         $filasHomologConId = 0;
         $noEncCed = [];
@@ -694,6 +701,7 @@ final class ImportacionTorneoExternoService
                 $pkey = trim((string) ($row[$mapHom['pareja']] ?? ''));
                 if ($pkey !== '') {
                     $parejaToIds[$pkey][] = $idU;
+                    $idUsuarioToClavePareja[$idU] = $pkey;
                 }
             }
         }
@@ -859,8 +867,8 @@ final class ImportacionTorneoExternoService
         if ($iEfectRes >= 0) {
             $hdrRes[] = 'efectividad';
         }
-        $nuevasFilas = [];
-        $nuevasFilas[] = $hdrRes;
+        /** @var array<int, list<array{f: list<string>, p: int, m: int, s: int}>> Matriz por jugador: todas las filas de partidas */
+        $matrizPorUsuario = [];
         $vectorPorUsuario = [];
 
         for ($r = 1; $r < count($rowsResultados); $r++) {
@@ -909,7 +917,15 @@ final class ImportacionTorneoExternoService
                 $stats['resultados_sin_resolver']++;
                 continue;
             }
-            self::asegurarInscritoTorneoActivo($pdo, $torneo_id, $idUsuario, $registrado_por, $stats);
+            if ($iPareja >= 0) {
+                $pkeyR = trim((string) ($row[$iPareja] ?? ''));
+                if ($pkeyR !== '' && (($idUsuarioToClavePareja[$idUsuario] ?? '') === '')) {
+                    $idUsuarioToClavePareja[$idUsuario] = $pkeyR;
+                }
+            }
+            $pNum = (int) ($row[$iPart] ?? 0);
+            $mNum = (int) ($row[$iMesa] ?? 0);
+            $sNum = (int) ($row[$iSeq] ?? 0);
             $ff = $iFf >= 0 ? self::parseFfValor($row[$iFf] ?? 0) : 0;
             $tarjetaFila = 0;
             $sancionFila = 0;
@@ -933,9 +949,9 @@ final class ImportacionTorneoExternoService
                 $sancionFila = min(80, max(0, $sancionFila));
             }
             $filaOut = [
-                (string) (int) ($row[$iPart] ?? 0),
-                (string) (int) ($row[$iMesa] ?? 0),
-                (string) (int) ($row[$iSeq] ?? 0),
+                (string) $pNum,
+                (string) $mNum,
+                (string) $sNum,
                 (string) $idUsuario,
                 (string) (int) ($row[$iR1] ?? 0),
                 (string) (int) ($row[$iR2] ?? 0),
@@ -946,17 +962,78 @@ final class ImportacionTorneoExternoService
             if ($iEfectRes >= 0) {
                 $filaOut[] = (string) \TorneoCampoNumerico::intEstadistica($row[$iEfectRes] ?? 0);
             }
-            $nuevasFilas[] = $filaOut;
+            if (! isset($matrizPorUsuario[$idUsuario])) {
+                $matrizPorUsuario[$idUsuario] = [];
+            }
+            $matrizPorUsuario[$idUsuario][] = [
+                'f' => $filaOut,
+                'p' => $pNum,
+                'm' => $mNum,
+                's' => $sNum,
+            ];
             $vectorPorUsuario[$idUsuario] = [
                 'torneo_id' => $torneo_id,
-                'partida' => (int) ($row[$iPart] ?? 0),
-                'mesa' => (int) ($row[$iMesa] ?? 0),
-                'secuencia' => (int) ($row[$iSeq] ?? 0),
+                'partida' => $pNum,
+                'mesa' => $mNum,
+                'secuencia' => $sNum,
                 'resultado1' => (int) ($row[$iR1] ?? 0),
                 'resultado2' => (int) ($row[$iR2] ?? 0),
                 'ff' => $ff,
                 'sancion' => $sancionFila,
             ];
+        }
+
+        $rondasArchivo = 0;
+        foreach ($matrizPorUsuario as $filasM) {
+            foreach ($filasM as $it) {
+                $rondasArchivo = max($rondasArchivo, (int) ($it['p'] ?? 0));
+            }
+        }
+        if ($rondasArchivo < 1) {
+            $stR = $pdo->prepare('SELECT COALESCE(NULLIF(rondas, 0), 9) AS r FROM tournaments WHERE id = ? LIMIT 1');
+            $stR->execute([$torneo_id]);
+            $rondasArchivo = max(1, (int) ($stR->fetchColumn() ?: 9));
+        }
+        $N = count($matrizPorUsuario);
+        $M = $N * $rondasArchivo;
+        $totalFilasMatriz = 0;
+        foreach ($matrizPorUsuario as $filasM) {
+            $totalFilasMatriz += count($filasM);
+        }
+        $stats['matriz_homologados_n'] = $N;
+        $stats['matriz_rondas'] = $rondasArchivo;
+        $stats['matriz_total_partidas_esperadas'] = $M;
+        $stats['matriz_total_filas'] = $totalFilasMatriz;
+        $stats['mensaje_homologacion_matriz'] = $N > 0
+            ? ('Homologados ' . $N . ' atletas con un total de ' . $M . ' partidas')
+            : '';
+
+        ksort($matrizPorUsuario, SORT_NUMERIC);
+        foreach ($matrizPorUsuario as $uid => $filasM) {
+            usort($filasM, static function (array $a, array $b): int {
+                if ($a['p'] !== $b['p']) {
+                    return $a['p'] <=> $b['p'];
+                }
+                if ($a['m'] !== $b['m']) {
+                    return $a['m'] <=> $b['m'];
+                }
+
+                return $a['s'] <=> $b['s'];
+            });
+            $matrizPorUsuario[$uid] = $filasM;
+        }
+        foreach (array_keys($matrizPorUsuario) as $uid) {
+            $uid = (int) $uid;
+            $claveP = $idUsuarioToClavePareja[$uid] ?? '';
+            self::asegurarInscritoYAsignarParejaDesdeHomologacion($pdo, $torneo_id, $uid, $claveP, $registrado_por, $stats);
+        }
+
+        $nuevasFilas = [];
+        $nuevasFilas[] = $hdrRes;
+        foreach ($matrizPorUsuario as $filasM) {
+            foreach ($filasM as $it) {
+                $nuevasFilas[] = $it['f'];
+            }
         }
 
         $resInsert = self::fase2InsertarPartiresul($pdo, $torneo_id, $registrado_por, $fechaTorneoYmd, $nuevasFilas);
@@ -1159,6 +1236,62 @@ final class ImportacionTorneoExternoService
     {
         while (count($row) <= $idx) {
             $row[] = '';
+        }
+    }
+
+    /**
+     * Tras agrupar por jugador (matriz): asegura inscripción y persiste número/código de pareja desde homologación.
+     * Usa codigo_equipo (formato 000-NNN) y numero; si existe columna numero_pareja en inscritos, también se actualiza.
+     */
+    private static function asegurarInscritoYAsignarParejaDesdeHomologacion(
+        PDO $pdo,
+        int $torneoId,
+        int $idUsuario,
+        string $clavePareja,
+        int $registradoPor,
+        ?array &$statsAcum = null
+    ): void {
+        self::asegurarInscritoTorneoActivo($pdo, $torneoId, $idUsuario, $registradoPor, $statsAcum);
+        $clave = trim($clavePareja);
+        if ($clave === '' || $idUsuario <= 0 || $torneoId <= 0) {
+            return;
+        }
+        require_once __DIR__ . '/InscritosHelper.php';
+        $st = $pdo->prepare(
+            'SELECT id FROM inscritos WHERE torneo_id = ? AND id_usuario = ? AND ' . InscritosHelper::SQL_WHERE_NO_RETIRADO . ' LIMIT 1'
+        );
+        $st->execute([$torneoId, $idUsuario]);
+        $idInscrito = (int) ($st->fetchColumn() ?: 0);
+        if ($idInscrito <= 0) {
+            return;
+        }
+        $digits = preg_replace('/\D/', '', $clave);
+        $numPareja = $digits !== '' ? (int) substr($digits, -8) : 0;
+        if ($numPareja > 99999999) {
+            $numPareja %= 100000000;
+        }
+        $suf3 = $numPareja % 1000;
+        $codigoEquipo = sprintf('000-%03d', $suf3);
+        $numeroCol = min(99999, $numPareja % 100000);
+
+        $colNames = [];
+        foreach ($pdo->query('SHOW COLUMNS FROM inscritos')->fetchAll(PDO::FETCH_ASSOC) as $c) {
+            $colNames[strtolower((string) $c['Field'])] = (string) $c['Field'];
+        }
+        $sets = ['`numero` = ?', '`codigo_equipo` = ?'];
+        $params = [$numeroCol, $codigoEquipo];
+        if (isset($colNames['numero_pareja'])) {
+            $f = '`' . str_replace('`', '``', $colNames['numero_pareja']) . '` = ?';
+            $sets[] = $f;
+            $params[] = $numeroCol;
+        }
+        $params[] = $idInscrito;
+        $sql = 'UPDATE inscritos SET ' . implode(', ', $sets) . ' WHERE id = ?';
+        try {
+            $up = $pdo->prepare($sql);
+            $up->execute($params);
+        } catch (Throwable $e) {
+            error_log('ImportacionTorneoExternoService asegurarInscritoYAsignarParejaDesdeHomologacion: ' . $e->getMessage());
         }
     }
 

@@ -49,6 +49,18 @@ function importacionTorneoExternoSwalPayload(array $res, string $origen, string 
     $html .= '<tr class="table-' . ($ins > 0 ? 'success' : 'warning') . '"><td><strong>Insertadas partiresul</strong></td><td><strong>' . $ins . '</strong></td></tr>';
     $vec = (int) ($res['vector_atletas_mapeados'] ?? 0);
     $html .= '<tr><td>Vector atletas (id únicos)</td><td><strong>' . $vec . '</strong></td></tr>';
+    $msgMat = (string) ($res['mensaje_homologacion_matriz'] ?? '');
+    if ($msgMat !== '') {
+        $html .= '<tr class="table-info"><td colspan="2"><strong>' . htmlspecialchars($msgMat, ENT_QUOTES, 'UTF-8') . '</strong>';
+        $nMat = (int) ($res['matriz_homologados_n'] ?? 0);
+        $rMat = (int) ($res['matriz_rondas'] ?? 0);
+        $mEsp = (int) ($res['matriz_total_partidas_esperadas'] ?? 0);
+        $mFil = (int) ($res['matriz_total_filas'] ?? 0);
+        if ($nMat > 0 && $rMat > 0) {
+            $html .= '<br><span class="text-muted small">N=' . $nMat . ', rondas=' . $rMat . ', N×rondas=' . $mEsp . ', filas agrupadas=' . $mFil . '</span>';
+        }
+        $html .= '</td></tr>';
+    }
     $av = (int) ($res['atletas_vinculados'] ?? 0);
     $pr = (int) ($res['parejas_reconstruidas'] ?? 0);
     $insN = (int) ($res['inscripciones_nuevas'] ?? 0);
