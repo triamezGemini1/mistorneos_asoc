@@ -975,4 +975,167 @@ final class ImportacionTorneoExternoService
         }
         return $r1 > $r2 ? ($r1 - $r2) : -($r2 - $r1);
     }
+
+    /**
+     * Organización y entidad por defecto según el torneo (club_responsable puede ser id de organización o de club).
+     *
+     * @return array{0: int, 1: int} [organizacion_id, entidad]
+     */
+    public static function organizacionYEntidadDefaultPorTorneo(PDO $pdo, int $torneoId): array
+    {
+        $st = $pdo->prepare('SELECT club_responsable FROM tournaments WHERE id = ? LIMIT 1');
+        $st->execute([$torneoId]);
+        $cr = (int) ($st->fetchColumn() ?: 0);
+        if ($cr <= 0) {
+            return [0, 0];
+        }
+        $stO = $pdo->prepare('SELECT id, entidad FROM organizaciones WHERE id = ? LIMIT 1');
+        $stO->execute([$cr]);
+        $o = $stO->fetch(PDO::FETCH_ASSOC);
+        if ($o) {
+            return [(int) ($o['id'] ?? 0), (int) ($o['entidad'] ?? 0)];
+        }
+        $stC = $pdo->prepare('SELECT organizacion_id, entidad FROM clubes WHERE id = ? LIMIT 1');
+        $stC->execute([$cr]);
+        $c = $stC->fetch(PDO::FETCH_ASSOC);
+        if ($c) {
+            return [(int) ($c['organizacion_id'] ?? 0), (int) ($c['entidad'] ?? 0)];
+        }
+
+        return [0, 0];
+    }
+
+    /**
+     * Busca club existente por nombre dentro de la misma organización (o global si org = 0).
+     */
+    private static function buscarClubIdPorNombreYOrg(PDO $pdo, string $nombre, int $orgId): int
+    {
+        $nombre = trim($nombre);
+        if ($nombre === '') {
+            return 0;
+        }
+        if ($orgId > 0) {
+            $st = $pdo->prepare('SELECT id FROM clubes WHERE organizacion_id = ? AND UPPER(TRIM(nombre)) = UPPER(?) LIMIT 1');
+            $st->execute([$orgId, $nombre]);
+        } else {
+            $st = $pdo->prepare('SELECT id FROM clubes WHERE (organizacion_id IS NULL OR organizacion_id = 0) AND UPPER(TRIM(nombre)) = UPPER(?) LIMIT 1');
+            $st->execute([$nombre]);
+        }
+
+        return (int) ($st->fetchColumn() ?: 0);
+    }
+
+    /**
+     * Crea clubes desde Excel/CSV para que existan antes de homologar inscritos (mismo ámbito que el torneo).
+     * Cabecera obligatoria: nombre (o club / nombre_club).
+     * Opcionales: direccion, telefono, email, delegado, organizacion_id, entidad, codigo_externo (solo informativo en log).
+     *
+     * @param list<list<string>> $rows Primera fila = cabeceras
+     *
+     * @return array{creados: int, omitidos_duplicado: int, errores: list<string>, filas_datos: int, organizacion_default: int, entidad_default: int}
+     */
+    public static function importarClubesDesdeExcel(PDO $pdo, int $torneoId, array $rows): array
+    {
+        $out = [
+            'creados' => 0,
+            'omitidos_duplicado' => 0,
+            'errores' => [],
+            'filas_datos' => 0,
+            'organizacion_default' => 0,
+            'entidad_default' => 0,
+        ];
+        if ($rows === [] || count($rows) < 2) {
+            $out['errores'][] = 'El archivo no tiene cabecera o datos.';
+
+            return $out;
+        }
+        [$orgDef, $entDef] = self::organizacionYEntidadDefaultPorTorneo($pdo, $torneoId);
+        $out['organizacion_default'] = $orgDef;
+        $out['entidad_default'] = $entDef;
+
+        $header = array_map(static fn ($h) => strtolower(preg_replace('/[^a-z0-9]+/i', '_', trim((string) $h))), $rows[0]);
+        $find = static function (array $h, array $names): int {
+            foreach ($names as $n) {
+                $n = strtolower($n);
+                foreach ($h as $i => $col) {
+                    if ($col === $n || str_contains((string) $col, $n)) {
+                        return $i;
+                    }
+                }
+            }
+
+            return -1;
+        };
+        $iNom = $find($header, ['nombre', 'club', 'nombre_club', 'club_nombre']);
+        if ($iNom < 0) {
+            $out['errores'][] = 'Falta columna de nombre del club (nombre, club o nombre_club).';
+
+            return $out;
+        }
+        $iDir = $find($header, ['direccion', 'dirección', 'domicilio']);
+        $iTel = $find($header, ['telefono', 'teléfono', 'celular', 'phone']);
+        $iEmail = $find($header, ['email', 'correo', 'mail']);
+        $iDel = $find($header, ['delegado', 'contacto', 'responsable']);
+        $iOrg = $find($header, ['organizacion_id', 'id_organizacion', 'organizacion']);
+        $iEnt = $find($header, ['entidad', 'cod_entidad', 'id_entidad']);
+
+        $pdo->beginTransaction();
+        try {
+            for ($r = 1; $r < count($rows); $r++) {
+                $row = $rows[$r];
+                $nombre = trim((string) ($row[$iNom] ?? ''));
+                if ($nombre === '') {
+                    continue;
+                }
+                $out['filas_datos']++;
+                $org = $orgDef;
+                if ($iOrg >= 0 && trim((string) ($row[$iOrg] ?? '')) !== '') {
+                    $org = max(0, (int) ($row[$iOrg] ?? 0));
+                }
+                $ent = $entDef;
+                if ($iEnt >= 0 && trim((string) ($row[$iEnt] ?? '')) !== '') {
+                    $ent = max(0, (int) ($row[$iEnt] ?? 0));
+                }
+                if ($org <= 0 && $orgDef > 0) {
+                    $org = $orgDef;
+                }
+                if ($ent <= 0 && $entDef > 0) {
+                    $ent = $entDef;
+                }
+
+                if (self::buscarClubIdPorNombreYOrg($pdo, $nombre, $org) > 0) {
+                    $out['omitidos_duplicado']++;
+                    continue;
+                }
+
+                $dir = $iDir >= 0 ? trim((string) ($row[$iDir] ?? '')) : '';
+                $tel = $iTel >= 0 ? trim((string) ($row[$iTel] ?? '')) : '';
+                $em = $iEmail >= 0 ? trim((string) ($row[$iEmail] ?? '')) : '';
+                $del = $iDel >= 0 ? trim((string) ($row[$iDel] ?? '')) : '';
+
+                $stmt = $pdo->prepare(
+                    'INSERT INTO clubes (nombre, direccion, delegado, telefono, email, estatus, organizacion_id, entidad)
+                     VALUES (?, ?, ?, ?, ?, 1, ?, ?)'
+                );
+                $stmt->execute([
+                    $nombre,
+                    $dir !== '' ? $dir : null,
+                    $del !== '' ? $del : null,
+                    $tel !== '' ? $tel : null,
+                    $em !== '' ? $em : null,
+                    $org > 0 ? $org : null,
+                    $ent,
+                ]);
+                $out['creados']++;
+            }
+            $pdo->commit();
+        } catch (Throwable $e) {
+            if ($pdo->inTransaction()) {
+                $pdo->rollBack();
+            }
+            $out['errores'][] = $e->getMessage();
+        }
+
+        return $out;
+    }
 }

@@ -126,6 +126,43 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         exit;
     }
 
+    if ($accion === 'importar_clubes_excel' && isset($_FILES['archivo_clubes']) && is_uploaded_file($_FILES['archivo_clubes']['tmp_name'])) {
+        $torneo_id = (int) ($_POST['torneo_id'] ?? 0);
+        if ($torneo_id <= 0) {
+            $_SESSION['import_swal'] = ['icon' => 'warning', 'title' => 'Torneo', 'html' => '<p>Seleccione el torneo en el paso 1 antes de importar clubes.</p>'];
+            header('Location: ' . $baseList);
+            exit;
+        }
+        $pdo = DB::pdo();
+        $rows = ImportacionTorneoExternoService::leerExcelOCsv(
+            (string) $_FILES['archivo_clubes']['tmp_name'],
+            (string) ($_FILES['archivo_clubes']['name'] ?? 'clubes.xlsx')
+        );
+        $res = ImportacionTorneoExternoService::importarClubesDesdeExcel($pdo, $torneo_id, $rows);
+        $c = (int) ($res['creados'] ?? 0);
+        $dup = (int) ($res['omitidos_duplicado'] ?? 0);
+        $fd = (int) ($res['filas_datos'] ?? 0);
+        $orgD = (int) ($res['organizacion_default'] ?? 0);
+        $entD = (int) ($res['entidad_default'] ?? 0);
+        $err = $res['errores'] ?? [];
+        $html = '<div class="text-start small" style="max-width:420px">';
+        $html .= '<p class="mb-2"><strong>Clubes creados:</strong> ' . $c . '</p>';
+        $html .= '<p class="mb-2"><strong>Omitidos (ya existían):</strong> ' . $dup . '</p>';
+        $html .= '<p class="mb-2"><strong>Filas con nombre:</strong> ' . $fd . '</p>';
+        $html .= '<p class="mb-2 text-muted small">Organización por defecto (torneo): ' . $orgD . ' · Entidad: ' . $entD . '</p>';
+        if ($err !== []) {
+            $html .= '<p class="text-danger mb-0"><strong>Detalle:</strong> ' . htmlspecialchars(implode(' | ', array_slice($err, 0, 5)), ENT_QUOTES, 'UTF-8') . '</p>';
+        }
+        $html .= '</div>';
+        $_SESSION['import_swal'] = [
+            'icon' => !empty($err) && $c === 0 ? 'error' : ($c > 0 ? 'success' : 'info'),
+            'title' => 'Importación de clubes',
+            'html' => $html,
+        ];
+        header('Location: ' . $baseList . '&torneo_id=' . $torneo_id);
+        exit;
+    }
+
     if ($accion === 'fase2_dual'
         && isset($_FILES['archivo_homologacion'], $_FILES['archivo_resultados'])
         && is_uploaded_file($_FILES['archivo_homologacion']['tmp_name'])
@@ -276,19 +313,24 @@ $url_import_individual = $url_panel . '#importacion-masiva';
         </div>
         <div class="card-body pt-0">
             <div class="row g-2 small">
-                <div class="col-md-6 col-lg-4">
+                <div class="col-md-6 col-lg-3">
                     <div class="border rounded p-2 h-100 bg-primary bg-opacity-10">
-                        <strong class="text-primary">Paso 1</strong> — Elegir torneo destino y fecha de partida.
+                        <strong class="text-primary">Paso 1</strong> — Elegir torneo destino.
                     </div>
                 </div>
-                <div class="col-md-6 col-lg-4">
+                <div class="col-md-6 col-lg-3">
+                    <div class="border rounded p-2 h-100 bg-warning bg-opacity-25">
+                        <strong class="text-dark">Paso 2</strong> — <strong>Clubes (Excel)</strong> antes de homologar: crear clubes de origen para que los atletas queden vinculados a su club.
+                    </div>
+                </div>
+                <div class="col-md-6 col-lg-3">
                     <div class="border rounded p-2 h-100 bg-secondary bg-opacity-10">
                         <strong class="text-secondary">(Opcional)</strong> — Inscribir jugadores/equipos si aún no están.
                     </div>
                 </div>
-                <div class="col-md-6 col-lg-4">
+                <div class="col-md-6 col-lg-3">
                     <div class="border rounded p-2 h-100 bg-success bg-opacity-10">
-                        <strong class="text-success">Carga</strong> — Un Excel: arriba cédula + id externo; abajo resultados (usuario = id externo). Se reemplaza por <code>id_usuario</code> y se guarda en <code>partiresul</code>.
+                        <strong class="text-success">Paso 3</strong> — Excel homologación + resultados → <code>partiresul</code>.
                     </div>
                 </div>
             </div>
@@ -322,7 +364,7 @@ $url_import_individual = $url_panel . '#importacion-masiva';
                 <ol class="small mb-0 ps-3">
                     <li>El torneo debe existir ya (creado en gestión de torneos).</li>
                     <li>Elija el torneo en la lista y pulse <strong>Aplicar</strong>.</li>
-                    <li>Solo después podrá subir los archivos de los pasos 2 y 3.</li>
+                    <li>Después podrá crear clubes desde Excel (paso 2) y luego cargar homologación/resultados (paso 3).</li>
                 </ol>
             </div>
             <form method="get" action="index.php" class="row g-2 align-items-end mt-2">
@@ -349,18 +391,45 @@ $url_import_individual = $url_panel . '#importacion-masiva';
                     <a href="<?= htmlspecialchars($url_panel) ?>" class="btn btn-sm btn-outline-dark mt-2" target="_blank" rel="noopener"><i class="fas fa-external-link-alt me-1"></i> Abrir panel del torneo</a>
                 </div>
             <?php else: ?>
-                <p class="text-warning small mt-3 mb-0"><i class="fas fa-hand-point-up me-1"></i> Debe completar el paso 1 para desbloquear el envío de archivos (pasos 2 y 3).</p>
+                <p class="text-warning small mt-3 mb-0"><i class="fas fa-hand-point-up me-1"></i> Debe completar el paso 1 para desbloquear la creación de clubes y la carga de archivos (pasos 2 y 3).</p>
             <?php endif; ?>
         </div>
     </div>
 
     <?php if ($torneo_actual): ?>
-    <!-- UN SOLO ARCHIVO (recomendado) -->
+    <!-- PASO 2: CLUBES (antes de homologación / inscritos) -->
+    <div class="card mb-4 shadow imp-card-paso paso-15 border-warning">
+        <div class="card-header bg-warning bg-gradient d-flex align-items-center gap-2 flex-wrap py-3">
+            <span class="imp-paso-num bg-dark text-white">2</span>
+            <div>
+                <span class="fw-bold">Crear clubes desde Excel</span>
+                <div class="small text-dark">Ejecutar <strong>antes</strong> de la homologación de jugadores para que existan los clubes de origen (misma organización que el torneo).</div>
+            </div>
+        </div>
+        <div class="card-body">
+            <div class="imp-seccion">
+                <h6>Columnas del archivo</h6>
+                <p class="small mb-0"><strong>Obligatoria:</strong> <code>nombre</code> (o <code>club</code> / <code>nombre_club</code>). <strong>Opcionales:</strong> <code>direccion</code>, <code>telefono</code>, <code>email</code>, <code>delegado</code>, <code>organizacion_id</code>, <code>entidad</code>. Si no indica organización, se usa la del torneo (organización responsable). Los clubes con el mismo nombre en la misma organización no se duplican.</p>
+            </div>
+            <form method="post" enctype="multipart/form-data" class="mt-2">
+                <input type="hidden" name="csrf_token" value="<?= htmlspecialchars(CSRF::token()) ?>">
+                <input type="hidden" name="accion" value="importar_clubes_excel">
+                <input type="hidden" name="torneo_id" value="<?= (int)$torneo_id_sel ?>">
+                <div class="mb-3">
+                    <label class="form-label fw-bold">Archivo (.xlsx, .csv o .txt)</label>
+                    <input type="file" name="archivo_clubes" class="form-control" accept=".xlsx,.csv,.txt" required>
+                </div>
+                <button type="submit" class="btn btn-warning text-dark fw-bold"><i class="fas fa-building me-2"></i>Importar clubes</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- PASO 3: UN SOLO ARCHIVO (recomendado) -->
     <div class="card mb-4 shadow-lg imp-card-paso paso-4 border-primary">
         <div class="card-header text-white d-flex align-items-center gap-2 py-3" style="background: linear-gradient(135deg,#0d6efd 0%,#0a58ca 100%);">
             <span class="imp-paso-num bg-white text-primary"><i class="fas fa-file-excel"></i></span>
             <div>
-                <span class="fw-bold">Un solo Excel — homologación + resultados</span>
+                <span class="fw-bold">Paso 3 — Un solo Excel: homologación + resultados</span>
                 <div class="small opacity-90">Recomendado: todo en un libro</div>
             </div>
         </div>
@@ -424,13 +493,13 @@ $url_import_individual = $url_panel . '#importacion-masiva';
         </div>
     </div>
 
-    <!-- Indicaciones paso 2 (solo texto) -->
+    <!-- Guía homologación (solo texto) -->
     <div class="card mb-3 shadow imp-card-paso paso-2">
         <div class="card-header bg-success bg-opacity-10 text-success border-success d-flex align-items-center gap-2 py-3">
-            <span class="imp-paso-num bg-success text-white">2</span>
+            <span class="imp-paso-num bg-success text-white">H</span>
             <div>
-                <span class="fw-bold text-dark">Paso 2 — Archivo de homologación (parejas y cédulas)</span>
-                <div class="small text-muted">Lo subirá en el formulario del paso final junto al archivo de resultados</div>
+                <span class="fw-bold text-dark">Guía — Archivo de homologación (parejas y cédulas)</span>
+                <div class="small text-muted">Para la alternativa «dos archivos» o para preparar la hoja 1 del Excel único</div>
             </div>
         </div>
         <div class="card-body">
@@ -452,12 +521,12 @@ $url_import_individual = $url_panel . '#importacion-masiva';
         </div>
     </div>
 
-    <!-- Indicaciones paso 3 -->
+    <!-- Guía resultados -->
     <div class="card mb-3 shadow imp-card-paso paso-3">
         <div class="card-header bg-info bg-opacity-10 text-info border-info d-flex align-items-center gap-2 py-3">
-            <span class="imp-paso-num bg-info text-dark">3</span>
+            <span class="imp-paso-num bg-info text-dark">R</span>
             <div>
-                <span class="fw-bold text-dark">Paso 3 — Resultados (solo id externo; sin cédula)</span>
+                <span class="fw-bold text-dark">Guía — Resultados (solo id externo; sin cédula)</span>
                 <div class="small text-muted">Columna <code>usuario</code> = mismo id que en homologación</div>
             </div>
         </div>
@@ -493,8 +562,8 @@ $url_import_individual = $url_panel . '#importacion-masiva';
             <div class="imp-seccion mb-3">
                 <h6>Secuencia al pulsar el botón</h6>
                 <ol class="small mb-0 ps-3">
-                    <li>Lee el archivo del <strong>paso 2</strong> y construye mapas cédula → usuario y pareja → lista de usuarios.</li>
-                    <li>Lee el archivo del <strong>paso 3</strong> y para cada fila asigna el <code>id_usuario</code> correcto.</li>
+                    <li>Lee el archivo de <strong>homologación</strong> y construye mapas cédula → usuario y pareja → lista de usuarios.</li>
+                    <li>Lee el archivo de <strong>resultados</strong> y para cada fila asigna el <code>id_usuario</code> correcto.</li>
                     <li>Si marcó vaciar, borra antes los resultados previos de este torneo en <code>partiresul</code>.</li>
                     <li>Inserta cada fila con la misma lógica que el panel (por mesa y secuencia).</li>
                 </ol>
@@ -505,14 +574,14 @@ $url_import_individual = $url_panel . '#importacion-masiva';
                 <input type="hidden" name="torneo_id" value="<?= (int)$torneo_id_sel ?>">
                 <div class="row g-3 mb-3">
                     <div class="col-md-6">
-                        <label class="form-label fw-bold"><span class="badge bg-success me-1">2</span> Archivo homologación (pareja + cédula)</label>
+                        <label class="form-label fw-bold"><span class="badge bg-success me-1">H</span> Archivo homologación (pareja + cédula)</label>
                         <input type="file" name="archivo_homologacion" class="form-control" accept=".xlsx,.csv,.txt" required>
-                        <div class="form-text">Mismo contenido descrito en la tarjeta del paso 2.</div>
+                        <div class="form-text">Mismo contenido descrito en la guía «H».</div>
                     </div>
                     <div class="col-md-6">
-                        <label class="form-label fw-bold"><span class="badge bg-info text-dark me-1">3</span> Archivo resultados (mesa, secuencia, puntos)</label>
+                        <label class="form-label fw-bold"><span class="badge bg-info text-dark me-1">R</span> Archivo resultados (mesa, secuencia, puntos)</label>
                         <input type="file" name="archivo_resultados" class="form-control" accept=".xlsx,.csv,.txt" required>
-                        <div class="form-text">Mismo contenido descrito en la tarjeta del paso 3.</div>
+                        <div class="form-text">Mismo contenido descrito en la guía «R».</div>
                     </div>
                 </div>
                 <div class="card bg-light mb-3">
