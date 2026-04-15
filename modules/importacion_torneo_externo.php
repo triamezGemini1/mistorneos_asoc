@@ -63,11 +63,19 @@ function importacionTorneoExternoSwalPayload(array $res, string $origen, string 
     if ($rAlta > 0 || $rExt > 0) {
         $html .= '<tr><td>Resolución identidad</td><td>Alta/externa: <strong>' . $rAlta . '</strong> filas; con datos afiliados: <strong>' . $rExt . '</strong></td></tr>';
     }
+    $rlt = (int) ($res['rondas_limite_torneo'] ?? 0);
+    if ($rlt > 0) {
+        $html .= '<tr><td>Rondas auditadas (límite torneo)</td><td><strong>1–' . $rlt . '</strong> (todas las rondas configuradas)</td></tr>';
+    }
+    $fOmit = (int) ($res['filas_omitidas_partida_superior_limite'] ?? 0);
+    if ($fOmit > 0) {
+        $html .= '<tr class="table-warning"><td>Filas omitidas (partida &gt; límite)</td><td><strong>' . $fOmit . '</strong></td></tr>';
+    }
     $html .= '</tbody></table>';
     $aud = $res['auditoria_por_ronda'] ?? [];
     if (is_array($aud) && $aud !== []) {
-        $html .= '<p class="mb-1 fw-bold">Validación post-carga (por ronda)</p><ul class="small mb-2 ps-3">';
-        foreach (array_slice($aud, 0, 15) as $a) {
+        $html .= '<p class="mb-1 fw-bold">Validación post-carga (todas las rondas 1…' . (int) (count($aud)) . ')</p><ul class="small mb-2 ps-3" style="max-height:280px;overflow-y:auto">';
+        foreach ($aud as $a) {
             $p = (int) ($a['partida'] ?? 0);
             $html .= '<li>Ronda ' . $p . ': GDU=' . (int) ($a['gdu'] ?? 0) . ', mesas incompletas=' . (int) ($a['mesas_incompletas'] ?? 0) . ' — ' . htmlspecialchars((string) ($a['detalle'] ?? ''), ENT_QUOTES, 'UTF-8') . '</li>';
         }

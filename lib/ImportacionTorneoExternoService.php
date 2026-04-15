@@ -110,9 +110,18 @@ final class ImportacionTorneoExternoService
         }
         require_once __DIR__ . '/TorneoCampoNumerico.php';
 
-        $stmtT = $pdo->prepare('SELECT puntos FROM tournaments WHERE id = ?');
+        $stmtT = $pdo->prepare('SELECT puntos, rondas FROM tournaments WHERE id = ? LIMIT 1');
         $stmtT->execute([$torneo_id]);
-        $puntosTorneo = (int) ($stmtT->fetchColumn() ?: 100);
+        $tMeta = $stmtT->fetch(PDO::FETCH_ASSOC) ?: [];
+        $puntosTorneo = (int) ($tMeta['puntos'] ?? 100);
+        if ($puntosTorneo < 1) {
+            $puntosTorneo = 100;
+        }
+        /** Máximo de rondas (partida) permitidas por configuración del torneo; importación completa 1..N. */
+        $limiteRondasTorneo = (int) ($tMeta['rondas'] ?? 0);
+        if ($limiteRondasTorneo < 1) {
+            $limiteRondasTorneo = 99;
+        }
 
         $header = array_map(static fn ($h) => strtolower(preg_replace('/[^a-z0-9]+/i', '_', trim((string) $h))), $rows[0]);
         $idx = static function (array $h, array $names): int {
@@ -164,6 +173,7 @@ final class ImportacionTorneoExternoService
         }
 
         $statsF2 = [];
+        $statsF2['rondas_limite_torneo'] = $limiteRondasTorneo;
         /** @var list<array{Field: string, Null: string, Default: mixed, Extra: string}> $meta */
         $meta = $pdo->query('SHOW COLUMNS FROM partiresul')->fetchAll(PDO::FETCH_ASSOC);
         $insertFields = [];
@@ -187,7 +197,6 @@ final class ImportacionTorneoExternoService
 
         $insertados = 0;
         $errores = [];
-        $partidasTocadas = [];
         $pdo->beginTransaction();
         try {
             for ($r = 1; $r < count($rows); $r++) {
@@ -215,6 +224,10 @@ final class ImportacionTorneoExternoService
                     self::asegurarInscritoTorneoActivo($pdo, $torneo_id, $idUsuario, $registrado_por, $statsF2);
                 }
                 if ($partida < 1 || $mesa < 1 || $secuencia < 1 || $idUsuario < 1) {
+                    continue;
+                }
+                if ($partida > $limiteRondasTorneo) {
+                    $statsF2['filas_omitidas_partida_superior_limite'] = (int) ($statsF2['filas_omitidas_partida_superior_limite'] ?? 0) + 1;
                     continue;
                 }
                 $r1 = (int) ($row[$iR1] ?? 0);
@@ -320,9 +333,6 @@ final class ImportacionTorneoExternoService
                 try {
                     $stmtI->execute($params);
                     $insertados++;
-                    if ($partida > 0) {
-                        $partidasTocadas[$partida] = true;
-                    }
                 } catch (Throwable $e) {
                     $errores[] = 'Fila ' . ($r + 1) . ': ' . $e->getMessage();
                 }
@@ -334,9 +344,14 @@ final class ImportacionTorneoExternoService
             return ['insertados' => 0, 'errores' => [$e->getMessage()], 'auditoria_por_ronda' => []];
         }
 
+        $omitLim = (int) ($statsF2['filas_omitidas_partida_superior_limite'] ?? 0);
+        if ($omitLim > 0) {
+            $errores[] = $omitLim . ' filas no insertadas: partida/ronda mayor al límite del torneo (' . $limiteRondasTorneo . ' rondas configuradas).';
+        }
+
         $auditoriaPorRonda = [];
-        $partidasLista = array_keys($partidasTocadas);
-        sort($partidasLista, SORT_NUMERIC);
+        /* Auditoría de las rondas 1..N según el torneo (carga completa), no solo las que tuvieron INSERT en este lote. */
+        $partidasLista = range(1, $limiteRondasTorneo);
         $gduTorneoCompleto = [];
         try {
             require_once __DIR__ . '/Tournament/OpEspecialesHelper.php';
@@ -773,17 +788,24 @@ final class ImportacionTorneoExternoService
         $stats['errores'] = $resInsert['errores'];
         $stats['auditoria_por_ronda'] = $resInsert['auditoria_por_ronda'] ?? [];
         $stats['vector_atletas_mapeados'] = count($vectorPorUsuario);
-        foreach ($resInsert['resolucion_identidad_fase2'] ?? [] as $k => $v) {
-            if ($k === '_ids_atletas' || $k === 'atletas_vinculados') {
+        $f2rid = $resInsert['resolucion_identidad_fase2'] ?? [];
+        foreach ($f2rid as $k => $v) {
+            if ($k === '_ids_atletas' || $k === 'atletas_vinculados' || $k === 'rondas_limite_torneo' || $k === 'filas_omitidas_partida_superior_limite') {
                 continue;
             }
             if (is_numeric($v)) {
                 $stats[$k] = (int) ($stats[$k] ?? 0) + (int) $v;
             }
         }
+        if (isset($f2rid['rondas_limite_torneo'])) {
+            $stats['rondas_limite_torneo'] = (int) $f2rid['rondas_limite_torneo'];
+        }
+        if (isset($f2rid['filas_omitidas_partida_superior_limite'])) {
+            $stats['filas_omitidas_partida_superior_limite'] = (int) $f2rid['filas_omitidas_partida_superior_limite'];
+        }
         $stats['atletas_vinculados'] = max(
             (int) ($stats['atletas_vinculados'] ?? 0),
-            (int) ($resInsert['resolucion_identidad_fase2']['atletas_vinculados'] ?? 0)
+            (int) ($f2rid['atletas_vinculados'] ?? 0)
         );
         $stats['filas_listas_para_insertar'] = max(0, count($nuevasFilas) - 1);
 
