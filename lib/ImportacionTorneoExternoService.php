@@ -15,8 +15,7 @@ final class ImportacionTorneoExternoService
     {
         $ext = strtolower(pathinfo($originalName, PATHINFO_EXTENSION));
         if (in_array($ext, ['xlsx'], true)) {
-            require_once __DIR__ . '/CargaMasivaXlsxReader.php';
-            $r = CargaMasivaXlsxReader::leerHojas($path);
+            $r = self::leerXlsxCombinandoTodasLasHojas($path);
             if ($r !== []) {
                 return $r;
             }
@@ -43,7 +42,69 @@ final class ImportacionTorneoExternoService
             return $rows;
         }
         require_once __DIR__ . '/CargaMasivaXlsxReader.php';
-        return CargaMasivaXlsxReader::leerHojas($path);
+        $r = self::leerXlsxCombinandoTodasLasHojas($path);
+
+        return $r !== [] ? $r : CargaMasivaXlsxReader::leerHojas($path);
+    }
+
+    /**
+     * Lee un .xlsx concatenando todas las hojas (orden sheet1, sheet2, …).
+     * Antes solo se usaba la hoja con más filas (leerHojas), perdiendo rondas en hojas separadas.
+     *
+     * @return list<list<string>>
+     */
+    private static function leerXlsxCombinandoTodasLasHojas(string $path): array
+    {
+        require_once __DIR__ . '/CargaMasivaXlsxReader.php';
+        $sheets = CargaMasivaXlsxReader::leerTodasHojasEnOrden($path);
+        if ($sheets === []) {
+            return [];
+        }
+        if (count($sheets) === 1) {
+            return $sheets[0];
+        }
+        $out = $sheets[0];
+        $cab0 = $out[0] ?? [];
+        for ($si = 1; $si < count($sheets); $si++) {
+            $sh = $sheets[$si];
+            if ($sh === []) {
+                continue;
+            }
+            $ini = 0;
+            if ($cab0 !== [] && isset($sh[0]) && self::filaPareceMismaCabeceraXlsx($cab0, $sh[0])) {
+                $ini = 1;
+            }
+            for ($ri = $ini; $ri < count($sh); $ri++) {
+                $out[] = $sh[$ri];
+            }
+        }
+
+        return $out;
+    }
+
+    /**
+     * @param list<string> $a
+     * @param list<string> $b
+     */
+    private static function filaPareceMismaCabeceraXlsx(array $a, array $b): bool
+    {
+        $n = min(count($a), count($b), 24);
+        if ($n < 2) {
+            return false;
+        }
+        $norm = static function (string $s): string {
+            return strtolower(preg_replace('/[^a-z0-9]+/i', '', trim($s)));
+        };
+        $ig = 0;
+        for ($i = 0; $i < $n; $i++) {
+            $ca = $norm((string) ($a[$i] ?? ''));
+            $cb = $norm((string) ($b[$i] ?? ''));
+            if ($ca !== '' && $cb !== '' && $ca === $cb) {
+                $ig++;
+            }
+        }
+
+        return $ig >= max(2, (int) ceil($n * 0.45));
     }
 
     /**
