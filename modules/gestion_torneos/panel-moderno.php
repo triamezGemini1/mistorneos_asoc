@@ -369,6 +369,11 @@ tailwind.config = {
                         <a href="index.php?page=invitations&filter_torneo=<?= (int)($torneo['id'] ?? 0) ?>" class="tw-btn bg-slate-600 hover:bg-slate-700 text-white w-full text-center">
                             <i class="fas fa-envelope mr-2"></i> Invitaciones por club
                         </a>
+                        <?php if ((int)($torneo['estatus'] ?? 0) === 9): ?>
+                        <a href="<?php echo htmlspecialchars(class_exists('AppHelpers', false) ? AppHelpers::url('index.php', ['page' => 'op_especiales', 'torneo_id' => (int)($torneo['id'] ?? 0)]) : ('index.php?page=op_especiales&torneo_id=' . (int)($torneo['id'] ?? 0)), ENT_QUOTES, 'UTF-8'); ?>" class="tw-btn bg-violet-600 hover:bg-violet-700 text-white w-full text-center">
+                            <i class="fas fa-flask mr-2"></i> Op Especiales (simulación)
+                        </a>
+                        <?php endif; ?>
                         <!-- Inscripciones: un solo bloque (Gestionar + Inscribir en sitio) -->
                         <?php if ($isLocked): ?>
                             <!-- Torneo finalizado: inscripciones totalmente cerradas -->
