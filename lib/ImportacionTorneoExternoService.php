@@ -302,6 +302,8 @@ final class ImportacionTorneoExternoService
 
         $insertados = 0;
         $errores = [];
+        $filasDatosF2 = max(0, count($rows) - 1);
+        $statsF2['filas_procesadas_fase2'] = $filasDatosF2;
         $pdo->beginTransaction();
         try {
             for ($r = 1; $r < count($rows); $r++) {
@@ -328,7 +330,25 @@ final class ImportacionTorneoExternoService
                     $statsF2['_ids_atletas'][$idUsuario] = true;
                     self::asegurarInscritoTorneoActivo($pdo, $torneo_id, $idUsuario, $registrado_por, $statsF2);
                 }
-                if ($partida < 1 || $mesa < 1 || $secuencia < 1 || $idUsuario < 1) {
+                /*
+                 * Importación externa ($omitirAuditoriaGdu): permite mesa/secuencia 0 (p. ej. BYE / cuadros con 0 en origen).
+                 * Otros usos: exige mesa>=1 y secuencia>=1.
+                 */
+                if ($partida < 1 || $idUsuario < 1) {
+                    if ($partida < 1) {
+                        $statsF2['filas_omitidas_partida_invalida'] = (int) ($statsF2['filas_omitidas_partida_invalida'] ?? 0) + 1;
+                    } else {
+                        $statsF2['filas_omitidas_sin_id_usuario'] = (int) ($statsF2['filas_omitidas_sin_id_usuario'] ?? 0) + 1;
+                    }
+                    continue;
+                }
+                if ($omitirAuditoriaGdu) {
+                    if ($mesa < 0 || $secuencia < 0) {
+                        $statsF2['filas_omitidas_mesa_secuencia_negativas'] = (int) ($statsF2['filas_omitidas_mesa_secuencia_negativas'] ?? 0) + 1;
+                        continue;
+                    }
+                } elseif ($mesa < 1 || $secuencia < 1) {
+                    $statsF2['filas_omitidas_mesa_o_secuencia_baja'] = (int) ($statsF2['filas_omitidas_mesa_o_secuencia_baja'] ?? 0) + 1;
                     continue;
                 }
                 if ($partida > $limiteRondasTorneo) {
@@ -456,6 +476,22 @@ final class ImportacionTorneoExternoService
         $omitLim = (int) ($statsF2['filas_omitidas_partida_superior_limite'] ?? 0);
         if ($omitLim > 0) {
             $errores[] = $omitLim . ' filas no insertadas: partida/ronda mayor al límite del torneo (' . $limiteRondasTorneo . ' rondas configuradas).';
+        }
+        $nPi = (int) ($statsF2['filas_omitidas_partida_invalida'] ?? 0);
+        if ($nPi > 0) {
+            $errores[] = $nPi . ' filas no insertadas: partida o ronda inválida (debe ser ≥ 1).';
+        }
+        $nId = (int) ($statsF2['filas_omitidas_sin_id_usuario'] ?? 0);
+        if ($nId > 0) {
+            $errores[] = $nId . ' filas no insertadas: sin id_usuario resoluble en la fila.';
+        }
+        $nMs = (int) ($statsF2['filas_omitidas_mesa_secuencia_negativas'] ?? 0);
+        if ($nMs > 0) {
+            $errores[] = $nMs . ' filas no insertadas: mesa o secuencia negativas.';
+        }
+        $nMsB = (int) ($statsF2['filas_omitidas_mesa_o_secuencia_baja'] ?? 0);
+        if ($nMsB > 0) {
+            $errores[] = $nMsB . ' filas no insertadas: mesa o secuencia en cero (solo permitido en importación externa con validación relajada).';
         }
 
         $auditoriaPorRonda = [];
@@ -1044,6 +1080,11 @@ final class ImportacionTorneoExternoService
         }
         if (isset($f2rid['filas_omitidas_partida_superior_limite'])) {
             $stats['filas_omitidas_partida_superior_limite'] = (int) $f2rid['filas_omitidas_partida_superior_limite'];
+        }
+        foreach (['filas_procesadas_fase2', 'filas_omitidas_partida_invalida', 'filas_omitidas_sin_id_usuario', 'filas_omitidas_mesa_secuencia_negativas', 'filas_omitidas_mesa_o_secuencia_baja'] as $fk) {
+            if (isset($f2rid[$fk])) {
+                $stats[$fk] = (int) $f2rid[$fk];
+            }
         }
         $stats['atletas_vinculados'] = max(
             (int) ($stats['atletas_vinculados'] ?? 0),
