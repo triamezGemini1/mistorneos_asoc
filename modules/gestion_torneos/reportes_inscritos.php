@@ -65,7 +65,11 @@ $page_title = 'Reportes de inscritos — ' . (string) ($torneo['nombre'] ?? 'Tor
 .btn-compact {
     display: inline-flex !important;
     width: auto !important;
-    min-width: 180px;
+    min-width: 170px;
+    min-height: 44px;
+    padding: 10px 14px !important;
+    line-height: 1.1;
+    font-size: 0.875rem;
 }
 </style>
 
@@ -95,42 +99,36 @@ $page_title = 'Reportes de inscritos — ' . (string) ($torneo['nombre'] ?? 'Tor
         <div class="p-5">
             <section class="border border-slate-200 rounded-xl p-4 bg-white mb-6">
                 <h2 class="text-xl font-extrabold text-slate-800 mb-4">Reportes de inscritos</h2>
-                <div class="grid grid-cols-3 gap-4">
-                    <div class="border border-slate-200 rounded-lg p-3 bg-slate-50">
-                        <div class="flex flex-col gap-3 items-start">
-                            <a href="<?php echo htmlspecialchars($url_pdf_det, ENT_QUOTES, 'UTF-8'); ?>" target="_blank" rel="noopener"
-                               class="tw-btn btn-compact bg-rose-600 hover:bg-rose-700 text-white justify-center text-sm font-bold px-4 py-2">
-                                <i class="fas fa-file-pdf mr-2"></i> PDF detallado
-                            </a>
-                            <a href="<?php echo htmlspecialchars($url_xls_det, ENT_QUOTES, 'UTF-8'); ?>" target="_blank" rel="noopener"
-                               class="tw-btn btn-compact bg-emerald-700 hover:bg-emerald-800 text-white justify-center text-sm font-bold px-4 py-2">
-                                <i class="fas fa-file-excel mr-2"></i> Excel detallado
-                            </a>
-                        </div>
+                <div class="grid grid-cols-3 gap-4 items-start">
+                    <div class="flex flex-col space-y-2 items-start">
+                        <a href="<?php echo htmlspecialchars($url_pdf_det, ENT_QUOTES, 'UTF-8'); ?>" target="_blank" rel="noopener"
+                           class="tw-btn btn-compact bg-rose-600 hover:bg-rose-700 text-white justify-center font-bold">
+                            <i class="fas fa-file-pdf mr-2"></i> PDF detallado
+                        </a>
+                        <a href="<?php echo htmlspecialchars($url_xls_det, ENT_QUOTES, 'UTF-8'); ?>" target="_blank" rel="noopener"
+                           class="tw-btn btn-compact bg-emerald-700 hover:bg-emerald-800 text-white justify-center font-bold">
+                            <i class="fas fa-file-excel mr-2"></i> Excel detallado
+                        </a>
                     </div>
-                    <div class="border border-slate-200 rounded-lg p-3 bg-slate-50">
-                        <div class="flex flex-col gap-3 items-start">
-                            <a href="<?php echo htmlspecialchars($url_pdf_simple, ENT_QUOTES, 'UTF-8'); ?>" target="_blank" rel="noopener"
-                               class="tw-btn btn-compact bg-rose-500 hover:bg-rose-600 text-white justify-center text-sm font-bold px-4 py-2">
-                                <i class="fas fa-file-pdf mr-2"></i> PDF simple
-                            </a>
-                            <a href="<?php echo htmlspecialchars($url_xls_simple, ENT_QUOTES, 'UTF-8'); ?>" target="_blank" rel="noopener"
-                               class="tw-btn btn-compact bg-emerald-600 hover:bg-emerald-700 text-white justify-center text-sm font-bold px-4 py-2">
-                                <i class="fas fa-file-excel mr-2"></i> Excel simple
-                            </a>
-                        </div>
+                    <div class="flex flex-col space-y-2 items-start">
+                        <a href="<?php echo htmlspecialchars($url_pdf_simple, ENT_QUOTES, 'UTF-8'); ?>" target="_blank" rel="noopener"
+                           class="tw-btn btn-compact bg-rose-500 hover:bg-rose-600 text-white justify-center font-bold">
+                            <i class="fas fa-file-pdf mr-2"></i> PDF simple
+                        </a>
+                        <a href="<?php echo htmlspecialchars($url_xls_simple, ENT_QUOTES, 'UTF-8'); ?>" target="_blank" rel="noopener"
+                           class="tw-btn btn-compact bg-emerald-600 hover:bg-emerald-700 text-white justify-center font-bold">
+                            <i class="fas fa-file-excel mr-2"></i> Excel simple
+                        </a>
                     </div>
-                    <div class="border border-slate-200 rounded-lg p-3 bg-slate-50">
-                        <div class="flex flex-col gap-3 items-start">
-                            <a href="<?php echo htmlspecialchars($url_pdf_ret, ENT_QUOTES, 'UTF-8'); ?>" target="_blank" rel="noopener"
-                               class="tw-btn btn-compact bg-amber-600 hover:bg-amber-700 text-white justify-center text-sm font-bold px-4 py-2">
-                                <i class="fas fa-file-pdf mr-2"></i> PDF retirados
-                            </a>
-                            <a href="<?php echo htmlspecialchars($url_xls_ret, ENT_QUOTES, 'UTF-8'); ?>" target="_blank" rel="noopener"
-                               class="tw-btn btn-compact bg-amber-700 hover:bg-amber-800 text-white justify-center text-sm font-bold px-4 py-2">
-                                <i class="fas fa-file-excel mr-2"></i> Excel retirados
-                            </a>
-                        </div>
+                    <div class="flex flex-col space-y-2 items-start">
+                        <a href="<?php echo htmlspecialchars($url_pdf_ret, ENT_QUOTES, 'UTF-8'); ?>" target="_blank" rel="noopener"
+                           class="tw-btn btn-compact bg-amber-600 hover:bg-amber-700 text-white justify-center font-bold">
+                            <i class="fas fa-file-pdf mr-2"></i> PDF retirados
+                        </a>
+                        <a href="<?php echo htmlspecialchars($url_xls_ret, ENT_QUOTES, 'UTF-8'); ?>" target="_blank" rel="noopener"
+                           class="tw-btn btn-compact bg-amber-700 hover:bg-amber-800 text-white justify-center font-bold">
+                            <i class="fas fa-file-excel mr-2"></i> Excel retirados
+                        </a>
                     </div>
                 </div>
             </section>
