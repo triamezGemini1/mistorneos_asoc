@@ -1,6 +1,6 @@
 <?php
 /**
- * Compatibilidad con PHP anterior a 8.0 en hosts donde no existen str_contains / str_starts_with.
+ * Compatibilidad con PHP anterior a 8.0: str_contains, str_starts_with, str_ends_with.
  * En PHP 8+ las funciones nativas tienen prioridad (no se redeclaran).
  */
 if (!function_exists('str_contains')) {
@@ -15,6 +15,24 @@ if (!function_exists('str_contains')) {
         }
 
         return strpos((string) $haystack, (string) $needle) !== false;
+    }
+}
+
+if (!function_exists('str_ends_with')) {
+    /**
+     * @param string $haystack
+     * @param string $needle
+     */
+    function str_ends_with($haystack, $needle): bool
+    {
+        if ($needle === '') {
+            return true;
+        }
+        $haystack = (string) $haystack;
+        $needle = (string) $needle;
+        $len = strlen($needle);
+
+        return $len <= strlen($haystack) && substr($haystack, -$len) === $needle;
     }
 }
 

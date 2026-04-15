@@ -197,11 +197,20 @@ final class ImportacionTorneoExternoService
 
             return -1;
         };
-        $iPart = $idx($header, ['partida', 'ronda', 'partida_']);
-        $iMesa = $idx($header, ['mesa']);
+        $iPart = self::indiceColumnaPartida($header);
+        if ($iPart < 0) {
+            $iPart = $idx($header, ['partida', 'ronda', 'partida_']);
+        }
+        $iMesa = self::indiceColumnaMesa($header);
+        if ($iMesa < 0) {
+            $iMesa = $idx($header, ['mesa']);
+        }
         $iUsr = $idx($header, ['id_usuario', 'idusuario']);
         $iCed = $idx($header, ['cedula', 'cedula1', 'ci', 'documento']);
-        $iSeq = $idx($header, ['secuencia', 'seq']);
+        $iSeq = self::indiceColumnaSecuencia($header);
+        if ($iSeq < 0) {
+            $iSeq = $idx($header, ['secuencia', 'seq']);
+        }
         /* PF / Result1 / r1… */
         $iR1 = $idx($header, ['resultado1', 'result1', 'result_1', 'r1', 'pts1', 'pf', 'puntos_favor', 'favor']);
         /* PC / Result2 / r2… */
@@ -231,6 +240,17 @@ final class ImportacionTorneoExternoService
         $iNac = $idx($header, ['nacionalidad', 'nac']);
         if ($iPart < 0 || $iMesa < 0 || $iSeq < 0 || $iR1 < 0 || $iR2 < 0 || ($iUsr < 0 && $iCed < 0)) {
             return ['insertados' => 0, 'errores' => ['Faltan columnas: partida, mesa, secuencia, puntos a favor / resultado1, puntos en contra / resultado2 e id_usuario o cédula.'], 'auditoria_por_ronda' => []];
+        }
+
+        $maxPartidaArchivo = 0;
+        for ($scan = 1; $scan < count($rows); $scan++) {
+            $pv = (int) ($rows[$scan][$iPart] ?? 0);
+            if ($pv > $maxPartidaArchivo) {
+                $maxPartidaArchivo = $pv;
+            }
+        }
+        if ($maxPartidaArchivo > 0) {
+            $limiteRondasTorneo = max($limiteRondasTorneo, $maxPartidaArchivo);
         }
 
         $statsF2 = [];
@@ -683,9 +703,18 @@ final class ImportacionTorneoExternoService
             }
             return -1;
         };
-        $iPart = $find($hNorm, ['partida', 'ronda']);
-        $iMesa = $find($hNorm, ['mesa']);
-        $iSeq = $find($hNorm, ['secuencia', 'seq']);
+        $iPart = self::indiceColumnaPartida($hNorm);
+        if ($iPart < 0) {
+            $iPart = $find($hNorm, ['partida', 'ronda']);
+        }
+        $iMesa = self::indiceColumnaMesa($hNorm);
+        if ($iMesa < 0) {
+            $iMesa = $find($hNorm, ['mesa']);
+        }
+        $iSeq = self::indiceColumnaSecuencia($hNorm);
+        if ($iSeq < 0) {
+            $iSeq = $find($hNorm, ['secuencia', 'seq']);
+        }
         $iR1 = $find($hNorm, ['resultado1', 'result1', 'result_1', 'r1', 'pts1', 'pf', 'puntos_favor', 'favor']);
         $iR2 = $find($hNorm, ['resultado2', 'result2', 'result_2', 'r2', 'pts2', 'pc', 'puntos_contra', 'contra']);
         $iFf = $find($hNorm, ['ff', 'forfait']);
@@ -910,20 +939,7 @@ final class ImportacionTorneoExternoService
             return [[], []];
         }
         for ($i = 0; $i < count($rows); $i++) {
-            $h = array_map(static fn ($x) => strtolower(preg_replace('/[^a-z0-9]+/i', '_', trim((string)$x))), $rows[$i]);
-            $part = $mesa = $seq = false;
-            foreach ($h as $c) {
-                if ($c === 'partida' || str_contains((string)$c, 'partida')) {
-                    $part = true;
-                }
-                if ($c === 'mesa') {
-                    $mesa = true;
-                }
-                if ($c === 'secuencia' || str_contains((string)$c, 'secuencia') || $c === 'seq') {
-                    $seq = true;
-                }
-            }
-            if ($part && $mesa && $seq) {
+            if (self::headerFilaDefineResultadosPartiresul($rows[$i])) {
                 $homolog = array_slice($rows, 0, $i);
                 if ($homolog === []) {
                     return [[], []];
@@ -932,6 +948,20 @@ final class ImportacionTorneoExternoService
             }
         }
         return [[], []];
+    }
+
+    /**
+     * Fila de encabezados del bloque resultados (partida/mesa/secuencia) sin confundir con «partidas» u otras columnas.
+     *
+     * @param list<string> $filaTitulos
+     */
+    private static function headerFilaDefineResultadosPartiresul(array $filaTitulos): bool
+    {
+        $h = array_map(static fn ($x) => strtolower(preg_replace('/[^a-z0-9]+/i', '_', trim((string) $x))), $filaTitulos);
+
+        return self::indiceColumnaPartida($h) >= 0
+            && self::indiceColumnaMesa($h) >= 0
+            && self::indiceColumnaSecuencia($h) >= 0;
     }
 
     /**
@@ -1143,6 +1173,102 @@ final class ImportacionTorneoExternoService
         }
 
         return \TorneoCampoNumerico::codigoTarjeta($v);
+    }
+
+    /**
+     * Columna «partida» / n.º de ronda: no usar subcadena "partida" sobre «partidas», «partidas_jugadas», etc.
+     *
+     * @param list<string> $hNorm Cabeceras normalizadas (minúsculas, guiones bajos)
+     */
+    private static function indiceColumnaPartida(array $hNorm): int
+    {
+        $exact = ['partida', 'nro_partida', 'num_partida', 'nr_partida', 'numero_partida', 'num_part', 'n_partida', 'round', 'nronda', 'no_partida'];
+        foreach ($exact as $ex) {
+            foreach ($hNorm as $i => $col) {
+                if ((string) $col === $ex) {
+                    return $i;
+                }
+            }
+        }
+        foreach ($hNorm as $i => $col) {
+            $c = (string) $col;
+            if ($c === 'ronda' || $c === 'ronda_partida' || (strlen($c) >= 9 && str_ends_with($c, '_partida'))) {
+                return $i;
+            }
+        }
+        foreach ($hNorm as $i => $col) {
+            $c = (string) $col;
+            if (! str_contains($c, 'partida')) {
+                continue;
+            }
+            if (str_starts_with($c, 'partidas')) {
+                continue;
+            }
+
+            return $i;
+        }
+        foreach ($hNorm as $i => $col) {
+            $c = (string) $col;
+            if ($c === '' || ! str_contains($c, 'ronda')) {
+                continue;
+            }
+            if ($c === 'rondas' || str_starts_with($c, 'rondas_')) {
+                continue;
+            }
+
+            return $i;
+        }
+
+        return -1;
+    }
+
+    /**
+     * @param list<string> $hNorm
+     */
+    private static function indiceColumnaMesa(array $hNorm): int
+    {
+        foreach (['mesa', 'n_mesa', 'num_mesa', 'nro_mesa', 'mesa_num', 'nro_de_mesa', 'table', 'mesa_numero'] as $ex) {
+            foreach ($hNorm as $i => $col) {
+                if ((string) $col === $ex) {
+                    return $i;
+                }
+            }
+        }
+        foreach ($hNorm as $i => $col) {
+            $c = (string) $col;
+            if (! str_contains($c, 'mesa')) {
+                continue;
+            }
+            if (str_starts_with($c, 'mesas') && $c !== 'mesas') {
+                continue;
+            }
+
+            return $i;
+        }
+
+        return -1;
+    }
+
+    /**
+     * @param list<string> $hNorm
+     */
+    private static function indiceColumnaSecuencia(array $hNorm): int
+    {
+        foreach (['secuencia', 'sequencia', 'orden', 'no_secuencia', 'nro_secuencia', 'posicion_mesa', 'pos_mesa', 'seq'] as $ex) {
+            foreach ($hNorm as $i => $col) {
+                if ((string) $col === $ex) {
+                    return $i;
+                }
+            }
+        }
+        foreach ($hNorm as $i => $col) {
+            $c = (string) $col;
+            if (str_contains($c, 'secuencia')) {
+                return $i;
+            }
+        }
+
+        return -1;
     }
 
     /**
