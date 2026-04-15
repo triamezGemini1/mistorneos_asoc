@@ -220,24 +220,47 @@ final class ImportacionTorneoExternoService
         if ($iTar < 0) {
             $iTar = $idx($header, ['tarjeta', 'marca_tarjeta']);
         }
-        $iSanNum = -1;
+        $iSancionPuntosF2 = -1;
         foreach ($header as $hi => $col) {
             $c = (string) $col;
-            if (str_contains($c, 'sancionp') || str_contains($c, 'sancion_p') || str_contains($c, 'penaliza') || $c === 'penal' || str_starts_with($c, 'penal_')) {
-                $iSanNum = $hi;
+            if (str_contains($c, 'sancionp') || str_contains($c, 'sancion_p')) {
+                $iSancionPuntosF2 = $hi;
                 break;
             }
         }
-        if ($iSanNum < 0) {
+        /** Columna «sancion» solo como marca si además hay «sancionp» (evita duplicar el mismo índice). */
+        $iSancionMarcaF2 = -1;
+        if ($iSancionPuntosF2 >= 0) {
             foreach ($header as $hi => $col) {
-                if ($col === 'sancion' || $col === 'sanc') {
+                if ((string) $col === 'sancion') {
+                    $iSancionMarcaF2 = $hi;
+                    break;
+                }
+            }
+        }
+        $iSanNum = -1;
+        if ($iSancionPuntosF2 >= 0) {
+            $iSanNum = $iSancionPuntosF2;
+        } else {
+            foreach ($header as $hi => $col) {
+                $c = (string) $col;
+                if (str_contains($c, 'penaliza') || $c === 'penal' || str_starts_with($c, 'penal_')) {
                     $iSanNum = $hi;
                     break;
+                }
+            }
+            if ($iSanNum < 0) {
+                foreach ($header as $hi => $col) {
+                    if ($col === 'sancion' || $col === 'sanc') {
+                        $iSanNum = $hi;
+                        break;
+                    }
                 }
             }
         }
         $iNombre = $idx($header, ['nombre', 'n1', 'jugador', 'atleta']);
         $iNac = $idx($header, ['nacionalidad', 'nac']);
+        $iEfect = $idx($header, ['efectiv', 'efectividad', 'efect']);
         if ($iPart < 0 || $iMesa < 0 || $iSeq < 0 || $iR1 < 0 || $iR2 < 0 || ($iUsr < 0 && $iCed < 0)) {
             return ['insertados' => 0, 'errores' => ['Faltan columnas: partida, mesa, secuencia, puntos a favor / resultado1, puntos en contra / resultado2 e id_usuario o cédula.'], 'auditoria_por_ronda' => []];
         }
@@ -316,12 +339,14 @@ final class ImportacionTorneoExternoService
                 $ff = $iFf >= 0 ? self::parseFfValor($row[$iFf] ?? 0) : 0;
                 $tarjetaVal = 0;
                 $sancionVal = 0;
-                if ($iTar >= 0) {
+                if ($iSancionMarcaF2 >= 0) {
+                    $tarjetaVal = self::parseMarcaTarjeta($row[$iSancionMarcaF2] ?? '');
+                } elseif ($iTar >= 0) {
                     $tarjetaVal = self::parseMarcaTarjeta($row[$iTar] ?? '');
                 }
                 if ($iSanNum >= 0) {
                     $celSan = $row[$iSanNum] ?? 0;
-                    if ($iTar < 0) {
+                    if ($iSancionMarcaF2 < 0 && $iTar < 0) {
                         $rawS = trim((string) $celSan);
                         if ($rawS !== '' && !is_numeric($rawS)) {
                             $tarjetaVal = self::parseMarcaTarjeta($celSan);
@@ -333,7 +358,9 @@ final class ImportacionTorneoExternoService
                     }
                     $sancionVal = min(80, max(0, $sancionVal));
                 }
-                $efect = self::efectividad($r1, $r2, $puntosTorneo, $ff);
+                $efect = ($iEfect >= 0)
+                    ? \TorneoCampoNumerico::intEstadistica($row[$iEfect] ?? 0)
+                    : self::efectividad($r1, $r2, $puntosTorneo, $ff);
                 $fecha = $fechaTorneoYmd . ' 12:00:00';
                 $params = [];
                 foreach ($insertFields as $c) {
@@ -722,24 +749,46 @@ final class ImportacionTorneoExternoService
         if ($iTarRes < 0) {
             $iTarRes = $find($hNorm, ['tarjeta', 'marca_tarjeta']);
         }
-        $iSanRes = -1;
+        $iSancionPuntos = -1;
         foreach ($hNorm as $ri => $col) {
             $c = (string) $col;
-            if (str_contains($c, 'sancionp') || str_contains($c, 'sancion_p') || str_contains($c, 'penaliza') || $c === 'penal' || str_starts_with($c, 'penal_')) {
-                $iSanRes = $ri;
+            if (str_contains($c, 'sancionp') || str_contains($c, 'sancion_p')) {
+                $iSancionPuntos = $ri;
                 break;
             }
         }
-        if ($iSanRes < 0) {
+        /** «Sancion» como marca solo si existe «SancionP» aparte (si no, una sola columna usa la lógica mixta). */
+        $iSancionMarca = -1;
+        if ($iSancionPuntos >= 0) {
             foreach ($hNorm as $ri => $col) {
-                if ($col === 'sancion' || $col === 'sanc') {
-                    $iSanRes = $ri;
+                if ((string) $col === 'sancion') {
+                    $iSancionMarca = $ri;
                     break;
                 }
             }
         }
-        if ($iSanRes < 0) {
-            $iSanRes = $find($hNorm, ['sancionp', 'sancion_p', 'penal', 'penalizacion']);
+        $iSanRes = -1;
+        if ($iSancionPuntos >= 0) {
+            $iSanRes = $iSancionPuntos;
+        } else {
+            foreach ($hNorm as $ri => $col) {
+                $c = (string) $col;
+                if (str_contains($c, 'penaliza') || $c === 'penal' || str_starts_with($c, 'penal_')) {
+                    $iSanRes = $ri;
+                    break;
+                }
+            }
+            if ($iSanRes < 0) {
+                foreach ($hNorm as $ri => $col) {
+                    if ($col === 'sancion' || $col === 'sanc') {
+                        $iSanRes = $ri;
+                        break;
+                    }
+                }
+            }
+            if ($iSanRes < 0) {
+                $iSanRes = $find($hNorm, ['sancionp', 'sancion_p', 'penal', 'penalizacion']);
+            }
         }
         $iCed = $find($hNorm, ['cedula', 'cedula1', 'ci', 'documento']);
         $iNombreRes = $find($hNorm, ['nombre', 'n1', 'jugador', 'atleta']);
@@ -759,15 +808,6 @@ final class ImportacionTorneoExternoService
                 break;
             }
         }
-        if ($iExtRes < 0) {
-            foreach ($hNorm as $ri => $col) {
-                if ($col !== '' && (str_contains((string)$col, 'usuario') || str_contains((string)$col, 'codigo') || $col === 'id')) {
-                    $iExtRes = $ri;
-                    break;
-                }
-            }
-        }
-
         if ($iPart < 0 || $iMesa < 0 || $iSeq < 0 || $iR1 < 0 || $iR2 < 0) {
             $stats['errores'][] = 'Resultados: faltan partida, mesa, secuencia, r1/resultado1 o r2/resultado2.';
             $stats['columna_usuario_resultados'] = $iExtRes >= 0;
@@ -780,14 +820,19 @@ final class ImportacionTorneoExternoService
             $stats['errores'][] = 'Mapa vacío: no se resolvió ningún id externo → usuario (revisar homologación: cédula, nombre si aplica, o BD externa). Cédulas sin resolver (muestra): ' . implode(', ', $muestra) . '.';
             return $stats;
         }
-        if ($iCed < 0 && ($iPareja < 0 || $iJug < 0) && !$puedePorExt) {
-            $stats['errores'][] = 'En resultados hace falta la columna usuario (mismo id externo que en homologación). No hace falta cédula ahí: partida, mesa, secuencia, usuario, r1, r2…';
+        if ($iCed < 0 && $iPareja < 0 && !$puedePorExt) {
+            $stats['errores'][] = 'En resultados hace falta una de: cédula, columna usuario/id externo (homologación), o pareja (con homologación de parejas).';
             return $stats;
         }
 
         require_once __DIR__ . '/TorneoCampoNumerico.php';
+        $iEfectRes = $find($hNorm, ['efectiv', 'efectividad', 'efect']);
+        $hdrRes = ['partida', 'mesa', 'secuencia', 'id_usuario', 'resultado1', 'resultado2', 'ff', 'sancion', 'tarjeta'];
+        if ($iEfectRes >= 0) {
+            $hdrRes[] = 'efectividad';
+        }
         $nuevasFilas = [];
-        $nuevasFilas[] = ['partida', 'mesa', 'secuencia', 'id_usuario', 'resultado1', 'resultado2', 'ff', 'sancion', 'tarjeta'];
+        $nuevasFilas[] = $hdrRes;
         $vectorPorUsuario = [];
 
         for ($r = 1; $r < count($rowsResultados); $r++) {
@@ -820,9 +865,16 @@ final class ImportacionTorneoExternoService
             }
             if ($idUsuario <= 0 && $iPareja >= 0) {
                 $pkey = trim((string) ($row[$iPareja] ?? ''));
-                $j = $iJug >= 0 ? max(1, (int) ($row[$iJug] ?? 1)) : 1;
-                if ($pkey !== '' && $iJug >= 0 && isset($parejaToIds[$pkey][$j - 1])) {
-                    $idUsuario = (int) $parejaToIds[$pkey][$j - 1];
+                if ($pkey !== '') {
+                    if ($iJug >= 0) {
+                        $j = max(1, min(2, (int) ($row[$iJug] ?? 1)));
+                    } else {
+                        $seqM = (int) ($row[$iSeq] ?? 1);
+                        $j = self::indiceJugadorEnParejaPorSecuenciaMesa($seqM);
+                    }
+                    if (isset($parejaToIds[$pkey][$j - 1])) {
+                        $idUsuario = (int) $parejaToIds[$pkey][$j - 1];
+                    }
                 }
             }
             if ($idUsuario <= 0) {
@@ -833,12 +885,14 @@ final class ImportacionTorneoExternoService
             $ff = $iFf >= 0 ? self::parseFfValor($row[$iFf] ?? 0) : 0;
             $tarjetaFila = 0;
             $sancionFila = 0;
-            if ($iTarRes >= 0) {
+            if ($iSancionMarca >= 0) {
+                $tarjetaFila = self::parseMarcaTarjeta($row[$iSancionMarca] ?? '');
+            } elseif ($iTarRes >= 0) {
                 $tarjetaFila = self::parseMarcaTarjeta($row[$iTarRes] ?? '');
             }
             if ($iSanRes >= 0) {
                 $celSan = $row[$iSanRes] ?? 0;
-                if ($iTarRes < 0) {
+                if ($iSancionMarca < 0 && $iTarRes < 0) {
                     $rawS = trim((string) $celSan);
                     if ($rawS !== '' && !is_numeric($rawS)) {
                         $tarjetaFila = self::parseMarcaTarjeta($celSan);
@@ -850,7 +904,7 @@ final class ImportacionTorneoExternoService
                 }
                 $sancionFila = min(80, max(0, $sancionFila));
             }
-            $nuevasFilas[] = [
+            $filaOut = [
                 (string) (int) ($row[$iPart] ?? 0),
                 (string) (int) ($row[$iMesa] ?? 0),
                 (string) (int) ($row[$iSeq] ?? 0),
@@ -861,6 +915,10 @@ final class ImportacionTorneoExternoService
                 (string) $sancionFila,
                 (string) $tarjetaFila,
             ];
+            if ($iEfectRes >= 0) {
+                $filaOut[] = (string) \TorneoCampoNumerico::intEstadistica($row[$iEfectRes] ?? 0);
+            }
+            $nuevasFilas[] = $filaOut;
             $vectorPorUsuario[$idUsuario] = [
                 'torneo_id' => $torneo_id,
                 'partida' => (int) ($row[$iPart] ?? 0),
@@ -981,6 +1039,18 @@ final class ImportacionTorneoExternoService
         $stats['filas_hoja_homolog_raw'] = max(0, count($hom) - 1);
         $stats['filas_hoja_resultados_raw'] = max(0, count($res) - 1);
         return $stats;
+    }
+
+    /**
+     * Mesa de 4: secuencias 1–4 suelen alternar jugador 1 y 2 dentro de cada pareja (1↔2, 3↔4).
+     */
+    private static function indiceJugadorEnParejaPorSecuenciaMesa(int $secuencia): int
+    {
+        if ($secuencia < 1) {
+            return 1;
+        }
+
+        return (($secuencia - 1) % 2) + 1;
     }
 
     private static function normalizarCedula(string $c): string
