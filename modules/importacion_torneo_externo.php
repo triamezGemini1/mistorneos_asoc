@@ -1,8 +1,9 @@
 <?php
 /**
- * Admin general —
- * Homologación: por fila → id_externo (37) + cédula → consulta usuarios → id_usuario (7009). Mapa 37→7009.
- * Resultados: columna usuario = id_externo (37). NO lleva cédula. Al guardar: 37 se sustituye por 7009.
+ * Admin general — Carga externa transparente.
+ * Homologación: cédula → usuario local (inscripción en sitio) → BD externa de personas → alta mínima con datos del archivo;
+ * id externo del archivo se mapea a id_usuario. Resultados: Result1/PF, Result2/PC, SancionP, FF → partiresul.
+ * Post-carga: por ronda se valida GDU (obtenerReporteAnomalias) y mesas incompletas.
  */
 declare(strict_types=1);
 
@@ -39,14 +40,30 @@ function importacionTorneoExternoSwalPayload(array $res, string $origen, string 
     }
     $html .= '<tr><td>Filas bloque cédulas (datos)</td><td><strong>' . $fh . '</strong></td></tr>';
     $html .= '<tr><td>Con usuario en Mistorneos (homolog.)</td><td><strong>' . (int)($res['cedulas_con_usuario_mistorneos'] ?? max(0, $fh - $sinBd)) . '</strong></td></tr>';
-    $html .= '<tr><td>Sin usuario en BD (cédula no encontrada)</td><td><strong>' . $sinBd . '</strong></td></tr>';
+    $html .= '<tr><td>Cédulas sin resolver en homologación</td><td><strong>' . $sinBd . '</strong></td></tr>';
     $html .= '<tr><td>Mapeos usuario externo → id</td><td><strong>' . $map . '</strong> ' . ($ch ? '(col. usuario en homolog.)' : '(sin col. usuario)') . '</td></tr>';
     $html .= '<tr><td>Filas bloque resultados (datos)</td><td><strong>' . $fr . '</strong></td></tr>';
     $html .= '<tr><td>Columna usuario en resultados</td><td>' . ($cr ? 'Sí' : 'No') . '</td></tr>';
     $html .= '<tr><td>Filas que podían insertarse</td><td><strong>' . $listas . '</strong></td></tr>';
     $html .= '<tr><td>Sin asignar jugador</td><td><strong>' . $sinJug . '</strong></td></tr>';
     $html .= '<tr class="table-' . ($ins > 0 ? 'success' : 'warning') . '"><td><strong>Insertadas partiresul</strong></td><td><strong>' . $ins . '</strong></td></tr>';
+    $vec = (int) ($res['vector_atletas_mapeados'] ?? 0);
+    $html .= '<tr><td>Vector atletas (id únicos)</td><td><strong>' . $vec . '</strong></td></tr>';
+    $rExt = (int) ($res['resoluciones_via_bd_externa'] ?? 0);
+    $rAlta = (int) ($res['resoluciones_cedula_sin_usuario_previo'] ?? 0);
+    if ($rAlta > 0 || $rExt > 0) {
+        $html .= '<tr><td>Resolución identidad</td><td>Alta/externa: <strong>' . $rAlta . '</strong> filas; con datos afiliados: <strong>' . $rExt . '</strong></td></tr>';
+    }
     $html .= '</tbody></table>';
+    $aud = $res['auditoria_por_ronda'] ?? [];
+    if (is_array($aud) && $aud !== []) {
+        $html .= '<p class="mb-1 fw-bold">Validación post-carga (por ronda)</p><ul class="small mb-2 ps-3">';
+        foreach (array_slice($aud, 0, 15) as $a) {
+            $p = (int) ($a['partida'] ?? 0);
+            $html .= '<li>Ronda ' . $p . ': GDU=' . (int) ($a['gdu'] ?? 0) . ', mesas incompletas=' . (int) ($a['mesas_incompletas'] ?? 0) . ' — ' . htmlspecialchars((string) ($a['detalle'] ?? ''), ENT_QUOTES, 'UTF-8') . '</li>';
+        }
+        $html .= '</ul>';
+    }
     if ($cedNo !== []) {
         $html .= '<p class="mb-1"><strong>Cédulas sin usuario (muestra):</strong> ' . htmlspecialchars(implode(', ', array_slice($cedNo, 0, 12))) . '</p>';
     }

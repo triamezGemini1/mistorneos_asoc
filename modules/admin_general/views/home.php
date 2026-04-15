@@ -20,6 +20,9 @@ $stats = $stats ?? [];
             </p>
         </div>
         <div class="d-flex align-items-center gap-2 flex-wrap">
+            <a href="<?= htmlspecialchars(AppHelpers::dashboard('importacion_torneo_externo')) ?>" class="btn btn-outline-secondary">
+                <i class="fas fa-file-import me-2"></i>Carga externa transparente
+            </a>
             <a href="<?= htmlspecialchars(AppHelpers::dashboard('notificaciones_masivas')) ?>" class="btn btn-primary">
                 <i class="fas fa-bell me-2"></i>Enviar notificaciones
             </a>

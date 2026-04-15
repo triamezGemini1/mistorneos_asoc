@@ -90,9 +90,11 @@ final class ImportacionTorneoExternoService
     }
 
     /**
-     * Fase 2: INSERT partiresul. Columnas esperadas (cabecera): partida, mesa, id_usuario (o cedula), secuencia, resultado1, resultado2, ff (opcional).
+     * Fase 2: INSERT partiresul. Cabecera: partida, mesa, id_usuario (o cédula), secuencia,
+     * resultado1 / Result1 / PF (puntos a favor), resultado2 / Result2 / PC (en contra), SancionP/sancion, ff.
+     * Identidad por cédula: misma prioridad que inscripción en sitio (local → externa → alta mínima).
      *
-     * @return array{insertados: int, errores: list<string>}
+     * @return array{insertados: int, errores: list<string>, auditoria_por_ronda: list<array{partida: int, gdu: int, mesas_incompletas: int, detalle: string}>}
      */
     public static function fase2InsertarPartiresul(
         PDO $pdo,
@@ -102,48 +104,56 @@ final class ImportacionTorneoExternoService
         array $rows
     ): array {
         if ($rows === []) {
-            return ['insertados' => 0, 'errores' => ['Archivo vacío']];
+            return ['insertados' => 0, 'errores' => ['Archivo vacío'], 'auditoria_por_ronda' => []];
         }
+        require_once __DIR__ . '/TorneoCampoNumerico.php';
+
         $stmtT = $pdo->prepare('SELECT puntos FROM tournaments WHERE id = ?');
         $stmtT->execute([$torneo_id]);
-        $puntosTorneo = (int)($stmtT->fetchColumn() ?: 100);
+        $puntosTorneo = (int) ($stmtT->fetchColumn() ?: 100);
 
-        $header = array_map(static fn ($h) => strtolower(preg_replace('/[^a-z0-9]+/i', '_', trim((string)$h))), $rows[0]);
+        $header = array_map(static fn ($h) => strtolower(preg_replace('/[^a-z0-9]+/i', '_', trim((string) $h))), $rows[0]);
         $idx = static function (array $h, array $names): int {
             foreach ($names as $n) {
                 $n = strtolower($n);
                 foreach ($h as $i => $col) {
-                    if (str_contains((string)$col, $n) || $col === $n) {
+                    if (str_contains((string) $col, $n) || $col === $n) {
                         return $i;
                     }
                 }
             }
+
             return -1;
         };
         $iPart = $idx($header, ['partida', 'ronda', 'partida_']);
         $iMesa = $idx($header, ['mesa']);
         $iUsr = $idx($header, ['id_usuario', 'idusuario']);
-        $iCed = $idx($header, ['cedula', 'cedula1']);
+        $iCed = $idx($header, ['cedula', 'cedula1', 'ci', 'documento']);
         $iSeq = $idx($header, ['secuencia', 'seq']);
-        $iR1 = $idx($header, ['resultado1', 'r1', 'pts1']);
-        $iR2 = $idx($header, ['resultado2', 'r2', 'pts2']);
+        /* PF / Result1 / r1… */
+        $iR1 = $idx($header, ['resultado1', 'result1', 'result_1', 'r1', 'pts1', 'pf', 'puntos_favor', 'favor']);
+        /* PC / Result2 / r2… */
+        $iR2 = $idx($header, ['resultado2', 'result2', 'result_2', 'r2', 'pts2', 'pc', 'puntos_contra', 'contra']);
         $iFf = $idx($header, ['ff', 'forfait']);
+        $iSan = $idx($header, ['sancionp', 'sancion_p', 'sancion', 'penal', 'penalizacion']);
+        $iNombre = $idx($header, ['nombre', 'n1', 'jugador', 'atleta']);
+        $iNac = $idx($header, ['nacionalidad', 'nac']);
         if ($iPart < 0 || $iMesa < 0 || $iSeq < 0 || $iR1 < 0 || $iR2 < 0 || ($iUsr < 0 && $iCed < 0)) {
-            return ['insertados' => 0, 'errores' => ['Faltan columnas: partida, mesa, secuencia, resultado1, resultado2 e id_usuario o cédula.']];
+            return ['insertados' => 0, 'errores' => ['Faltan columnas: partida, mesa, secuencia, puntos a favor / resultado1, puntos en contra / resultado2 e id_usuario o cédula.'], 'auditoria_por_ronda' => []];
         }
 
-        $stmtU = $pdo->prepare('SELECT id FROM usuarios WHERE cedula = ? OR cedula = ? LIMIT 1');
+        $statsF2 = [];
         /** @var list<array{Field: string, Null: string, Default: mixed, Extra: string}> $meta */
         $meta = $pdo->query('SHOW COLUMNS FROM partiresul')->fetchAll(PDO::FETCH_ASSOC);
         $insertFields = [];
         foreach ($meta as $c) {
-            if (strtolower((string)$c['Field']) === 'id' && str_contains((string)$c['Extra'], 'auto_increment')) {
+            if (strtolower((string) $c['Field']) === 'id' && str_contains((string) $c['Extra'], 'auto_increment')) {
                 continue;
             }
             $insertFields[] = $c;
         }
         if ($insertFields === []) {
-            return ['insertados' => 0, 'errores' => ['partiresul: sin columnas insertables']];
+            return ['insertados' => 0, 'errores' => ['partiresul: sin columnas insertables'], 'auditoria_por_ronda' => []];
         }
         $sqlParts = [];
         $placeholders = [];
@@ -156,32 +166,48 @@ final class ImportacionTorneoExternoService
 
         $insertados = 0;
         $errores = [];
+        $partidasTocadas = [];
         $pdo->beginTransaction();
         try {
             for ($r = 1; $r < count($rows); $r++) {
                 $row = $rows[$r];
-                $partida = (int)($row[$iPart] ?? 0);
-                $mesa = (int)($row[$iMesa] ?? 0);
-                $secuencia = (int)($row[$iSeq] ?? 0);
-                $idUsuario = $iUsr >= 0 ? (int)($row[$iUsr] ?? 0) : 0;
+                $partida = (int) ($row[$iPart] ?? 0);
+                $mesa = (int) ($row[$iMesa] ?? 0);
+                $secuencia = (int) ($row[$iSeq] ?? 0);
+                $idUsuario = $iUsr >= 0 ? (int) ($row[$iUsr] ?? 0) : 0;
                 if ($idUsuario <= 0 && $iCed >= 0) {
                     $ced = self::normalizarCedula($row[$iCed] ?? '');
-                    $stmtU->execute([$ced, preg_replace('/\D/', '', $ced)]);
-                    $idUsuario = (int)($stmtU->fetchColumn() ?: 0);
+                    $nom = $iNombre >= 0 ? trim((string) ($row[$iNombre] ?? '')) : '';
+                    $nac = $iNac >= 0 ? trim((string) ($row[$iNac] ?? '')) : '';
+                    $idUsuario = self::resolverIdUsuarioInscripcionSitio(
+                        $pdo,
+                        $torneo_id,
+                        $ced,
+                        $nom,
+                        $nac,
+                        $registrado_por,
+                        $statsF2
+                    );
+                }
+                if ($idUsuario > 0 && $iUsr >= 0) {
+                    self::asegurarInscritoTorneoActivo($pdo, $torneo_id, $idUsuario, $registrado_por);
                 }
                 if ($partida < 1 || $mesa < 1 || $secuencia < 1 || $idUsuario < 1) {
                     continue;
                 }
-                $r1 = (int)($row[$iR1] ?? 0);
-                $r2 = (int)($row[$iR2] ?? 0);
-                $ff = ($iFf >= 0 && (int)($row[$iFf] ?? 0) === 1) ? 1 : 0;
+                $r1 = (int) ($row[$iR1] ?? 0);
+                $r2 = (int) ($row[$iR2] ?? 0);
+                $ff = $iFf >= 0 ? self::parseFfValor($row[$iFf] ?? 0) : 0;
+                $sancionVal = 0;
+                if ($iSan >= 0) {
+                    $sancionVal = \TorneoCampoNumerico::intEstadistica($row[$iSan] ?? 0);
+                    $sancionVal = min(80, max(0, $sancionVal));
+                }
                 $efect = self::efectividad($r1, $r2, $puntosTorneo, $ff);
-                $zap = ($r1 === 0 && $ff === 0) ? 1 : 0;
-                $chan = $zap;
                 $fecha = $fechaTorneoYmd . ' 12:00:00';
                 $params = [];
                 foreach ($insertFields as $c) {
-                    $f = strtolower((string)$c['Field']);
+                    $f = strtolower((string) $c['Field']);
                     $nullable = ($c['Null'] ?? '') === 'YES';
                     $def = $c['Default'] ?? null;
                     switch ($f) {
@@ -212,8 +238,10 @@ final class ImportacionTorneoExternoService
                         case 'ff':
                             $params[] = $ff;
                             break;
-                        case 'tarjeta':
                         case 'sancion':
+                            $params[] = $sancionVal;
+                            break;
+                        case 'tarjeta':
                         case 'chancleta':
                         case 'zapato':
                             $params[] = 0;
@@ -234,18 +262,16 @@ final class ImportacionTorneoExternoService
                             $params[] = $nullable ? null : '';
                             break;
                         case 'origen_dato':
-                            /* ENUM('admin','qr'); '' o NULL suelen disparar 1265 según sql_mode */
                             $params[] = 'admin';
                             break;
                         case 'estatus':
-                            /* INT en muchas instalaciones; VARCHAR en otras — nunca cadena vacía */
                             $params[] = $nullable ? null : 1;
                             break;
                         default:
                             if ($nullable) {
                                 $params[] = null;
                             } elseif (is_numeric($def)) {
-                                $params[] = (int)$def;
+                                $params[] = (int) $def;
                             } elseif ($def !== null) {
                                 $params[] = $def;
                             } else {
@@ -256,6 +282,9 @@ final class ImportacionTorneoExternoService
                 try {
                     $stmtI->execute($params);
                     $insertados++;
+                    if ($partida > 0) {
+                        $partidasTocadas[$partida] = true;
+                    }
                 } catch (Throwable $e) {
                     $errores[] = 'Fila ' . ($r + 1) . ': ' . $e->getMessage();
                 }
@@ -263,9 +292,43 @@ final class ImportacionTorneoExternoService
             $pdo->commit();
         } catch (Throwable $e) {
             $pdo->rollBack();
-            return ['insertados' => 0, 'errores' => [$e->getMessage()]];
+
+            return ['insertados' => 0, 'errores' => [$e->getMessage()], 'auditoria_por_ronda' => []];
         }
-        return ['insertados' => $insertados, 'errores' => $errores];
+
+        $auditoriaPorRonda = [];
+        $partidasLista = array_keys($partidasTocadas);
+        sort($partidasLista, SORT_NUMERIC);
+        require_once __DIR__ . '/Tournament/OpEspecialesHelper.php';
+        $gduTorneoCompleto = \Tournament\OpEspecialesHelper::obtenerReporteAnomalias($torneo_id);
+        foreach ($partidasLista as $pnum) {
+            $chk = self::validarPostCargaRondaPartiresul($pdo, $torneo_id, (int) $pnum, $gduTorneoCompleto);
+            $nGdu = count($chk['gdu']);
+            $nInc = count($chk['mesas_incompletas']);
+            $det = '';
+            if ($nGdu > 0) {
+                $det .= 'GDU: ' . $nGdu . ' anomalía(s). ';
+            }
+            if ($nInc > 0) {
+                $det .= 'Mesas incompletas: ' . $nInc . '. ';
+            }
+            if ($det === '') {
+                $det = 'Sin anomalías GDU ni mesas incompletas en esta ronda.';
+            }
+            $auditoriaPorRonda[] = [
+                'partida' => (int) $pnum,
+                'gdu' => $nGdu,
+                'mesas_incompletas' => $nInc,
+                'detalle' => trim($det),
+            ];
+        }
+
+        return [
+            'insertados' => $insertados,
+            'errores' => $errores,
+            'auditoria_por_ronda' => $auditoriaPorRonda,
+            'resolucion_identidad_fase2' => $statsF2,
+        ];
     }
 
     /**
@@ -379,7 +442,27 @@ final class ImportacionTorneoExternoService
             return $stats;
         }
 
-        $stmtCed = $pdo->prepare('SELECT id FROM usuarios WHERE cedula = ? OR cedula = ? LIMIT 1');
+        $iNombreHom = -1;
+        foreach ($hNormHom as $hi => $col) {
+            if ($hi === $mapHom['cedula'] || $hi === $iExtHom || ($mapHom['pareja'] >= 0 && $hi === $mapHom['pareja'])) {
+                continue;
+            }
+            if ($col === 'nombre' || str_contains((string) $col, 'nombre') || $col === 'n1' || str_contains((string) $col, 'atleta')) {
+                $iNombreHom = $hi;
+                break;
+            }
+        }
+        $iNacHom = -1;
+        foreach ($hNormHom as $hi => $col) {
+            if ($hi === $mapHom['cedula'] || $hi === $iExtHom) {
+                continue;
+            }
+            if ($col === 'nac' || $col === 'nacionalidad' || str_contains((string) $col, 'nacionalidad')) {
+                $iNacHom = $hi;
+                break;
+            }
+        }
+
         $cedulaToId = [];
         $parejaToIds = [];
         $extUsuarioToId = [];
@@ -387,29 +470,40 @@ final class ImportacionTorneoExternoService
         $noEncCed = [];
         for ($i = $dataStartIdx; $i < count($homologRows); $i++) {
             $row = $homologRows[$i];
-            while (count($row) <= max($mapHom['cedula'], $iExtHom)) {
+            $maxIdxHom = max($mapHom['cedula'], $iExtHom);
+            if ($mapHom['pareja'] >= 0) {
+                $maxIdxHom = max($maxIdxHom, $mapHom['pareja']);
+            }
+            if ($iNombreHom >= 0) {
+                $maxIdxHom = max($maxIdxHom, $iNombreHom);
+            }
+            if ($iNacHom >= 0) {
+                $maxIdxHom = max($maxIdxHom, $iNacHom);
+            }
+            while (count($row) <= $maxIdxHom) {
                 $row[] = '';
             }
             $ced = self::normalizarCedula($row[$mapHom['cedula']] ?? '');
-            $extKey = trim((string)($row[$iExtHom] ?? ''));
+            $extKey = trim((string) ($row[$iExtHom] ?? ''));
             if ($ced === '' || $extKey === '') {
                 continue;
             }
-            $stmtCed->execute([$ced, preg_replace('/\D/', '', $ced)]);
-            $idU = (int)($stmtCed->fetchColumn() ?: 0);
+            $nomH = $iNombreHom >= 0 ? trim((string) ($row[$iNombreHom] ?? '')) : '';
+            $nacH = $iNacHom >= 0 ? trim((string) ($row[$iNacHom] ?? '')) : '';
+            $idU = self::resolverIdUsuarioInscripcionSitio($pdo, $torneo_id, $ced, $nomH, $nacH, $registrado_por, $stats);
             if ($idU > 0) {
                 $filasHomologConId++;
                 $cedulaToId[$ced] = $idU;
                 $cedulaToId[preg_replace('/\D/', '', $ced)] = $idU;
                 $extUsuarioToId[$extKey] = $idU;
                 if (is_numeric($extKey)) {
-                    $extUsuarioToId[(string)(int)$extKey] = $idU;
+                    $extUsuarioToId[(string) (int) $extKey] = $idU;
                 }
             } else {
                 $noEncCed[] = $ced;
             }
             if ($mapHom['pareja'] >= 0 && $idU > 0) {
-                $pkey = trim((string)($row[$mapHom['pareja']] ?? ''));
+                $pkey = trim((string) ($row[$mapHom['pareja']] ?? ''));
                 if ($pkey !== '') {
                     $parejaToIds[$pkey][] = $idU;
                 }
@@ -447,10 +541,13 @@ final class ImportacionTorneoExternoService
         $iPart = $find($hNorm, ['partida', 'ronda']);
         $iMesa = $find($hNorm, ['mesa']);
         $iSeq = $find($hNorm, ['secuencia', 'seq']);
-        $iR1 = $find($hNorm, ['resultado1', 'r1', 'pts1']);
-        $iR2 = $find($hNorm, ['resultado2', 'r2', 'pts2']);
+        $iR1 = $find($hNorm, ['resultado1', 'result1', 'result_1', 'r1', 'pts1', 'pf', 'puntos_favor', 'favor']);
+        $iR2 = $find($hNorm, ['resultado2', 'result2', 'result_2', 'r2', 'pts2', 'pc', 'puntos_contra', 'contra']);
         $iFf = $find($hNorm, ['ff', 'forfait']);
+        $iSanRes = $find($hNorm, ['sancionp', 'sancion_p', 'sancion', 'penal', 'penalizacion']);
         $iCed = $find($hNorm, ['cedula', 'cedula1', 'ci', 'documento']);
+        $iNombreRes = $find($hNorm, ['nombre', 'n1', 'jugador', 'atleta']);
+        $iNacRes = $find($hNorm, ['nacionalidad', 'nac']);
         $iPareja = $find($hNorm, ['pareja', 'id_pareja', 'parejas']);
         $iJug = $find($hNorm, ['jugador', 'miembro', 'pos_pareja', 'jp', 'slot']);
         /* Id del otro sistema en hoja resultados (no es id_usuario Mistorneos hasta homologar) */
@@ -484,7 +581,7 @@ final class ImportacionTorneoExternoService
         $puedePorExt = $iExtRes >= 0 && $extUsuarioToId !== [];
         if ($iExtRes >= 0 && $extUsuarioToId === []) {
             $muestra = array_slice($noEncCed, 0, 15);
-            $stats['errores'][] = 'Mapa vacío: ninguna cédula del bloque homologación existe en usuarios (o filas vacías). Cédulas no encontradas (muestra): ' . implode(', ', $muestra) . '. — Formato hoja 1: columna A id externo (37), columna B cédula (4906763), o al revés; fila 1 = títulos.';
+            $stats['errores'][] = 'Mapa vacío: no se resolvió ningún id externo → usuario (revisar homologación: cédula, nombre si aplica, o BD externa). Cédulas sin resolver (muestra): ' . implode(', ', $muestra) . '.';
             return $stats;
         }
         if ($iCed < 0 && ($iPareja < 0 || $iJug < 0) && !$puedePorExt) {
@@ -492,55 +589,87 @@ final class ImportacionTorneoExternoService
             return $stats;
         }
 
-        $stmtU = $pdo->prepare('SELECT id FROM usuarios WHERE cedula = ? OR cedula = ? LIMIT 1');
+        require_once __DIR__ . '/TorneoCampoNumerico.php';
         $nuevasFilas = [];
-        $nuevasFilas[] = ['partida', 'mesa', 'secuencia', 'id_usuario', 'resultado1', 'resultado2', 'ff'];
+        $nuevasFilas[] = ['partida', 'mesa', 'secuencia', 'id_usuario', 'resultado1', 'resultado2', 'ff', 'sancion'];
+        $vectorPorUsuario = [];
 
         for ($r = 1; $r < count($rowsResultados); $r++) {
             $row = $rowsResultados[$r];
             $idUsuario = 0;
             if ($iExtRes >= 0 && $extUsuarioToId !== []) {
-                $uk = trim((string)($row[$iExtRes] ?? ''));
+                $uk = trim((string) ($row[$iExtRes] ?? ''));
                 if ($uk !== '') {
-                    $idUsuario = (int)($extUsuarioToId[$uk] ?? $extUsuarioToId[(string)(int)$uk] ?? 0);
+                    $idUsuario = (int) ($extUsuarioToId[$uk] ?? $extUsuarioToId[(string) (int) $uk] ?? 0);
                 }
             }
             if ($idUsuario <= 0 && $iCed >= 0) {
                 $ced = self::normalizarCedula($row[$iCed] ?? '');
                 if ($ced !== '') {
-                    $idUsuario = (int)($cedulaToId[$ced] ?? $cedulaToId[preg_replace('/\D/', '', $ced)] ?? 0);
+                    $idUsuario = (int) ($cedulaToId[$ced] ?? $cedulaToId[preg_replace('/\D/', '', $ced)] ?? 0);
                     if ($idUsuario <= 0) {
-                        $stmtU->execute([$ced, preg_replace('/\D/', '', $ced)]);
-                        $idUsuario = (int)($stmtU->fetchColumn() ?: 0);
+                        $nomR = $iNombreRes >= 0 ? trim((string) ($row[$iNombreRes] ?? '')) : '';
+                        $nacR = $iNacRes >= 0 ? trim((string) ($row[$iNacRes] ?? '')) : '';
+                        $idUsuario = self::resolverIdUsuarioInscripcionSitio(
+                            $pdo,
+                            $torneo_id,
+                            $ced,
+                            $nomR,
+                            $nacR,
+                            $registrado_por,
+                            $stats
+                        );
                     }
                 }
             }
             if ($idUsuario <= 0 && $iPareja >= 0) {
-                $pkey = trim((string)($row[$iPareja] ?? ''));
-                $j = $iJug >= 0 ? max(1, (int)($row[$iJug] ?? 1)) : 1;
+                $pkey = trim((string) ($row[$iPareja] ?? ''));
+                $j = $iJug >= 0 ? max(1, (int) ($row[$iJug] ?? 1)) : 1;
                 if ($pkey !== '' && $iJug >= 0 && isset($parejaToIds[$pkey][$j - 1])) {
-                    $idUsuario = (int)$parejaToIds[$pkey][$j - 1];
+                    $idUsuario = (int) $parejaToIds[$pkey][$j - 1];
                 }
             }
             if ($idUsuario <= 0) {
                 $stats['resultados_sin_resolver']++;
                 continue;
             }
-            $ff = ($iFf >= 0 && (int)($row[$iFf] ?? 0) === 1) ? 1 : 0;
+            self::asegurarInscritoTorneoActivo($pdo, $torneo_id, $idUsuario, $registrado_por);
+            $ff = $iFf >= 0 ? self::parseFfValor($row[$iFf] ?? 0) : 0;
+            $sancionFila = 0;
+            if ($iSanRes >= 0) {
+                $sancionFila = \TorneoCampoNumerico::intEstadistica($row[$iSanRes] ?? 0);
+                $sancionFila = min(80, max(0, $sancionFila));
+            }
             $nuevasFilas[] = [
-                (string)(int)($row[$iPart] ?? 0),
-                (string)(int)($row[$iMesa] ?? 0),
-                (string)(int)($row[$iSeq] ?? 0),
-                (string)$idUsuario,
-                (string)(int)($row[$iR1] ?? 0),
-                (string)(int)($row[$iR2] ?? 0),
-                (string)$ff,
+                (string) (int) ($row[$iPart] ?? 0),
+                (string) (int) ($row[$iMesa] ?? 0),
+                (string) (int) ($row[$iSeq] ?? 0),
+                (string) $idUsuario,
+                (string) (int) ($row[$iR1] ?? 0),
+                (string) (int) ($row[$iR2] ?? 0),
+                (string) $ff,
+                (string) $sancionFila,
+            ];
+            $vectorPorUsuario[$idUsuario] = [
+                'torneo_id' => $torneo_id,
+                'partida' => (int) ($row[$iPart] ?? 0),
+                'mesa' => (int) ($row[$iMesa] ?? 0),
+                'secuencia' => (int) ($row[$iSeq] ?? 0),
+                'resultado1' => (int) ($row[$iR1] ?? 0),
+                'resultado2' => (int) ($row[$iR2] ?? 0),
+                'ff' => $ff,
+                'sancion' => $sancionFila,
             ];
         }
 
         $resInsert = self::fase2InsertarPartiresul($pdo, $torneo_id, $registrado_por, $fechaTorneoYmd, $nuevasFilas);
         $stats['insertados'] = $resInsert['insertados'];
         $stats['errores'] = $resInsert['errores'];
+        $stats['auditoria_por_ronda'] = $resInsert['auditoria_por_ronda'] ?? [];
+        $stats['vector_atletas_mapeados'] = count($vectorPorUsuario);
+        foreach ($resInsert['resolucion_identidad_fase2'] ?? [] as $k => $v) {
+            $stats[$k] = (int) ($stats[$k] ?? 0) + (int) $v;
+        }
         $stats['filas_listas_para_insertar'] = max(0, count($nuevasFilas) - 1);
 
         return $stats;
@@ -629,6 +758,181 @@ final class ImportacionTorneoExternoService
     private static function normalizarCedula(string $c): string
     {
         return trim(preg_replace('/\s+/', '', $c));
+    }
+
+    /**
+     * Club responsable del torneo + entidad territorial (misma lógica que carga masiva en sitio).
+     *
+     * @return array{0: int, 1: int} [club_id, entidad]
+     */
+    private static function clubYEntidadDesdeTorneo(PDO $pdo, int $torneoId): array
+    {
+        $st = $pdo->prepare('SELECT club_responsable FROM tournaments WHERE id = ? LIMIT 1');
+        $st->execute([$torneoId]);
+        $clubId = (int) ($st->fetchColumn() ?: 0);
+        $entidad = 0;
+        if ($clubId > 0) {
+            try {
+                $st2 = $pdo->prepare('SELECT COALESCE(entidad, 0) FROM clubes WHERE id = ? LIMIT 1');
+                $st2->execute([$clubId]);
+                $entidad = (int) $st2->fetchColumn();
+            } catch (Throwable $e) {
+                $entidad = 0;
+            }
+        }
+
+        return [$clubId, $entidad];
+    }
+
+    /**
+     * Garantiza fila activa en inscritos para el torneo (transparente para partiresul).
+     */
+    private static function asegurarInscritoTorneoActivo(PDO $pdo, int $torneoId, int $idUsuario, int $registradoPor): void
+    {
+        if ($torneoId <= 0 || $idUsuario <= 0) {
+            return;
+        }
+        require_once __DIR__ . '/InscritosHelper.php';
+        $st = $pdo->prepare(
+            'SELECT id FROM inscritos WHERE torneo_id = ? AND id_usuario = ? AND ' . InscritosHelper::SQL_WHERE_NO_RETIRADO . ' LIMIT 1'
+        );
+        $st->execute([$torneoId, $idUsuario]);
+        if ($st->fetchColumn()) {
+            return;
+        }
+        [$idClub, ] = self::clubYEntidadDesdeTorneo($pdo, $torneoId);
+        try {
+            InscritosHelper::insertarInscrito($pdo, [
+                'id_usuario' => $idUsuario,
+                'torneo_id' => $torneoId,
+                'id_club' => $idClub > 0 ? $idClub : null,
+                'estatus' => 1,
+                'inscrito_por' => $registradoPor > 0 ? $registradoPor : null,
+                'numero' => 0,
+                'codigo_equipo' => '000-000',
+            ]);
+        } catch (Throwable $e) {
+            error_log('ImportacionTorneoExternoService asegurarInscritoTorneoActivo: ' . $e->getMessage());
+        }
+    }
+
+    /**
+     * Mapeador de identidad alineado con inscripción en sitio: usuarios → BD externa de personas → alta mínima con datos del archivo.
+     *
+     * @param array<string, int|bool> $statsAcum referencia opcional para acumular contadores (p. ej. usuarios_creados_import)
+     */
+    private static function resolverIdUsuarioInscripcionSitio(
+        PDO $pdo,
+        int $torneoId,
+        string $cedRaw,
+        string $nombrePreferido,
+        string $nacPreferido,
+        int $registradoPor,
+        ?array &$statsAcum = null
+    ): int {
+        require_once __DIR__ . '/BusquedaJugadorInscripcionService.php';
+        require_once __DIR__ . '/UsuarioInscripcionSitioHelper.php';
+
+        $dig = BusquedaJugadorInscripcionService::cedulaSoloDigitos($cedRaw);
+        if ($dig === '') {
+            return 0;
+        }
+        $nac = BusquedaJugadorInscripcionService::normalizarNacionalidad($nacPreferido !== '' ? $nacPreferido : 'V');
+
+        $u = BusquedaJugadorInscripcionService::buscarUsuarioPorCedula($pdo, $nac, $dig);
+        $idU = 0;
+        if ($u !== null) {
+            $idU = (int) ($u['id'] ?? 0);
+        }
+
+        $nombre = trim($nombrePreferido);
+        $ext = null;
+        if ($idU <= 0) {
+            $ext = BusquedaJugadorInscripcionService::buscarPersonaExternaPorCedula($nac, $dig);
+            if ($ext !== null) {
+                $p = $ext['persona'];
+                if ($nombre === '') {
+                    $nombre = trim((string) ($p['nombre'] ?? ''));
+                }
+            }
+        }
+
+        if ($idU <= 0) {
+            if ($nombre === '') {
+                $nombre = 'Atleta ' . $dig;
+            }
+            [$clubId, $entidadClub] = self::clubYEntidadDesdeTorneo($pdo, $torneoId);
+            try {
+                $cedParaAlta = self::normalizarCedula($cedRaw) !== '' ? self::normalizarCedula($cedRaw) : ($nac . $dig);
+                $idU = UsuarioInscripcionSitioHelper::obtenerOCrearUsuarioJugador(
+                    $pdo,
+                    $cedParaAlta,
+                    $nombre,
+                    max(0, $clubId),
+                    max(0, $entidadClub)
+                );
+            } catch (Throwable $e) {
+                error_log('ImportacionTorneoExternoService resolverIdUsuarioInscripcionSitio: ' . $e->getMessage());
+
+                return 0;
+            }
+        }
+
+        if ($idU > 0) {
+            self::asegurarInscritoTorneoActivo($pdo, $torneoId, $idU, $registradoPor);
+        }
+        if ($statsAcum !== null && $u === null && $idU > 0) {
+            $statsAcum['resoluciones_cedula_sin_usuario_previo'] = (int) ($statsAcum['resoluciones_cedula_sin_usuario_previo'] ?? 0) + 1;
+            if ($ext !== null) {
+                $statsAcum['resoluciones_via_bd_externa'] = (int) ($statsAcum['resoluciones_via_bd_externa'] ?? 0) + 1;
+            }
+        }
+
+        return $idU;
+    }
+
+    private static function parseFfValor(mixed $v): int
+    {
+        if ($v === null || $v === '') {
+            return 0;
+        }
+        if (is_bool($v)) {
+            return $v ? 1 : 0;
+        }
+        if (is_numeric($v)) {
+            return ((int) $v) === 1 ? 1 : 0;
+        }
+        $s = strtoupper(trim((string) $v));
+
+        return in_array($s, ['1', 'S', 'SI', 'Y', 'YES', 'TRUE', 'FF', 'FORFAIT'], true) ? 1 : 0;
+    }
+
+    /**
+     * Tras cargar una ronda: anomalías GDU (desde caché de obtenerReporteAnomalias) y mesas con distinto de 4 jugadores.
+     *
+     * @param list<array<string, mixed>> $gduTorneoCompleto Resultado de una sola llamada a obtenerReporteAnomalias($torneoId)
+     *
+     * @return array{gdu: list<array<string, mixed>>, mesas_incompletas: list<array<string, mixed>>}
+     */
+    private static function validarPostCargaRondaPartiresul(
+        PDO $pdo,
+        int $torneoId,
+        int $partida,
+        array $gduTorneoCompleto
+    ): array {
+        $gdu = [];
+        foreach ($gduTorneoCompleto as $row) {
+            if ((int) ($row['partida'] ?? 0) === $partida) {
+                $gdu[] = $row;
+            }
+        }
+        $st = $pdo->prepare(
+            'SELECT mesa, COUNT(*) AS c FROM partiresul WHERE id_torneo = ? AND partida = ? AND mesa > 0 GROUP BY mesa HAVING c <> 4'
+        );
+        $st->execute([$torneoId, $partida]);
+        $mesasInc = $st->fetchAll(PDO::FETCH_ASSOC) ?: [];
+
+        return ['gdu' => $gdu, 'mesas_incompletas' => $mesasInc];
     }
 
     /**
