@@ -217,8 +217,8 @@ final class RoundManagerHandler
                     $estrategia
                 );
 
-            if ($resultado['success']) {
-                $mensaje = $resultado['message'];
+            if (! empty($resultado['success'])) {
+                $mensaje = (string) ($resultado['message'] ?? 'Ronda generada correctamente.');
                 if (isset($resultado['total_mesas'])) {
                     $mensaje .= ': ' . $resultado['total_mesas'] . ' mesas';
                 }
@@ -304,7 +304,7 @@ final class RoundManagerHandler
                     error_log('Notificaciones ronda: ' . $e->getMessage());
                 }
             } else {
-                $_SESSION['error'] = $resultado['message'];
+                $_SESSION['error'] = (string) ($resultado['message'] ?? 'No se pudo generar la ronda.');
             }
         } catch (Exception $e) {
             error_log('Error al generar ronda: ' . $e->getMessage() . "\n" . $e->getTraceAsString());

@@ -111,7 +111,12 @@ class MesaAsignacionEquiposService
         }
 
         $this->guardarAsignacionRonda($torneo_id, 1, $mesas);
-        return ['success' => true, 'total_mesas' => count($mesas)];
+
+        return [
+            'success' => true,
+            'message' => 'Primera ronda generada exitosamente (equipos)',
+            'total_mesas' => count($mesas),
+        ];
     }
 
     /**
