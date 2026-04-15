@@ -71,6 +71,17 @@ function importacionTorneoExternoSwalPayload(array $res, string $origen, string 
     if ($fOmit > 0) {
         $html .= '<tr class="table-warning"><td>Filas omitidas (partida &gt; límite)</td><td><strong>' . $fOmit . '</strong></td></tr>';
     }
+    $crP = (int) ($res['resultados_celdas_rellenadas_pareja'] ?? 0);
+    $crU = (int) ($res['resultados_celdas_rellenadas_usuario'] ?? 0);
+    if ($crP > 0 || $crU > 0) {
+        $html .= '<tr class="table-light"><td colspan="2" class="fw-bold">Propagación Excel (celdas combinadas)</td></tr>';
+        if ($crP > 0) {
+            $html .= '<tr><td>Celdas pareja rellenadas automáticamente</td><td><strong>' . $crP . '</strong></td></tr>';
+        }
+        if ($crU > 0) {
+            $html .= '<tr><td>Celdas usuario/id externo rellenadas automáticamente</td><td><strong>' . $crU . '</strong></td></tr>';
+        }
+    }
     $html .= '</tbody></table>';
     $aud = $res['auditoria_por_ronda'] ?? [];
     if (is_array($aud) && $aud !== []) {

@@ -543,6 +543,8 @@ final class ImportacionTorneoExternoService
             'atletas_vinculados' => 0,
             'parejas_reconstruidas' => 0,
             'inscripciones_nuevas' => 0,
+            'resultados_celdas_rellenadas_pareja' => 0,
+            'resultados_celdas_rellenadas_usuario' => 0,
         ];
         if ($rowsHomologacion === [] || $rowsResultados === []) {
             $stats['errores'][] = 'Faltan filas en archivo de homologación o de resultados.';
@@ -695,6 +697,9 @@ final class ImportacionTorneoExternoService
                 }
             }
         }
+        foreach ($parejaToIds as $pk => $idsP) {
+            $parejaToIds[$pk] = array_values(array_unique(array_map('intval', $idsP)));
+        }
         $stats['homologacion_sin_usuario'] = count(array_unique($noEncCed));
         $stats['cedulas_no_encontradas'] = array_values(array_unique($noEncCed));
         $stats['atletas_vinculados'] = count(array_unique(array_values($extUsuarioToId)));
@@ -815,7 +820,7 @@ final class ImportacionTorneoExternoService
         }
         $stats['columna_usuario_resultados'] = $iExtRes >= 0;
         $puedePorExt = $iExtRes >= 0 && $extUsuarioToId !== [];
-        if ($iExtRes >= 0 && $extUsuarioToId === []) {
+        if ($iExtRes >= 0 && $extUsuarioToId === [] && $iPareja < 0 && $iCed < 0) {
             $muestra = array_slice($noEncCed, 0, 15);
             $stats['errores'][] = 'Mapa vacío: no se resolvió ningún id externo → usuario (revisar homologación: cédula, nombre si aplica, o BD externa). Cédulas sin resolver (muestra): ' . implode(', ', $muestra) . '.';
             return $stats;
@@ -823,6 +828,29 @@ final class ImportacionTorneoExternoService
         if ($iCed < 0 && $iPareja < 0 && !$puedePorExt) {
             $stats['errores'][] = 'En resultados hace falta una de: cédula, columna usuario/id externo (homologación), o pareja (con homologación de parejas).';
             return $stats;
+        }
+
+        if ($iPareja >= 0) {
+            $rowsResultados = self::rellenarHuecosColumnaPorPartidaMesa(
+                $rowsResultados,
+                $iPart,
+                $iMesa,
+                $iSeq,
+                $iPareja,
+                $stats,
+                'resultados_celdas_rellenadas_pareja'
+            );
+        }
+        if ($iExtRes >= 0) {
+            $rowsResultados = self::rellenarHuecosColumnaPorPartidaMesa(
+                $rowsResultados,
+                $iPart,
+                $iMesa,
+                $iSeq,
+                $iExtRes,
+                $stats,
+                'resultados_celdas_rellenadas_usuario'
+            );
         }
 
         require_once __DIR__ . '/TorneoCampoNumerico.php';
@@ -1039,6 +1067,99 @@ final class ImportacionTorneoExternoService
         $stats['filas_hoja_homolog_raw'] = max(0, count($hom) - 1);
         $stats['filas_hoja_resultados_raw'] = max(0, count($res) - 1);
         return $stats;
+    }
+
+    /**
+     * Propaga valores no vacíos en una columna dentro de cada grupo (partida, mesa), ordenado por secuencia.
+     * Cubre celdas combinadas en Excel (pareja / id externo) que al exportar quedan vacías salvo la primera fila.
+     *
+     * @param list<list<string>> $rows
+     * @param array<string, int|float|string|bool> $statsAcum
+     * @return list<list<string>>
+     */
+    private static function rellenarHuecosColumnaPorPartidaMesa(
+        array $rows,
+        int $iPart,
+        int $iMesa,
+        int $iSeq,
+        int $iCol,
+        ?array &$statsAcum = null,
+        string $statKey = ''
+    ): array {
+        if ($iCol < 0 || count($rows) < 2 || $iPart < 0 || $iMesa < 0 || $iSeq < 0) {
+            return $rows;
+        }
+        $out = $rows;
+        $byPartida = [];
+        for ($r = 1; $r < count($out); $r++) {
+            $p = (int) ($out[$r][$iPart] ?? 0);
+            if ($p < 1) {
+                continue;
+            }
+            $byPartida[$p][] = $r;
+        }
+        foreach ($byPartida as $indices) {
+            usort($indices, static function (int $a, int $b) use ($out, $iMesa, $iSeq): int {
+                $ma = (int) ($out[$a][$iMesa] ?? 0);
+                $mb = (int) ($out[$b][$iMesa] ?? 0);
+                if ($ma !== $mb) {
+                    return $ma <=> $mb;
+                }
+                $sa = (int) ($out[$a][$iSeq] ?? 0);
+                $sb = (int) ($out[$b][$iSeq] ?? 0);
+
+                return $sa <=> $sb;
+            });
+            $byMesa = [];
+            foreach ($indices as $r) {
+                $m = (int) ($out[$r][$iMesa] ?? 0);
+                if ($m < 1) {
+                    continue;
+                }
+                $byMesa[$m][] = $r;
+            }
+            foreach ($byMesa as $mesaRows) {
+                $last = '';
+                foreach ($mesaRows as $r) {
+                    self::filaAseguraIndice($out[$r], $iCol);
+                    $v = trim((string) ($out[$r][$iCol] ?? ''));
+                    if ($v !== '') {
+                        $last = $v;
+                    } elseif ($last !== '') {
+                        $out[$r][$iCol] = $last;
+                        if ($statKey !== '' && $statsAcum !== null) {
+                            $statsAcum[$statKey] = (int) ($statsAcum[$statKey] ?? 0) + 1;
+                        }
+                    }
+                }
+                $last = '';
+                for ($k = count($mesaRows) - 1; $k >= 0; $k--) {
+                    $r = $mesaRows[$k];
+                    self::filaAseguraIndice($out[$r], $iCol);
+                    $v = trim((string) ($out[$r][$iCol] ?? ''));
+                    if ($v !== '') {
+                        $last = $v;
+                    } elseif ($last !== '') {
+                        $out[$r][$iCol] = $last;
+                        if ($statKey !== '' && $statsAcum !== null) {
+                            $statsAcum[$statKey] = (int) ($statsAcum[$statKey] ?? 0) + 1;
+                        }
+                    }
+                }
+            }
+        }
+
+        return $out;
+    }
+
+    /**
+     * @param list<string> $row
+     */
+    private static function filaAseguraIndice(array &$row, int $idx): void
+    {
+        while (count($row) <= $idx) {
+            $row[] = '';
+        }
     }
 
     /**
