@@ -545,6 +545,7 @@ final class ImportacionTorneoExternoService
             'inscripciones_nuevas' => 0,
             'resultados_celdas_rellenadas_pareja' => 0,
             'resultados_celdas_rellenadas_usuario' => 0,
+            'inscripciones_numero_pareja_sincronizadas' => 0,
             'matriz_homologados_n' => 0,
             'matriz_rondas' => 0,
             'matriz_total_partidas_esperadas' => 0,
@@ -702,6 +703,12 @@ final class ImportacionTorneoExternoService
                 if ($pkey !== '') {
                     $parejaToIds[$pkey][] = $idU;
                     $idUsuarioToClavePareja[$idU] = $pkey;
+                    $numLin = self::numeroParejaArchivoAEntero($pkey);
+                    if ($numLin > 0) {
+                        self::asegurarInscritoTorneoActivo($pdo, $torneo_id, $idU, $registrado_por, $stats);
+                        self::actualizarNumeroInscripcionTorneo($pdo, $torneo_id, $idU, $numLin);
+                        $stats['inscripciones_numero_pareja_sincronizadas'] = (int) ($stats['inscripciones_numero_pareja_sincronizadas'] ?? 0) + 1;
+                    }
                 }
             }
         }
@@ -807,7 +814,6 @@ final class ImportacionTorneoExternoService
         $iNombreRes = $find($hNorm, ['nombre', 'n1', 'jugador', 'atleta']);
         $iNacRes = $find($hNorm, ['nacionalidad', 'nac']);
         $iPareja = $find($hNorm, ['pareja', 'id_pareja', 'parejas']);
-        $iJug = $find($hNorm, ['jugador', 'miembro', 'pos_pareja', 'jp', 'slot']);
         /* Id del otro sistema en hoja resultados (no es id_usuario Mistorneos hasta homologar) */
         $iExtRes = -1;
         $candidatosExt = ['usuario', 'id_externo', 'id_jugador_externo', 'cod_jugador', 'codigo', 'cod', 'externo'];
@@ -876,7 +882,7 @@ final class ImportacionTorneoExternoService
         $matrizAtletas = [];
         $vectorPorUsuario = [];
 
-        /** @var list<array{id_map: int, ced: string, nom: string, nac: string, pkey: string, j: int, fm: array<string, int>}> */
+        /** @var list<array{id_map: int, ced: string, nom: string, nac: string, pkey: string, fm: array<string, int>}> */
         $staged = [];
         for ($r = 1; $r < count($rowsResultados); $r++) {
             $row = $rowsResultados[$r];
@@ -899,18 +905,12 @@ final class ImportacionTorneoExternoService
                 }
             }
             $pkey = '';
-            $jSlot = 1;
             if ($idUsuario <= 0 && $iPareja >= 0) {
                 $pkey = trim((string) ($row[$iPareja] ?? ''));
                 if ($pkey !== '') {
-                    if ($iJug >= 0) {
-                        $jSlot = max(1, min(2, (int) ($row[$iJug] ?? 1)));
-                    } else {
-                        $seqM = (int) ($row[$iSeq] ?? 1);
-                        $jSlot = self::indiceJugadorEnParejaPorSecuenciaMesa($seqM);
-                    }
-                    if (isset($parejaToIds[$pkey][$jSlot - 1])) {
-                        $idUsuario = (int) $parejaToIds[$pkey][$jSlot - 1];
+                    $numLin = self::numeroParejaArchivoAEntero($pkey);
+                    if ($numLin > 0) {
+                        $idUsuario = self::idUsuarioPorTorneoNumeroInscripcion($pdo, $torneo_id, $numLin);
                     }
                 }
             }
@@ -958,7 +958,6 @@ final class ImportacionTorneoExternoService
                 'nom' => $nomR,
                 'nac' => $nacR,
                 'pkey' => $pkey,
-                'j' => $jSlot,
                 'fm' => $filaMatriz,
             ];
         }
@@ -1001,9 +1000,9 @@ final class ImportacionTorneoExternoService
                 $idUsuario = (int) ($cedulaToId[$ced] ?? $cedulaToId[preg_replace('/\D/', '', $ced)] ?? 0);
             }
             if ($idUsuario <= 0 && $st['pkey'] !== '') {
-                $jk = (int) $st['j'];
-                if (isset($parejaToIds[$st['pkey']][$jk - 1])) {
-                    $idUsuario = (int) $parejaToIds[$st['pkey']][$jk - 1];
+                $numLin = self::numeroParejaArchivoAEntero($st['pkey']);
+                if ($numLin > 0) {
+                    $idUsuario = self::idUsuarioPorTorneoNumeroInscripcion($pdo, $torneo_id, $numLin);
                 }
             }
             if ($idUsuario <= 0) {
@@ -1316,8 +1315,48 @@ final class ImportacionTorneoExternoService
     }
 
     /**
-     * Tras agrupar por jugador (matriz): asegura inscripción y persiste número/código de pareja desde homologación.
-     * Usa codigo_equipo (formato 000-NNN) y numero; si existe columna numero_pareja en inscritos, también se actualiza.
+     * Valor de la columna (p. ej. pareja) pasado a entero: solo dígitos del texto, transferencia lineal.
+     */
+    private static function numeroParejaArchivoAEntero(string $clavePareja): int
+    {
+        $digits = preg_replace('/\D/', '', trim($clavePareja));
+
+        return $digits !== '' ? (int) $digits : 0;
+    }
+
+    /**
+     * Un registro → un inscrito.numero → un id_usuario en el torneo (LIMIT 1).
+     */
+    private static function idUsuarioPorTorneoNumeroInscripcion(PDO $pdo, int $torneoId, int $numeroInscripcion): int
+    {
+        if ($torneoId <= 0 || $numeroInscripcion <= 0) {
+            return 0;
+        }
+        require_once __DIR__ . '/InscritosHelper.php';
+        $st = $pdo->prepare(
+            'SELECT id_usuario FROM inscritos WHERE torneo_id = ? AND numero = ? AND ' . InscritosHelper::SQL_WHERE_NO_RETIRADO . ' LIMIT 1'
+        );
+        $st->execute([$torneoId, $numeroInscripcion]);
+
+        return (int) ($st->fetchColumn() ?: 0);
+    }
+
+    private static function actualizarNumeroInscripcionTorneo(PDO $pdo, int $torneoId, int $idUsuario, int $numero): void
+    {
+        require_once __DIR__ . '/InscritosHelper.php';
+        try {
+            $st = $pdo->prepare(
+                'UPDATE inscritos SET numero = ? WHERE torneo_id = ? AND id_usuario = ? AND ' . InscritosHelper::SQL_WHERE_NO_RETIRADO
+            );
+            $st->execute([$numero, $torneoId, $idUsuario]);
+        } catch (Throwable $e) {
+            error_log('ImportacionTorneoExternoService actualizarNumeroInscripcionTorneo: ' . $e->getMessage());
+        }
+    }
+
+    /**
+     * Tras agrupar por jugador (matriz): asegura inscripción y persiste código de equipo desde homologación.
+     * `numero` lo fija {@see actualizarNumeroInscripcionTorneo} en el bucle de homologación; aquí solo codigo_equipo (y numero_pareja si existe).
      */
     private static function asegurarInscritoYAsignarParejaDesdeHomologacion(
         PDO $pdo,
@@ -1348,15 +1387,16 @@ final class ImportacionTorneoExternoService
         }
         $suf3 = $numPareja % 1000;
         $codigoEquipo = sprintf('000-%03d', $suf3);
-        $numeroCol = min(99999, $numPareja % 100000);
 
         $colNames = [];
         foreach ($pdo->query('SHOW COLUMNS FROM inscritos')->fetchAll(PDO::FETCH_ASSOC) as $c) {
             $colNames[strtolower((string) $c['Field'])] = (string) $c['Field'];
         }
-        $sets = ['`numero` = ?', '`codigo_equipo` = ?'];
-        $params = [$numeroCol, $codigoEquipo];
+        /* `numero` lo define el bucle de homologación vía actualizarNumeroInscripcionTorneo; aquí solo codigo_equipo. */
+        $sets = ['`codigo_equipo` = ?'];
+        $params = [$codigoEquipo];
         if (isset($colNames['numero_pareja'])) {
+            $numeroCol = min(99999, $numPareja % 100000);
             $f = '`' . str_replace('`', '``', $colNames['numero_pareja']) . '` = ?';
             $sets[] = $f;
             $params[] = $numeroCol;
@@ -1369,18 +1409,6 @@ final class ImportacionTorneoExternoService
         } catch (Throwable $e) {
             error_log('ImportacionTorneoExternoService asegurarInscritoYAsignarParejaDesdeHomologacion: ' . $e->getMessage());
         }
-    }
-
-    /**
-     * Mesa de 4: secuencias 1–4 suelen alternar jugador 1 y 2 dentro de cada pareja (1↔2, 3↔4).
-     */
-    private static function indiceJugadorEnParejaPorSecuenciaMesa(int $secuencia): int
-    {
-        if ($secuencia < 1) {
-            return 1;
-        }
-
-        return (($secuencia - 1) % 2) + 1;
     }
 
     private static function normalizarCedula(string $c): string
