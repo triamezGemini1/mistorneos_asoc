@@ -22,6 +22,10 @@ function generarPaginador($pagina_actual, $total_paginas, $base_url, $parametros
     if ($total_paginas <= 1) {
         return '';
     }
+    $buildUrl = static function ($base_url, array $params): string {
+        $sep = (strpos($base_url, '?') !== false) ? '&' : '?';
+        return $base_url . $sep . http_build_query($params);
+    };
     
     $html = '<div class="flex items-center justify-center gap-2 mt-6 mb-4">';
     $html .= '<div class="flex items-center gap-1">';
@@ -29,7 +33,7 @@ function generarPaginador($pagina_actual, $total_paginas, $base_url, $parametros
     // Botón Primera página
     if ($pagina_actual > 1) {
         $parametros_get['pagina'] = 1;
-        $url = $base_url . '?' . http_build_query($parametros_get);
+        $url = $buildUrl($base_url, $parametros_get);
         $html .= '<a href="' . htmlspecialchars($url) . '" class="px-3 py-2 bg-purple-600 text-white rounded hover:bg-purple-700 transition"><i class="fas fa-angle-double-left"></i></a>';
     } else {
         $html .= '<span class="px-3 py-2 bg-gray-300 text-gray-500 rounded cursor-not-allowed"><i class="fas fa-angle-double-left"></i></span>';
@@ -38,7 +42,7 @@ function generarPaginador($pagina_actual, $total_paginas, $base_url, $parametros
     // Botón Página anterior
     if ($pagina_actual > 1) {
         $parametros_get['pagina'] = $pagina_actual - 1;
-        $url = $base_url . '?' . http_build_query($parametros_get);
+        $url = $buildUrl($base_url, $parametros_get);
         $html .= '<a href="' . htmlspecialchars($url) . '" class="px-3 py-2 bg-purple-600 text-white rounded hover:bg-purple-700 transition"><i class="fas fa-angle-left"></i></a>';
     } else {
         $html .= '<span class="px-3 py-2 bg-gray-300 text-gray-500 rounded cursor-not-allowed"><i class="fas fa-angle-left"></i></span>';
@@ -50,7 +54,7 @@ function generarPaginador($pagina_actual, $total_paginas, $base_url, $parametros
     
     if ($inicio > 1) {
         $parametros_get['pagina'] = 1;
-        $url = $base_url . '?' . http_build_query($parametros_get);
+        $url = $buildUrl($base_url, $parametros_get);
         $html .= '<a href="' . htmlspecialchars($url) . '" class="px-3 py-2 bg-white text-purple-600 rounded hover:bg-purple-50 transition">1</a>';
         if ($inicio > 2) {
             $html .= '<span class="px-2 text-gray-500">...</span>';
@@ -62,7 +66,7 @@ function generarPaginador($pagina_actual, $total_paginas, $base_url, $parametros
             $html .= '<span class="px-3 py-2 bg-purple-600 text-white rounded font-bold">' . $i . '</span>';
         } else {
             $parametros_get['pagina'] = $i;
-            $url = $base_url . '?' . http_build_query($parametros_get);
+            $url = $buildUrl($base_url, $parametros_get);
             $html .= '<a href="' . htmlspecialchars($url) . '" class="px-3 py-2 bg-white text-purple-600 rounded hover:bg-purple-50 transition">' . $i . '</a>';
         }
     }
@@ -72,14 +76,14 @@ function generarPaginador($pagina_actual, $total_paginas, $base_url, $parametros
             $html .= '<span class="px-2 text-gray-500">...</span>';
         }
         $parametros_get['pagina'] = $total_paginas;
-        $url = $base_url . '?' . http_build_query($parametros_get);
+        $url = $buildUrl($base_url, $parametros_get);
         $html .= '<a href="' . htmlspecialchars($url) . '" class="px-3 py-2 bg-white text-purple-600 rounded hover:bg-purple-50 transition">' . $total_paginas . '</a>';
     }
     
     // Botón Página siguiente
     if ($pagina_actual < $total_paginas) {
         $parametros_get['pagina'] = $pagina_actual + 1;
-        $url = $base_url . '?' . http_build_query($parametros_get);
+        $url = $buildUrl($base_url, $parametros_get);
         $html .= '<a href="' . htmlspecialchars($url) . '" class="px-3 py-2 bg-purple-600 text-white rounded hover:bg-purple-700 transition"><i class="fas fa-angle-right"></i></a>';
     } else {
         $html .= '<span class="px-3 py-2 bg-gray-300 text-gray-500 rounded cursor-not-allowed"><i class="fas fa-angle-right"></i></span>';
@@ -88,7 +92,7 @@ function generarPaginador($pagina_actual, $total_paginas, $base_url, $parametros
     // Botón Última página
     if ($pagina_actual < $total_paginas) {
         $parametros_get['pagina'] = $total_paginas;
-        $url = $base_url . '?' . http_build_query($parametros_get);
+        $url = $buildUrl($base_url, $parametros_get);
         $html .= '<a href="' . htmlspecialchars($url) . '" class="px-3 py-2 bg-purple-600 text-white rounded hover:bg-purple-700 transition"><i class="fas fa-angle-double-right"></i></a>';
     } else {
         $html .= '<span class="px-3 py-2 bg-gray-300 text-gray-500 rounded cursor-not-allowed"><i class="fas fa-angle-double-right"></i></span>';
