@@ -867,10 +867,17 @@ final class ImportacionTorneoExternoService
         if ($iEfectRes >= 0) {
             $hdrRes[] = 'efectividad';
         }
-        /** @var array<int, list<array{f: list<string>, p: int, m: int, s: int}>> Matriz por jugador: todas las filas de partidas */
-        $matrizPorUsuario = [];
+        /**
+         * Matriz en memoria (sin INSERT todavía): [ id_usuario string ] => lista de partidas con datos de origen.
+         * Se rellena solo después de: (1) parseo completo del archivo en $staged, (2) resolución por lote de cédulas.
+         *
+         * @var array<string, list<array{ronda: int, mesa: int, secuencia: int, result1: int, result2: int, sancionp: int, tarjeta: int, ff: int, efectividad?: int}>>
+         */
+        $matrizAtletas = [];
         $vectorPorUsuario = [];
 
+        /** @var list<array{id_map: int, ced: string, nom: string, nac: string, pkey: string, j: int, fm: array<string, int>}> */
+        $staged = [];
         for ($r = 1; $r < count($rowsResultados); $r++) {
             $row = $rowsResultados[$r];
             $idUsuario = 0;
@@ -880,47 +887,31 @@ final class ImportacionTorneoExternoService
                     $idUsuario = (int) ($extUsuarioToId[$uk] ?? $extUsuarioToId[(string) (int) $uk] ?? 0);
                 }
             }
+            $ced = '';
+            $nomR = '';
+            $nacR = '';
             if ($idUsuario <= 0 && $iCed >= 0) {
                 $ced = self::normalizarCedula($row[$iCed] ?? '');
                 if ($ced !== '') {
                     $idUsuario = (int) ($cedulaToId[$ced] ?? $cedulaToId[preg_replace('/\D/', '', $ced)] ?? 0);
-                    if ($idUsuario <= 0) {
-                        $nomR = $iNombreRes >= 0 ? trim((string) ($row[$iNombreRes] ?? '')) : '';
-                        $nacR = $iNacRes >= 0 ? trim((string) ($row[$iNacRes] ?? '')) : '';
-                        $idUsuario = self::resolverIdUsuarioInscripcionSitio(
-                            $pdo,
-                            $torneo_id,
-                            $ced,
-                            $nomR,
-                            $nacR,
-                            $registrado_por,
-                            $stats
-                        );
-                    }
+                    $nomR = $iNombreRes >= 0 ? trim((string) ($row[$iNombreRes] ?? '')) : '';
+                    $nacR = $iNacRes >= 0 ? trim((string) ($row[$iNacRes] ?? '')) : '';
                 }
             }
+            $pkey = '';
+            $jSlot = 1;
             if ($idUsuario <= 0 && $iPareja >= 0) {
                 $pkey = trim((string) ($row[$iPareja] ?? ''));
                 if ($pkey !== '') {
                     if ($iJug >= 0) {
-                        $j = max(1, min(2, (int) ($row[$iJug] ?? 1)));
+                        $jSlot = max(1, min(2, (int) ($row[$iJug] ?? 1)));
                     } else {
                         $seqM = (int) ($row[$iSeq] ?? 1);
-                        $j = self::indiceJugadorEnParejaPorSecuenciaMesa($seqM);
+                        $jSlot = self::indiceJugadorEnParejaPorSecuenciaMesa($seqM);
                     }
-                    if (isset($parejaToIds[$pkey][$j - 1])) {
-                        $idUsuario = (int) $parejaToIds[$pkey][$j - 1];
+                    if (isset($parejaToIds[$pkey][$jSlot - 1])) {
+                        $idUsuario = (int) $parejaToIds[$pkey][$jSlot - 1];
                     }
-                }
-            }
-            if ($idUsuario <= 0) {
-                $stats['resultados_sin_resolver']++;
-                continue;
-            }
-            if ($iPareja >= 0) {
-                $pkeyR = trim((string) ($row[$iPareja] ?? ''));
-                if ($pkeyR !== '' && (($idUsuarioToClavePareja[$idUsuario] ?? '') === '')) {
-                    $idUsuarioToClavePareja[$idUsuario] = $pkeyR;
                 }
             }
             $pNum = (int) ($row[$iPart] ?? 0);
@@ -948,45 +939,102 @@ final class ImportacionTorneoExternoService
                 }
                 $sancionFila = min(80, max(0, $sancionFila));
             }
-            $filaOut = [
-                (string) $pNum,
-                (string) $mNum,
-                (string) $sNum,
-                (string) $idUsuario,
-                (string) (int) ($row[$iR1] ?? 0),
-                (string) (int) ($row[$iR2] ?? 0),
-                (string) $ff,
-                (string) $sancionFila,
-                (string) $tarjetaFila,
-            ];
-            if ($iEfectRes >= 0) {
-                $filaOut[] = (string) \TorneoCampoNumerico::intEstadistica($row[$iEfectRes] ?? 0);
-            }
-            if (! isset($matrizPorUsuario[$idUsuario])) {
-                $matrizPorUsuario[$idUsuario] = [];
-            }
-            $matrizPorUsuario[$idUsuario][] = [
-                'f' => $filaOut,
-                'p' => $pNum,
-                'm' => $mNum,
-                's' => $sNum,
-            ];
-            $vectorPorUsuario[$idUsuario] = [
-                'torneo_id' => $torneo_id,
-                'partida' => $pNum,
+            $filaMatriz = [
+                'ronda' => $pNum,
                 'mesa' => $mNum,
                 'secuencia' => $sNum,
-                'resultado1' => (int) ($row[$iR1] ?? 0),
-                'resultado2' => (int) ($row[$iR2] ?? 0),
+                'result1' => (int) ($row[$iR1] ?? 0),
+                'result2' => (int) ($row[$iR2] ?? 0),
+                'sancionp' => $sancionFila,
+                'tarjeta' => $tarjetaFila,
                 'ff' => $ff,
-                'sancion' => $sancionFila,
+            ];
+            if ($iEfectRes >= 0) {
+                $filaMatriz['efectividad'] = \TorneoCampoNumerico::intEstadistica($row[$iEfectRes] ?? 0);
+            }
+            $staged[] = [
+                'id_map' => $idUsuario,
+                'ced' => $ced,
+                'nom' => $nomR,
+                'nac' => $nacR,
+                'pkey' => $pkey,
+                'j' => $jSlot,
+                'fm' => $filaMatriz,
+            ];
+        }
+
+        $cedulasUnicasResolver = [];
+        foreach ($staged as $st) {
+            if ($st['id_map'] > 0) {
+                continue;
+            }
+            if ($st['ced'] === '') {
+                continue;
+            }
+            $cedK = $st['ced'];
+            $digK = preg_replace('/\D/', '', $cedK);
+            if ((int) ($cedulaToId[$cedK] ?? $cedulaToId[$digK] ?? 0) > 0) {
+                continue;
+            }
+            $cedulasUnicasResolver[$cedK] = ['nom' => $st['nom'], 'nac' => $st['nac']];
+        }
+        foreach ($cedulasUnicasResolver as $cedK => $meta) {
+            $idR = self::resolverIdUsuarioInscripcionSitio(
+                $pdo,
+                $torneo_id,
+                $cedK,
+                (string) ($meta['nom'] ?? ''),
+                (string) ($meta['nac'] ?? ''),
+                $registrado_por,
+                $stats
+            );
+            if ($idR > 0) {
+                $cedulaToId[$cedK] = $idR;
+                $cedulaToId[preg_replace('/\D/', '', $cedK)] = $idR;
+            }
+        }
+
+        foreach ($staged as $st) {
+            $idUsuario = (int) $st['id_map'];
+            $ced = $st['ced'];
+            if ($idUsuario <= 0 && $ced !== '') {
+                $idUsuario = (int) ($cedulaToId[$ced] ?? $cedulaToId[preg_replace('/\D/', '', $ced)] ?? 0);
+            }
+            if ($idUsuario <= 0 && $st['pkey'] !== '') {
+                $jk = (int) $st['j'];
+                if (isset($parejaToIds[$st['pkey']][$jk - 1])) {
+                    $idUsuario = (int) $parejaToIds[$st['pkey']][$jk - 1];
+                }
+            }
+            if ($idUsuario <= 0) {
+                $stats['resultados_sin_resolver']++;
+                continue;
+            }
+            if ($st['pkey'] !== '' && (($idUsuarioToClavePareja[$idUsuario] ?? '') === '')) {
+                $idUsuarioToClavePareja[$idUsuario] = $st['pkey'];
+            }
+            $sid = (string) $idUsuario;
+            if (! isset($matrizAtletas[$sid])) {
+                $matrizAtletas[$sid] = [];
+            }
+            $matrizAtletas[$sid][] = $st['fm'];
+            $fm = $st['fm'];
+            $vectorPorUsuario[$idUsuario] = [
+                'torneo_id' => $torneo_id,
+                'partida' => (int) ($fm['ronda'] ?? 0),
+                'mesa' => (int) ($fm['mesa'] ?? 0),
+                'secuencia' => (int) ($fm['secuencia'] ?? 0),
+                'resultado1' => (int) ($fm['result1'] ?? 0),
+                'resultado2' => (int) ($fm['result2'] ?? 0),
+                'ff' => (int) ($fm['ff'] ?? 0),
+                'sancion' => (int) ($fm['sancionp'] ?? 0),
             ];
         }
 
         $rondasArchivo = 0;
-        foreach ($matrizPorUsuario as $filasM) {
+        foreach ($matrizAtletas as $filasM) {
             foreach ($filasM as $it) {
-                $rondasArchivo = max($rondasArchivo, (int) ($it['p'] ?? 0));
+                $rondasArchivo = max($rondasArchivo, (int) ($it['ronda'] ?? 0));
             }
         }
         if ($rondasArchivo < 1) {
@@ -994,10 +1042,10 @@ final class ImportacionTorneoExternoService
             $stR->execute([$torneo_id]);
             $rondasArchivo = max(1, (int) ($stR->fetchColumn() ?: 9));
         }
-        $N = count($matrizPorUsuario);
+        $N = count($matrizAtletas);
         $M = $N * $rondasArchivo;
         $totalFilasMatriz = 0;
-        foreach ($matrizPorUsuario as $filasM) {
+        foreach ($matrizAtletas as $filasM) {
             $totalFilasMatriz += count($filasM);
         }
         $stats['matriz_homologados_n'] = $N;
@@ -1008,31 +1056,33 @@ final class ImportacionTorneoExternoService
             ? ('Homologados ' . $N . ' atletas con un total de ' . $M . ' partidas')
             : '';
 
-        ksort($matrizPorUsuario, SORT_NUMERIC);
-        foreach ($matrizPorUsuario as $uid => $filasM) {
+        ksort($matrizAtletas, SORT_STRING);
+        foreach ($matrizAtletas as $uidStr => $filasM) {
             usort($filasM, static function (array $a, array $b): int {
-                if ($a['p'] !== $b['p']) {
-                    return $a['p'] <=> $b['p'];
+                if (($a['ronda'] ?? 0) !== ($b['ronda'] ?? 0)) {
+                    return ($a['ronda'] ?? 0) <=> ($b['ronda'] ?? 0);
                 }
-                if ($a['m'] !== $b['m']) {
-                    return $a['m'] <=> $b['m'];
+                if (($a['mesa'] ?? 0) !== ($b['mesa'] ?? 0)) {
+                    return ($a['mesa'] ?? 0) <=> ($b['mesa'] ?? 0);
                 }
 
-                return $a['s'] <=> $b['s'];
+                return ($a['secuencia'] ?? 0) <=> ($b['secuencia'] ?? 0);
             });
-            $matrizPorUsuario[$uid] = $filasM;
+            $matrizAtletas[$uidStr] = $filasM;
         }
-        foreach (array_keys($matrizPorUsuario) as $uid) {
-            $uid = (int) $uid;
+        foreach (array_keys($matrizAtletas) as $uidStr) {
+            $uid = (int) $uidStr;
             $claveP = $idUsuarioToClavePareja[$uid] ?? '';
             self::asegurarInscritoYAsignarParejaDesdeHomologacion($pdo, $torneo_id, $uid, $claveP, $registrado_por, $stats);
         }
 
         $nuevasFilas = [];
         $nuevasFilas[] = $hdrRes;
-        foreach ($matrizPorUsuario as $filasM) {
-            foreach ($filasM as $it) {
-                $nuevasFilas[] = $it['f'];
+        $incluirEfect = $iEfectRes >= 0;
+        foreach ($matrizAtletas as $uidStr => $filasM) {
+            $uid = (int) $uidStr;
+            foreach ($filasM as $filaMatriz) {
+                $nuevasFilas[] = self::partiresulFilaDesdeMatrizAtleta($uid, $filaMatriz, $incluirEfect);
             }
         }
 
@@ -1237,6 +1287,32 @@ final class ImportacionTorneoExternoService
         while (count($row) <= $idx) {
             $row[] = '';
         }
+    }
+
+    /**
+     * Convierte una fila de la matriz en memoria ($matrizAtletas) al formato tabular esperado por fase2InsertarPartiresul.
+     *
+     * @param array{ronda?: int, mesa?: int, secuencia?: int, result1?: int, result2?: int, sancionp?: int, tarjeta?: int, ff?: int, efectividad?: int} $fm
+     * @return list<string>
+     */
+    private static function partiresulFilaDesdeMatrizAtleta(int $idUsuario, array $fm, bool $incluirEfectividad): array
+    {
+        $fila = [
+            (string) (int) ($fm['ronda'] ?? 0),
+            (string) (int) ($fm['mesa'] ?? 0),
+            (string) (int) ($fm['secuencia'] ?? 0),
+            (string) $idUsuario,
+            (string) (int) ($fm['result1'] ?? 0),
+            (string) (int) ($fm['result2'] ?? 0),
+            (string) (int) ($fm['ff'] ?? 0),
+            (string) (int) ($fm['sancionp'] ?? 0),
+            (string) (int) ($fm['tarjeta'] ?? 0),
+        ];
+        if ($incluirEfectividad) {
+            $fila[] = (string) (int) ($fm['efectividad'] ?? 0);
+        }
+
+        return $fila;
     }
 
     /**
