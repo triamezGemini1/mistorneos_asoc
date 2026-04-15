@@ -85,67 +85,55 @@ $page_title = 'Reportes de inscritos — ' . (string) ($torneo['nombre'] ?? 'Tor
                 <span class="inline-flex items-center rounded-full bg-slate-100 text-slate-800 px-3 py-1 font-semibold border border-slate-200" title="Equipos activos">Equipos <span class="ml-1 tabular-nums"><?php echo $total_equipos_rep; ?></span></span>
             </div>
         </div>
-        <div class="p-5 space-y-6">
-            <section>
-                <h2 class="text-sm font-bold text-slate-700 uppercase tracking-wide mb-3">Listados detallados</h2>
-                <p class="text-sm text-slate-600 mb-3">Por asociación, equipo y jugadores (formato completo para revisión e impresión).</p>
-                <div class="flex flex-col sm:flex-row gap-3">
-                    <a href="<?php echo htmlspecialchars($url_pdf_det, ENT_QUOTES, 'UTF-8'); ?>"
-                       target="_blank" rel="noopener"
-                       class="tw-btn bg-rose-600 hover:bg-rose-700 text-white text-center flex-1 justify-center">
-                        <i class="fas fa-file-pdf mr-2"></i> Imprimir PDF detallado
-                    </a>
-                    <a href="<?php echo htmlspecialchars($url_xls_det, ENT_QUOTES, 'UTF-8'); ?>"
-                       target="_blank" rel="noopener"
-                       class="tw-btn bg-emerald-700 hover:bg-emerald-800 text-white text-center flex-1 justify-center">
-                        <i class="fas fa-file-excel mr-2"></i> Descargar Excel detallado
-                    </a>
-                </div>
-            </section>
-            <section class="pt-2 border-t border-slate-200">
-                <h2 class="text-sm font-bold text-slate-700 uppercase tracking-wide mb-3">Listados simples</h2>
-                <p class="text-sm text-slate-600 mb-3">Tabla compacta de inscritos (misma información base, menos formato).</p>
-                <div class="flex flex-col sm:flex-row gap-3">
-                    <a href="<?php echo htmlspecialchars($url_pdf_simple, ENT_QUOTES, 'UTF-8'); ?>"
-                       target="_blank" rel="noopener"
-                       class="tw-btn bg-rose-500 hover:bg-rose-600 text-white text-center flex-1 justify-center">
-                        <i class="fas fa-file-pdf mr-2"></i> PDF simple
-                    </a>
-                    <a href="<?php echo htmlspecialchars($url_xls_simple, ENT_QUOTES, 'UTF-8'); ?>"
-                       target="_blank" rel="noopener"
-                       class="tw-btn bg-emerald-600 hover:bg-emerald-700 text-white text-center flex-1 justify-center">
-                        <i class="fas fa-file-excel mr-2"></i> Excel simple
-                    </a>
-                </div>
-            </section>
-            <section class="pt-2 border-t border-slate-200">
-                <h2 class="text-sm font-bold text-slate-700 uppercase tracking-wide mb-3">Retirados</h2>
-                <p class="text-sm text-slate-600 mb-3">Jugadores con estatus retirado en este torneo.</p>
-                <div class="flex flex-col sm:flex-row gap-3">
-                    <a href="<?php echo htmlspecialchars($url_pdf_ret, ENT_QUOTES, 'UTF-8'); ?>"
-                       target="_blank" rel="noopener"
-                       class="tw-btn bg-amber-600 hover:bg-amber-700 text-white text-center flex-1 justify-center">
-                        <i class="fas fa-file-pdf mr-2"></i> PDF retirados
-                    </a>
-                    <a href="<?php echo htmlspecialchars($url_xls_ret, ENT_QUOTES, 'UTF-8'); ?>"
-                       target="_blank" rel="noopener"
-                       class="tw-btn bg-amber-700 hover:bg-amber-800 text-white text-center flex-1 justify-center">
-                        <i class="fas fa-file-excel mr-2"></i> Excel retirados
-                    </a>
-                </div>
-            </section>
-            <section class="pt-2 border-t border-slate-200">
-                <h2 class="text-sm font-bold text-slate-700 uppercase tracking-wide mb-3">Gestor Excel a petición</h2>
-                <p class="text-sm text-slate-600 mb-3">Descarga reportes desde <code>inscritos</code>, <code>partiresul</code> y <code>equipos</code>. Puedes elegir columnas con checkboxes antes de exportar.</p>
-                <form method="get" action="<?php echo htmlspecialchars($form_action_url, ENT_QUOTES, 'UTF-8'); ?>" class="grid grid-cols-1 md:grid-cols-4 gap-3 items-start" id="form-gestor-excel">
+        <div class="p-5">
+            <div class="grid grid-cols-1 xl:grid-cols-2 gap-6">
+                <section class="border border-slate-200 rounded-xl p-4 bg-white">
+                    <h2 class="text-xl font-extrabold text-slate-800 mb-4">Reportes de inscritos</h2>
+                    <div class="grid grid-cols-1 gap-3">
+                        <a href="<?php echo htmlspecialchars($url_pdf_det, ENT_QUOTES, 'UTF-8'); ?>"
+                           target="_blank" rel="noopener"
+                           class="tw-btn bg-rose-600 hover:bg-rose-700 text-white justify-center text-base font-bold py-3">
+                            <i class="fas fa-file-pdf mr-2"></i> PDF detallado
+                        </a>
+                        <a href="<?php echo htmlspecialchars($url_xls_det, ENT_QUOTES, 'UTF-8'); ?>"
+                           target="_blank" rel="noopener"
+                           class="tw-btn bg-emerald-700 hover:bg-emerald-800 text-white justify-center text-base font-bold py-3">
+                            <i class="fas fa-file-excel mr-2"></i> Excel detallado
+                        </a>
+                        <a href="<?php echo htmlspecialchars($url_pdf_simple, ENT_QUOTES, 'UTF-8'); ?>"
+                           target="_blank" rel="noopener"
+                           class="tw-btn bg-rose-500 hover:bg-rose-600 text-white justify-center text-base font-bold py-3">
+                            <i class="fas fa-file-pdf mr-2"></i> PDF simple
+                        </a>
+                        <a href="<?php echo htmlspecialchars($url_xls_simple, ENT_QUOTES, 'UTF-8'); ?>"
+                           target="_blank" rel="noopener"
+                           class="tw-btn bg-emerald-600 hover:bg-emerald-700 text-white justify-center text-base font-bold py-3">
+                            <i class="fas fa-file-excel mr-2"></i> Excel simple
+                        </a>
+                        <a href="<?php echo htmlspecialchars($url_pdf_ret, ENT_QUOTES, 'UTF-8'); ?>"
+                           target="_blank" rel="noopener"
+                           class="tw-btn bg-amber-600 hover:bg-amber-700 text-white justify-center text-base font-bold py-3">
+                            <i class="fas fa-file-pdf mr-2"></i> PDF retirados
+                        </a>
+                        <a href="<?php echo htmlspecialchars($url_xls_ret, ENT_QUOTES, 'UTF-8'); ?>"
+                           target="_blank" rel="noopener"
+                           class="tw-btn bg-amber-700 hover:bg-amber-800 text-white justify-center text-base font-bold py-3">
+                            <i class="fas fa-file-excel mr-2"></i> Excel retirados
+                        </a>
+                    </div>
+                </section>
+
+                <section class="border border-slate-200 rounded-xl p-4 bg-slate-50">
+                    <h2 class="text-xl font-extrabold text-slate-800 mb-4">Gestor de reportes a solicitud</h2>
+                    <form method="get" action="<?php echo htmlspecialchars($form_action_url, ENT_QUOTES, 'UTF-8'); ?>" class="grid grid-cols-1 md:grid-cols-4 gap-3 items-start" id="form-gestor-excel">
                     <?php if (!$use_standalone): ?>
                     <input type="hidden" name="page" value="torneo_gestion">
                     <?php endif; ?>
                     <input type="hidden" name="action" value="inscripciones_gestor_excel">
                     <input type="hidden" name="torneo_id" value="<?php echo (int)$tid_report; ?>">
-                    <div>
-                        <label class="block text-xs font-semibold text-slate-700 mb-1">Tipo de reporte</label>
-                        <select name="tipo_reporte" class="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm">
+                    <div class="md:col-span-2">
+                        <label class="block text-sm font-bold text-slate-800 mb-1">Tabla a descargar</label>
+                        <select name="tipo_reporte" class="w-full border-2 border-slate-300 rounded-lg px-3 py-2 text-sm font-semibold">
                             <option value="inscritos_detallado">Inscritos detallado (con nombre)</option>
                             <option value="inscritos_por_equipo">Inscritos por equipo (con nombre)</option>
                             <option value="partiresul_detallado">Partiresul detallado (con nombre)</option>
@@ -153,11 +141,11 @@ $page_title = 'Reportes de inscritos — ' . (string) ($torneo['nombre'] ?? 'Tor
                             <option value="equipos_detallado">Equipos detallado</option>
                         </select>
                     </div>
-                    <div>
-                        <label class="block text-xs font-semibold text-slate-700 mb-1">Ronda (solo por ronda)</label>
-                        <input type="number" min="1" name="ronda" class="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm" placeholder="Ej: 1">
+                    <div class="md:col-span-2">
+                        <label class="block text-sm font-bold text-slate-800 mb-1">Ronda (solo partiresul por ronda)</label>
+                        <input type="number" min="1" name="ronda" class="w-full border-2 border-slate-300 rounded-lg px-3 py-2 text-sm font-semibold" placeholder="Ej: 1">
                     </div>
-                    <div class="md:col-span-2 flex gap-2 mt-6">
+                    <div class="md:col-span-4 flex gap-2 mt-2">
                         <button type="submit" class="tw-btn bg-emerald-700 hover:bg-emerald-800 text-white">
                             <i class="fas fa-file-excel mr-2"></i> Descargar Excel
                         </button>
@@ -166,9 +154,9 @@ $page_title = 'Reportes de inscritos — ' . (string) ($torneo['nombre'] ?? 'Tor
                         </a>
                     </div>
                     <div class="md:col-span-4">
-                        <label class="block text-xs font-semibold text-slate-700 mb-2">Columnas a exportar</label>
+                        <label class="block text-sm font-bold text-slate-800 mb-2">Campos a exportar</label>
                         <div class="p-3 rounded-lg border border-slate-200 bg-slate-50">
-                            <div data-cols-for="inscritos_detallado inscritos_por_equipo" class="grid grid-cols-2 md:grid-cols-3 gap-2">
+                            <div data-cols-for="inscritos_detallado inscritos_por_equipo" class="grid grid-cols-2 md:grid-cols-3 gap-2 text-sm font-semibold text-slate-800">
                                 <label><input type="checkbox" name="columnas[]" value="asociacion_nombre" checked> Asociación</label>
                                 <label><input type="checkbox" name="columnas[]" value="equipo_nombre" checked> Equipo</label>
                                 <label><input type="checkbox" name="columnas[]" value="codigo_equipo" checked> Código equipo</label>
@@ -179,7 +167,7 @@ $page_title = 'Reportes de inscritos — ' . (string) ($torneo['nombre'] ?? 'Tor
                                 <label><input type="checkbox" name="columnas[]" value="usuario_sexo" checked> Sexo</label>
                                 <label><input type="checkbox" name="columnas[]" value="usuario_telefono" checked> Teléfono</label>
                             </div>
-                            <div data-cols-for="partiresul_detallado partiresul_por_ronda" class="grid grid-cols-2 md:grid-cols-3 gap-2 mt-3">
+                            <div data-cols-for="partiresul_detallado partiresul_por_ronda" class="grid grid-cols-2 md:grid-cols-3 gap-2 mt-3 text-sm font-semibold text-slate-800">
                                 <label><input type="checkbox" name="columnas[]" value="partida" checked> Ronda</label>
                                 <label><input type="checkbox" name="columnas[]" value="mesa" checked> Mesa</label>
                                 <label><input type="checkbox" name="columnas[]" value="secuencia" checked> Secuencia</label>
@@ -192,7 +180,7 @@ $page_title = 'Reportes de inscritos — ' . (string) ($torneo['nombre'] ?? 'Tor
                                 <label><input type="checkbox" name="columnas[]" value="sancion" checked> Sanción</label>
                                 <label><input type="checkbox" name="columnas[]" value="registrado" checked> Registrado</label>
                             </div>
-                            <div data-cols-for="equipos_detallado" class="grid grid-cols-2 md:grid-cols-3 gap-2 mt-3">
+                            <div data-cols-for="equipos_detallado" class="grid grid-cols-2 md:grid-cols-3 gap-2 mt-3 text-sm font-semibold text-slate-800">
                                 <label><input type="checkbox" name="columnas[]" value="codigo_equipo" checked> Código equipo</label>
                                 <label><input type="checkbox" name="columnas[]" value="nombre_equipo" checked> Nombre equipo</label>
                                 <label><input type="checkbox" name="columnas[]" value="id_club" checked> ID club</label>
@@ -208,7 +196,8 @@ $page_title = 'Reportes de inscritos — ' . (string) ($torneo['nombre'] ?? 'Tor
                             </div>
                         </div>
                     </div>
-                </form>
+                    </form>
+                </section>
                 <script>
                 (function () {
                     var form = document.getElementById('form-gestor-excel');
@@ -233,7 +222,6 @@ $page_title = 'Reportes de inscritos — ' . (string) ($torneo['nombre'] ?? 'Tor
                     syncCols();
                 })();
                 </script>
-            </section>
             <div class="pt-2">
                 <a href="<?php echo htmlspecialchars($url_panel, ENT_QUOTES, 'UTF-8'); ?>" class="inline-flex items-center text-sm text-indigo-600 hover:text-indigo-800 font-semibold">
                     <i class="fas fa-arrow-left mr-2"></i> Volver al panel del torneo
