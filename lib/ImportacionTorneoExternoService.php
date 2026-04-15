@@ -853,7 +853,22 @@ final class ImportacionTorneoExternoService
         $iCed = $find($hNorm, ['cedula', 'cedula1', 'ci', 'documento']);
         $iNombreRes = $find($hNorm, ['nombre', 'n1', 'jugador', 'atleta']);
         $iNacRes = $find($hNorm, ['nacionalidad', 'nac']);
-        $iPareja = $find($hNorm, ['pareja', 'id_pareja', 'parejas']);
+        $iPareja = -1;
+        foreach ($hNorm as $ri => $col) {
+            if ((string) $col === 'pareja') {
+                $iPareja = $ri;
+                break;
+            }
+        }
+        if ($iPareja < 0) {
+            $iPareja = $find($hNorm, [
+                'id_pareja', 'parejas', 'num_pareja', 'nro_pareja', 'n_pareja', 'no_pareja',
+                'nopareja', 'numero_pareja', 'eq_pareja', 'equipo_pareja',
+            ]);
+        }
+        if ($iPareja < 0) {
+            $iPareja = $find($hNorm, ['pareja']);
+        }
         /* Id del otro sistema en hoja resultados (no es id_usuario Mistorneos hasta homologar) */
         $iExtRes = -1;
         $candidatosExt = ['usuario', 'id_externo', 'id_jugador_externo', 'cod_jugador', 'codigo', 'cod', 'externo'];
@@ -922,30 +937,29 @@ final class ImportacionTorneoExternoService
         for ($r = 1; $r < count($rowsResultados); $r++) {
             $row = $rowsResultados[$r];
             $idUsuario = 0;
-            if ($iExtRes >= 0 && $extUsuarioToId !== []) {
-                $uk = trim((string) ($row[$iExtRes] ?? ''));
-                if ($uk !== '') {
-                    $idUsuario = (int) ($extUsuarioToId[$uk] ?? $extUsuarioToId[(string) (int) $uk] ?? 0);
-                }
-            }
             $ced = '';
             $nomR = '';
             $nacR = '';
-            if ($idUsuario <= 0 && $iCed >= 0) {
-                $ced = self::normalizarCedula($row[$iCed] ?? '');
-                if ($ced !== '') {
-                    $idUsuario = (int) ($cedulaToId[$ced] ?? $cedulaToId[preg_replace('/\D/', '', $ced)] ?? 0);
-                    $nomR = $iNombreRes >= 0 ? trim((string) ($row[$iNombreRes] ?? '')) : '';
-                    $nacR = $iNacRes >= 0 ? trim((string) ($row[$iNacRes] ?? '')) : '';
-                }
-            }
             $pkey = '';
-            if ($idUsuario <= 0 && $iPareja >= 0) {
+            /* Si existe columna Pareja: identidad solo por inscritos.numero + torneo (sin id externo ni cédula en resultados). */
+            if ($iPareja >= 0) {
                 $pkey = trim((string) ($row[$iPareja] ?? ''));
                 if ($pkey !== '') {
-                    $numLin = self::numeroParejaArchivoAEntero($pkey);
-                    if ($numLin > 0) {
-                        $idUsuario = self::idUsuarioPorTorneoNumeroInscripcion($pdo, $torneo_id, $numLin);
+                    $idUsuario = self::idUsuarioPorParejaSoloInscritosNumero($pdo, $torneo_id, $pkey);
+                }
+            } else {
+                if ($iExtRes >= 0 && $extUsuarioToId !== []) {
+                    $uk = trim((string) ($row[$iExtRes] ?? ''));
+                    if ($uk !== '') {
+                        $idUsuario = (int) ($extUsuarioToId[$uk] ?? $extUsuarioToId[(string) (int) $uk] ?? 0);
+                    }
+                }
+                if ($idUsuario <= 0 && $iCed >= 0) {
+                    $ced = self::normalizarCedula($row[$iCed] ?? '');
+                    if ($ced !== '') {
+                        $idUsuario = (int) ($cedulaToId[$ced] ?? $cedulaToId[preg_replace('/\D/', '', $ced)] ?? 0);
+                        $nomR = $iNombreRes >= 0 ? trim((string) ($row[$iNombreRes] ?? '')) : '';
+                        $nacR = $iNacRes >= 0 ? trim((string) ($row[$iNacRes] ?? '')) : '';
                     }
                 }
             }
@@ -1002,6 +1016,9 @@ final class ImportacionTorneoExternoService
             if ($st['id_map'] > 0) {
                 continue;
             }
+            if ($iPareja >= 0) {
+                continue;
+            }
             if ($st['ced'] === '') {
                 continue;
             }
@@ -1033,14 +1050,11 @@ final class ImportacionTorneoExternoService
         foreach ($staged as $st) {
             $idUsuario = (int) $st['id_map'];
             $ced = $st['ced'];
-            if ($idUsuario <= 0 && $ced !== '') {
-                $idUsuario = (int) ($cedulaToId[$ced] ?? $cedulaToId[preg_replace('/\D/', '', $ced)] ?? 0);
-            }
             if ($idUsuario <= 0 && $st['pkey'] !== '') {
-                $numLin = self::numeroParejaArchivoAEntero($st['pkey']);
-                if ($numLin > 0) {
-                    $idUsuario = self::idUsuarioPorTorneoNumeroInscripcion($pdo, $torneo_id, $numLin);
-                }
+                $idUsuario = self::idUsuarioPorParejaSoloInscritosNumero($pdo, $torneo_id, $st['pkey']);
+            }
+            if ($idUsuario <= 0 && $iPareja < 0 && $ced !== '') {
+                $idUsuario = (int) ($cedulaToId[$ced] ?? $cedulaToId[preg_replace('/\D/', '', $ced)] ?? 0);
             }
             if ($idUsuario <= 0) {
                 $stats['resultados_sin_resolver']++;
@@ -1303,6 +1317,37 @@ final class ImportacionTorneoExternoService
         $digits = preg_replace('/\D/', '', trim($clavePareja));
 
         return $digits !== '' ? (int) $digits : 0;
+    }
+
+    /**
+     * Columna Pareja del Excel → solo `inscritos.numero` + `torneo_id` (primer id_usuario encontrado).
+     */
+    private static function idUsuarioPorParejaSoloInscritosNumero(PDO $pdo, int $torneoId, string $pkeyRaw): int
+    {
+        $pkey = trim($pkeyRaw);
+        if ($pkey === '') {
+            return 0;
+        }
+        $intentos = [];
+        $porDigitos = self::numeroParejaArchivoAEntero($pkey);
+        if ($porDigitos > 0) {
+            $intentos[] = $porDigitos;
+        }
+        $soloDig = preg_replace('/\D/', '', $pkey);
+        if ($soloDig !== '') {
+            $n2 = (int) $soloDig;
+            if ($n2 > 0 && ! in_array($n2, $intentos, true)) {
+                $intentos[] = $n2;
+            }
+        }
+        foreach ($intentos as $num) {
+            $id = self::idUsuarioPorTorneoNumeroInscripcion($pdo, $torneoId, $num);
+            if ($id > 0) {
+                return $id;
+            }
+        }
+
+        return 0;
     }
 
     /**
