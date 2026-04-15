@@ -880,8 +880,19 @@ if ($action === 'inscripciones_gestor_excel' && ($_SERVER['REQUEST_METHOD'] ?? '
         ],
     ];
     $columnasSolicitadas = array_map('strval', (array)($_GET['columnas'] ?? []));
+    $columnasOrdenSolicitadoRaw = trim((string)($_GET['columnas_orden'] ?? ''));
+    $columnasOrdenSolicitado = $columnasOrdenSolicitadoRaw !== ''
+        ? array_values(array_filter(array_map('trim', explode(',', $columnasOrdenSolicitadoRaw)), static fn ($v) => $v !== ''))
+        : [];
     $columnasValidas = array_keys($columnasDisponibles[$tipoReporte]);
     $columnasSeleccionadas = array_values(array_intersect($columnasValidas, $columnasSolicitadas));
+    if ($columnasOrdenSolicitado !== []) {
+        $ordenValidado = array_values(array_intersect($columnasOrdenSolicitado, $columnasSeleccionadas));
+        if ($ordenValidado !== []) {
+            $faltantes = array_values(array_diff($columnasSeleccionadas, $ordenValidado));
+            $columnasSeleccionadas = array_merge($ordenValidado, $faltantes);
+        }
+    }
     if ($columnasSeleccionadas === []) {
         $columnasSeleccionadas = $columnasValidas;
     }
