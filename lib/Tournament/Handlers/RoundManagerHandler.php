@@ -19,6 +19,25 @@ final class RoundManagerHandler
     }
 
     /**
+     * Sincroniza inscritos desde partiresul antes de generar ronda (requiere torneo_gestion en flujos normales).
+     */
+    public static function syncInscritosStatsBeforeGeneracion(int $torneoId): void
+    {
+        if (\function_exists('actualizarEstadisticasInscritos')) {
+            actualizarEstadisticasInscritos($torneoId);
+
+            return;
+        }
+        require_once __DIR__ . '/../../InscritosPartiresulHelper.php';
+        $pdo = \DB::pdo();
+        $stmt = $pdo->prepare('SELECT DISTINCT id_usuario FROM inscritos WHERE torneo_id = ? AND estatus != 4');
+        $stmt->execute([$torneoId]);
+        while ($uid = $stmt->fetchColumn()) {
+            \InscritosPartiresulHelper::actualizarEstadisticas((int) $uid, $torneoId);
+        }
+    }
+
+    /**
      * Redirección tras validaciones / éxito de generación (panel torneo_gestion o tournament_admin).
      *
      * @param array<string, mixed> $options
@@ -27,6 +46,9 @@ final class RoundManagerHandler
     {
         if (($options['redirect_base'] ?? '') === 'tournament_admin') {
             return 'index.php?page=tournament_admin&torneo_id=' . $torneoId . '&action=generar_rondas';
+        }
+        if (($options['redirect_base'] ?? '') === 'op_especiales') {
+            return 'index.php?page=op_especiales&torneo_id=' . $torneoId;
         }
         if (function_exists('buildRedirectUrl')) {
             return buildRedirectUrl('panel', ['torneo_id' => $torneoId]);
@@ -148,7 +170,7 @@ final class RoundManagerHandler
 
             // Actualizar estadísticas antes de generar nueva ronda
             try {
-                actualizarEstadisticasInscritos($torneoId);
+                self::syncInscritosStatsBeforeGeneracion($torneoId);
             } catch (Exception $e) {
                 $_SESSION['error'] = 'Error al actualizar estadísticas: ' . $e->getMessage();
                 header('Location: ' . self::redirectUrlPanel($torneoId, $options));
@@ -176,9 +198,9 @@ final class RoundManagerHandler
 
             // Obtener estrategia de asignación (para equipos puede ser: secuencial, intercalada_13_24, intercalada_14_23, por_rendimiento)
             if ($es_torneo_equipos) {
-                $estrategia = $_POST['estrategia_asignacion'] ?? 'secuencial';
+                $estrategia = $options['estrategia_asignacion'] ?? ($_POST['estrategia_asignacion'] ?? 'secuencial');
             } else {
-                $estrategia = $_POST['estrategia_ronda2'] ?? 'separar';
+                $estrategia = $options['estrategia_ronda2'] ?? ($_POST['estrategia_ronda2'] ?? 'separar');
             }
 
             $resultado = $es_torneo_equipos

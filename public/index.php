@@ -425,6 +425,12 @@ if ($page === 'torneo_gestion' && ($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POS
     exit;
 }
 
+// op_especiales POST: redirecciones y CSRF sin layout
+if ($page === 'op_especiales' && ($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
+    require_once __DIR__ . '/../modules/op_especiales.php';
+    exit;
+}
+
 // torneo_gestion GET — acciones que solo envían cabeceras o redirigen: sin layout (el módulo dentro del <main> ya imprimió HTML arriba)
 if ($page === 'torneo_gestion' && ($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'GET') {
     $tg_get = trim((string)($_GET['action'] ?? ''));
