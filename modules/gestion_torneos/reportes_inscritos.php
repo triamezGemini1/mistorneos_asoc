@@ -137,10 +137,10 @@ $page_title = 'Reportes de inscritos — ' . (string) ($torneo['nombre'] ?? 'Tor
                 <input type="hidden" name="torneo_id" value="<?php echo (int)$tid_report; ?>">
                 <input type="hidden" name="columnas_orden" value="" id="columnas_orden">
 
-                <div class="grid grid-cols-1 xl:grid-cols-4 gap-4 items-start">
+                <div class="grid grid-cols-1 xl:grid-cols-2 gap-4 items-start">
                     <div class="xl:col-span-1">
-                        <label class="block text-base font-extrabold text-slate-800 mb-1">Tabla a descargar</label>
-                        <select name="tipo_reporte" class="w-full border-2 border-slate-300 rounded-lg px-3 py-2 text-base font-bold">
+                        <label class="block text-[12px] font-extrabold text-slate-800 mb-1">Tabla a descargar</label>
+                        <select name="tipo_reporte" class="w-full border-2 border-slate-300 rounded-lg px-3 py-2 text-[12px] font-semibold">
                             <option value="inscritos_detallado">Inscritos detallado</option>
                             <option value="inscritos_por_equipo">Inscritos por equipo</option>
                             <option value="partiresul_detallado">Partiresul detallado</option>
@@ -148,7 +148,18 @@ $page_title = 'Reportes de inscritos — ' . (string) ($torneo['nombre'] ?? 'Tor
                             <option value="equipos_detallado">Equipos detallado</option>
                         </select>
                     </div>
-                    <div class="xl:col-span-3">
+                    <div class="xl:col-span-1">
+                        <label class="block text-[12px] font-extrabold text-slate-800 mb-1">Rondas a incluir</label>
+                        <select name="rondas_cantidad" class="w-full border-2 border-slate-300 rounded-lg px-2 py-1.5 text-[12px] font-semibold">
+                            <option value="99">Todas las rondas</option>
+                            <option value="1">Última ronda</option>
+                            <option value="2">Últimas 2 rondas</option>
+                            <option value="3">Últimas 3 rondas</option>
+                            <option value="5">Últimas 5 rondas</option>
+                            <option value="10">Últimas 10 rondas</option>
+                        </select>
+                    </div>
+                    <div class="xl:col-span-2">
                         <label class="block text-base font-extrabold text-slate-800 mb-2">Campos de la tabla seleccionada</label>
                         <div class="p-3 rounded-lg border border-slate-200 bg-white">
                             <div data-cols-for="inscritos_detallado inscritos_por_equipo" class="grid grid-cols-2 md:grid-cols-3 gap-2 text-sm font-semibold text-slate-800">
@@ -194,17 +205,6 @@ $page_title = 'Reportes de inscritos — ' . (string) ($torneo['nombre'] ?? 'Tor
                 </div>
 
                 <div class="grid grid-cols-1 xl:grid-cols-4 gap-4 items-end">
-                    <div class="xl:col-span-1">
-                        <label class="block text-base font-extrabold text-slate-800 mb-1">Rondas a incluir</label>
-                        <select name="rondas_cantidad" class="w-full border-2 border-slate-300 rounded-lg px-2 py-1.5 text-sm font-bold">
-                            <option value="99">Todas las rondas</option>
-                            <option value="1">Última ronda</option>
-                            <option value="2">Últimas 2 rondas</option>
-                            <option value="3">Últimas 3 rondas</option>
-                            <option value="5">Últimas 5 rondas</option>
-                            <option value="10">Últimas 10 rondas</option>
-                        </select>
-                    </div>
                     <div class="xl:col-span-4">
                         <label class="block text-base font-extrabold text-slate-800 mb-1">Resultado del reporte a descargar</label>
                         <ul id="preview-columnas" class="list-disc pl-5 text-sm font-semibold text-slate-800 bg-white border border-slate-200 rounded-lg p-3"></ul>
