@@ -905,12 +905,13 @@ final class ImportacionTorneoExternoService
                 }
             }
             $pkey = '';
+            $idsDesdePareja = [];
             if ($idUsuario <= 0 && $iPareja >= 0) {
                 $pkey = trim((string) ($row[$iPareja] ?? ''));
                 if ($pkey !== '') {
                     $numLin = self::numeroParejaArchivoAEntero($pkey);
                     if ($numLin > 0) {
-                        $idUsuario = self::idUsuarioPorTorneoNumeroInscripcion($pdo, $torneo_id, $numLin);
+                        $idsDesdePareja = self::idsUsuariosPorTorneoNumeroInscripcion($pdo, $torneo_id, $numLin);
                     }
                 }
             }
@@ -952,14 +953,33 @@ final class ImportacionTorneoExternoService
             if ($iEfectRes >= 0) {
                 $filaMatriz['efectividad'] = \TorneoCampoNumerico::intEstadistica($row[$iEfectRes] ?? 0);
             }
-            $staged[] = [
-                'id_map' => $idUsuario,
-                'ced' => $ced,
-                'nom' => $nomR,
-                'nac' => $nacR,
-                'pkey' => $pkey,
-                'fm' => $filaMatriz,
-            ];
+            $idsParaStaged = [];
+            if ($idUsuario > 0) {
+                $idsParaStaged = [$idUsuario];
+            } elseif ($idsDesdePareja !== []) {
+                $idsParaStaged = $idsDesdePareja;
+            }
+            if ($idsParaStaged === []) {
+                $staged[] = [
+                    'id_map' => 0,
+                    'ced' => $ced,
+                    'nom' => $nomR,
+                    'nac' => $nacR,
+                    'pkey' => $pkey,
+                    'fm' => $filaMatriz,
+                ];
+            } else {
+                foreach ($idsParaStaged as $iduSt) {
+                    $staged[] = [
+                        'id_map' => (int) $iduSt,
+                        'ced' => $ced,
+                        'nom' => $nomR,
+                        'nac' => $nacR,
+                        'pkey' => $pkey,
+                        'fm' => $filaMatriz,
+                    ];
+                }
+            }
         }
 
         $cedulasUnicasResolver = [];
@@ -994,40 +1014,50 @@ final class ImportacionTorneoExternoService
         }
 
         foreach ($staged as $st) {
-            $idUsuario = (int) $st['id_map'];
+            $idsResolver = [];
+            $idMap = (int) $st['id_map'];
             $ced = $st['ced'];
-            if ($idUsuario <= 0 && $ced !== '') {
-                $idUsuario = (int) ($cedulaToId[$ced] ?? $cedulaToId[preg_replace('/\D/', '', $ced)] ?? 0);
-            }
-            if ($idUsuario <= 0 && $st['pkey'] !== '') {
-                $numLin = self::numeroParejaArchivoAEntero($st['pkey']);
-                if ($numLin > 0) {
-                    $idUsuario = self::idUsuarioPorTorneoNumeroInscripcion($pdo, $torneo_id, $numLin);
+            if ($idMap > 0) {
+                $idsResolver[] = $idMap;
+            } else {
+                if ($ced !== '') {
+                    $idC = (int) ($cedulaToId[$ced] ?? $cedulaToId[preg_replace('/\D/', '', $ced)] ?? 0);
+                    if ($idC > 0) {
+                        $idsResolver[] = $idC;
+                    }
+                }
+                if ($idsResolver === [] && $st['pkey'] !== '') {
+                    $numLin = self::numeroParejaArchivoAEntero($st['pkey']);
+                    if ($numLin > 0) {
+                        $idsResolver = self::idsUsuariosPorTorneoNumeroInscripcion($pdo, $torneo_id, $numLin);
+                    }
                 }
             }
-            if ($idUsuario <= 0) {
+            if ($idsResolver === []) {
                 $stats['resultados_sin_resolver']++;
                 continue;
             }
-            if ($st['pkey'] !== '' && (($idUsuarioToClavePareja[$idUsuario] ?? '') === '')) {
-                $idUsuarioToClavePareja[$idUsuario] = $st['pkey'];
+            foreach ($idsResolver as $idUsuario) {
+                if ($st['pkey'] !== '' && (($idUsuarioToClavePareja[$idUsuario] ?? '') === '')) {
+                    $idUsuarioToClavePareja[$idUsuario] = $st['pkey'];
+                }
+                $sid = (string) $idUsuario;
+                if (! isset($matrizAtletas[$sid])) {
+                    $matrizAtletas[$sid] = [];
+                }
+                $matrizAtletas[$sid][] = $st['fm'];
+                $fm = $st['fm'];
+                $vectorPorUsuario[$idUsuario] = [
+                    'torneo_id' => $torneo_id,
+                    'partida' => (int) ($fm['ronda'] ?? 0),
+                    'mesa' => (int) ($fm['mesa'] ?? 0),
+                    'secuencia' => (int) ($fm['secuencia'] ?? 0),
+                    'resultado1' => (int) ($fm['result1'] ?? 0),
+                    'resultado2' => (int) ($fm['result2'] ?? 0),
+                    'ff' => (int) ($fm['ff'] ?? 0),
+                    'sancion' => (int) ($fm['sancionp'] ?? 0),
+                ];
             }
-            $sid = (string) $idUsuario;
-            if (! isset($matrizAtletas[$sid])) {
-                $matrizAtletas[$sid] = [];
-            }
-            $matrizAtletas[$sid][] = $st['fm'];
-            $fm = $st['fm'];
-            $vectorPorUsuario[$idUsuario] = [
-                'torneo_id' => $torneo_id,
-                'partida' => (int) ($fm['ronda'] ?? 0),
-                'mesa' => (int) ($fm['mesa'] ?? 0),
-                'secuencia' => (int) ($fm['secuencia'] ?? 0),
-                'resultado1' => (int) ($fm['result1'] ?? 0),
-                'resultado2' => (int) ($fm['result2'] ?? 0),
-                'ff' => (int) ($fm['ff'] ?? 0),
-                'sancion' => (int) ($fm['sancionp'] ?? 0),
-            ];
         }
 
         $rondasArchivo = 0;
@@ -1042,17 +1072,16 @@ final class ImportacionTorneoExternoService
             $rondasArchivo = max(1, (int) ($stR->fetchColumn() ?: 9));
         }
         $N = count($matrizAtletas);
-        $M = $N * $rondasArchivo;
         $totalFilasMatriz = 0;
         foreach ($matrizAtletas as $filasM) {
             $totalFilasMatriz += count($filasM);
         }
         $stats['matriz_homologados_n'] = $N;
         $stats['matriz_rondas'] = $rondasArchivo;
-        $stats['matriz_total_partidas_esperadas'] = $M;
+        $stats['matriz_total_partidas_esperadas'] = $totalFilasMatriz;
         $stats['matriz_total_filas'] = $totalFilasMatriz;
         $stats['mensaje_homologacion_matriz'] = $N > 0
-            ? ('Homologados ' . $N . ' atletas con un total de ' . $M . ' partidas')
+            ? ($totalFilasMatriz . ' filas a insertar en partiresul (' . $N . ' atletas con al menos una fila)')
             : '';
 
         ksort($matrizAtletas, SORT_STRING);
@@ -1325,20 +1354,27 @@ final class ImportacionTorneoExternoService
     }
 
     /**
-     * Un registro → un inscrito.numero → un id_usuario en el torneo (LIMIT 1).
+     * Mismo número de pareja en inscritos.numero (p. ej. parejas fijas): todos los id_usuario activos del torneo.
+     * Cada fila de resultados por pareja se replica en partiresul para cada integrante.
+     *
+     * @return list<int>
      */
-    private static function idUsuarioPorTorneoNumeroInscripcion(PDO $pdo, int $torneoId, int $numeroInscripcion): int
+    private static function idsUsuariosPorTorneoNumeroInscripcion(PDO $pdo, int $torneoId, int $numeroInscripcion): array
     {
         if ($torneoId <= 0 || $numeroInscripcion <= 0) {
-            return 0;
+            return [];
         }
         require_once __DIR__ . '/InscritosHelper.php';
         $st = $pdo->prepare(
-            'SELECT id_usuario FROM inscritos WHERE torneo_id = ? AND numero = ? AND ' . InscritosHelper::SQL_WHERE_NO_RETIRADO . ' LIMIT 1'
+            'SELECT id_usuario FROM inscritos WHERE torneo_id = ? AND numero = ? AND ' . InscritosHelper::SQL_WHERE_NO_RETIRADO . ' ORDER BY id_usuario ASC'
         );
         $st->execute([$torneoId, $numeroInscripcion]);
+        $out = [];
+        while (($u = $st->fetchColumn()) !== false) {
+            $out[] = (int) $u;
+        }
 
-        return (int) ($st->fetchColumn() ?: 0);
+        return $out;
     }
 
     private static function actualizarNumeroInscripcionTorneo(PDO $pdo, int $torneoId, int $idUsuario, int $numero): void
