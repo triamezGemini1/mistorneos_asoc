@@ -3,6 +3,8 @@ if (!defined('APP_BOOTSTRAPPED')) {
     define('APP_BOOTSTRAPPED', true);
 }
 
+require_once __DIR__ . '/php_polyfills.php';
+
 // Nota: El autoloader de Composer debe regenerarse con 'composer dump-autoload'
 // if (file_exists(__DIR__ . '/../vendor/autoload.php')) {
 //     require_once __DIR__ . '/../vendor/autoload.php';

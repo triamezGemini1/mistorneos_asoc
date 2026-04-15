@@ -4,6 +4,8 @@
  */
 declare(strict_types=1);
 
+require_once __DIR__ . '/../config/php_polyfills.php';
+
 final class ImportacionTorneoExternoService
 {
     /**
@@ -335,10 +337,27 @@ final class ImportacionTorneoExternoService
         $auditoriaPorRonda = [];
         $partidasLista = array_keys($partidasTocadas);
         sort($partidasLista, SORT_NUMERIC);
-        require_once __DIR__ . '/Tournament/OpEspecialesHelper.php';
-        $gduTorneoCompleto = \Tournament\OpEspecialesHelper::obtenerReporteAnomalias($torneo_id);
+        $gduTorneoCompleto = [];
+        try {
+            require_once __DIR__ . '/Tournament/OpEspecialesHelper.php';
+            $gduTorneoCompleto = \Tournament\OpEspecialesHelper::obtenerReporteAnomalias($torneo_id);
+        } catch (Throwable $e) {
+            error_log('ImportacionTorneoExternoService obtenerReporteAnomalias: ' . $e->getMessage());
+            $errores[] = 'Auditoría GDU no disponible: ' . $e->getMessage();
+        }
         foreach ($partidasLista as $pnum) {
-            $chk = self::validarPostCargaRondaPartiresul($pdo, $torneo_id, (int) $pnum, $gduTorneoCompleto);
+            try {
+                $chk = self::validarPostCargaRondaPartiresul($pdo, $torneo_id, (int) $pnum, $gduTorneoCompleto);
+            } catch (Throwable $e) {
+                error_log('ImportacionTorneoExternoService validarPostCargaRondaPartiresul: ' . $e->getMessage());
+                $auditoriaPorRonda[] = [
+                    'partida' => (int) $pnum,
+                    'gdu' => 0,
+                    'mesas_incompletas' => 0,
+                    'detalle' => 'Validación post-carga falló: ' . $e->getMessage(),
+                ];
+                continue;
+            }
             $nGdu = count($chk['gdu']);
             $nInc = count($chk['mesas_incompletas']);
             $det = '';
@@ -996,7 +1015,8 @@ final class ImportacionTorneoExternoService
         return $idU;
     }
 
-    private static function parseFfValor(mixed $v): int
+    /** @param mixed $v */
+    private static function parseFfValor($v): int
     {
         if ($v === null || $v === '') {
             return 0;
@@ -1015,7 +1035,8 @@ final class ImportacionTorneoExternoService
     /**
      * Marca administrativa (tarjeta amarilla/roja/negra) → código TorneoCampoNumerico (0/1/3/4).
      */
-    private static function parseMarcaTarjeta(mixed $v): int
+    /** @param mixed $v */
+    private static function parseMarcaTarjeta($v): int
     {
         require_once __DIR__ . '/TorneoCampoNumerico.php';
         if ($v === null) {
