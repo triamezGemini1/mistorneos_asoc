@@ -16,9 +16,18 @@ $tg = static function (string $action, array $extra = []) use ($torneo_id): stri
 };
 
 $urlPdf = static function (string $tipo) use ($torneo_id): string {
-    return AppHelpers::url('export_resultados_pdf.php', ['torneo_id' => $torneo_id, 'tipo' => $tipo]);
+    return AppHelpers::url('index.php', [
+        'page' => 'torneo_gestion',
+        'action' => 'export_resultados_pdf',
+        'torneo_id' => $torneo_id,
+        'tipo' => $tipo,
+    ]);
 };
-$urlExcel = AppHelpers::url('export_resultados_excel.php', ['torneo_id' => $torneo_id]);
+$urlExcel = AppHelpers::url('index.php', [
+    'page' => 'torneo_gestion',
+    'action' => 'export_resultados_excel',
+    'torneo_id' => $torneo_id,
+]);
 $urlPrint = static function (string $tipo) use ($tg): string {
     return $tg('resultados_reportes_print', ['tipo' => $tipo]);
 };

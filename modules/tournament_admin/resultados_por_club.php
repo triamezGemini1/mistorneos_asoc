@@ -421,11 +421,11 @@ $base_url_return = $use_standalone ? $script_actual : 'index.php?page=torneo_ges
            class="inline-flex items-center px-6 py-3 bg-amber-600 hover:bg-amber-700 text-white rounded-lg shadow-lg font-bold">
             <i class="fas fa-file-alt mr-2"></i> Reportes PDF/Excel
         </a>
-        <a href="<?php echo htmlspecialchars(AppHelpers::url('export_resultados_pdf.php', ['torneo_id' => $torneo_id, 'tipo' => 'clubes_resumido'])); ?>"
+        <a href="<?php echo htmlspecialchars(AppHelpers::url('index.php', ['page' => 'torneo_gestion', 'action' => 'export_resultados_pdf', 'torneo_id' => $torneo_id, 'tipo' => 'clubes_resumido'])); ?>"
            class="inline-flex items-center px-4 py-3 bg-red-200 text-black font-bold rounded-lg border-2 border-black" target="_blank" rel="noopener">PDF clubes resumido</a>
-        <a href="<?php echo htmlspecialchars(AppHelpers::url('export_resultados_pdf.php', ['torneo_id' => $torneo_id, 'tipo' => 'clubes_detallado'])); ?>"
+        <a href="<?php echo htmlspecialchars(AppHelpers::url('index.php', ['page' => 'torneo_gestion', 'action' => 'export_resultados_pdf', 'torneo_id' => $torneo_id, 'tipo' => 'clubes_detallado'])); ?>"
            class="inline-flex items-center px-4 py-3 bg-red-100 text-black font-bold rounded-lg border-2 border-black" target="_blank" rel="noopener">PDF clubes detallado</a>
-        <a href="<?php echo htmlspecialchars(AppHelpers::url('export_resultados_excel.php', ['torneo_id' => $torneo_id])); ?>"
+        <a href="<?php echo htmlspecialchars(AppHelpers::url('index.php', ['page' => 'torneo_gestion', 'action' => 'export_resultados_excel', 'torneo_id' => $torneo_id])); ?>"
            class="inline-flex items-center px-4 py-3 bg-green-200 text-black font-bold rounded-lg border-2 border-black">Excel</a>
         <a href="<?php echo htmlspecialchars(AppHelpers::url('index.php', ['page' => 'torneo_gestion', 'action' => 'resultados_reportes_print', 'torneo_id' => $torneo_id, 'tipo' => 'clubes_resumido'])); ?>" target="_blank" rel="noopener"
            class="inline-flex items-center px-4 py-3 bg-blue-200 text-black font-bold rounded-lg border-2 border-black">Impr. resumido</a>

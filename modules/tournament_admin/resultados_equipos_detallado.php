@@ -200,7 +200,7 @@ $base_url_return = $use_standalone ? $script_actual : 'index.php?page=torneo_ges
                 </div>
             </div>
             <div class="text-right flex flex-wrap gap-2 justify-end">
-                <a href="<?php echo htmlspecialchars(AppHelpers::url('export_resultados_pdf.php', ['torneo_id' => $torneo_id, 'tipo' => 'equipos_detallado'])); ?>"
+                <a href="<?php echo htmlspecialchars(AppHelpers::url('index.php', ['page' => 'torneo_gestion', 'action' => 'export_resultados_pdf', 'torneo_id' => $torneo_id, 'tipo' => 'equipos_detallado'])); ?>"
                    class="px-4 py-3 bg-amber-200 text-black font-bold rounded-lg border border-black text-sm">PDF Letter</a>
                 <a href="<?php echo htmlspecialchars(AppHelpers::url('index.php', ['page' => 'torneo_gestion', 'action' => 'resultados_reportes_print', 'torneo_id' => $torneo_id, 'tipo' => 'equipos_detallado'])); ?>" target="_blank" rel="noopener"
                    class="px-4 py-3 bg-slate-200 text-black font-bold rounded-lg border border-black text-sm">Vista impresión</a>
