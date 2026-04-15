@@ -156,14 +156,20 @@ $page_title = 'Reportes de inscritos — ' . (string) ($torneo['nombre'] ?? 'Tor
                     </div>
                     <div class="xl:col-span-1">
                         <label class="block text-[12px] font-extrabold text-slate-800 mb-1">Rondas a incluir</label>
-                        <select name="rondas_cantidad" class="w-full border-2 border-slate-300 rounded-lg px-2 py-1.5 text-[12px] font-semibold">
+                        <select name="rondas_cantidad" id="gestor-rondas-cantidad" class="w-full border-2 border-slate-300 rounded-lg px-2 py-1.5 text-[12px] font-semibold">
                             <option value="99">Todas las rondas</option>
+                            <option value="-1">Una sola ronda (número exacto)</option>
                             <option value="1">Última ronda</option>
                             <option value="2">Últimas 2 rondas</option>
                             <option value="3">Últimas 3 rondas</option>
                             <option value="5">Últimas 5 rondas</option>
                             <option value="10">Últimas 10 rondas</option>
                         </select>
+                        <div id="wrap-ronda-numero-exacta" class="mt-2 hidden">
+                            <label class="block text-[11px] font-bold text-slate-700 mb-0.5">Número de ronda (partida)</label>
+                            <input type="number" name="ronda_numero" id="gestor-ronda-numero" min="1" max="999" value="1" class="w-full border-2 border-slate-300 rounded-lg px-2 py-1 text-[12px] font-semibold">
+                            <p class="text-[10px] text-slate-500 mt-1 mb-0">Solo aplica a «Partiresul por ronda»: un valor único evita solapar datos de varias rondas.</p>
+                        </div>
                     </div>
                     <div class="xl:col-span-2">
                         <label class="block text-base font-extrabold text-slate-800 mb-2">Campos de la tabla seleccionada</label>
@@ -234,6 +240,7 @@ $page_title = 'Reportes de inscritos — ' . (string) ($torneo['nombre'] ?? 'Tor
                     if (!form) return;
                     var tipo = form.querySelector('select[name="tipo_reporte"]');
                     var rondasCantidad = form.querySelector('select[name="rondas_cantidad"]');
+                    var wrapRondaExacta = document.getElementById('wrap-ronda-numero-exacta');
                     var grupos = form.querySelectorAll('[data-cols-for]');
                     var preview = document.getElementById('preview-columnas');
                     var ordenInput = document.getElementById('columnas_orden');
@@ -293,6 +300,9 @@ $page_title = 'Reportes de inscritos — ' . (string) ($torneo['nombre'] ?? 'Tor
                         if (rondasCantidad) {
                             rondasCantidad.disabled = !usaRondas;
                         }
+                        if (wrapRondaExacta) {
+                            wrapRondaExacta.style.display = (usaRondas && rondasCantidad && rondasCantidad.value === '-1') ? '' : 'none';
+                        }
                         rebuildOrdenVisible();
                         renderPreview();
                     }
@@ -310,6 +320,9 @@ $page_title = 'Reportes de inscritos — ' . (string) ($torneo['nombre'] ?? 'Tor
                         });
                     });
                     if (tipo) tipo.addEventListener('change', syncCols);
+                    if (rondasCantidad) {
+                        rondasCantidad.addEventListener('change', syncCols);
+                    }
                     form.addEventListener('submit', function () {
                         rebuildOrdenVisible();
                         renderPreview();

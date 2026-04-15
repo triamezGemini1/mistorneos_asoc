@@ -135,7 +135,26 @@ final class ImportacionTorneoExternoService
         /* PC / Result2 / r2… */
         $iR2 = $idx($header, ['resultado2', 'result2', 'result_2', 'r2', 'pts2', 'pc', 'puntos_contra', 'contra']);
         $iFf = $idx($header, ['ff', 'forfait']);
-        $iSan = $idx($header, ['sancionp', 'sancion_p', 'sancion', 'penal', 'penalizacion']);
+        $iTar = self::indiceColumnaImport($header, ['tarjeta', 'amarilla', 'roja'], ['tarjeta_amarilla', 'tarjeta_roja', 'marca_tarjeta']);
+        if ($iTar < 0) {
+            $iTar = $idx($header, ['tarjeta', 'marca_tarjeta']);
+        }
+        $iSanNum = -1;
+        foreach ($header as $hi => $col) {
+            $c = (string) $col;
+            if (str_contains($c, 'sancionp') || str_contains($c, 'sancion_p') || str_contains($c, 'penaliza') || $c === 'penal' || str_starts_with($c, 'penal_')) {
+                $iSanNum = $hi;
+                break;
+            }
+        }
+        if ($iSanNum < 0) {
+            foreach ($header as $hi => $col) {
+                if ($col === 'sancion' || $col === 'sanc') {
+                    $iSanNum = $hi;
+                    break;
+                }
+            }
+        }
         $iNombre = $idx($header, ['nombre', 'n1', 'jugador', 'atleta']);
         $iNac = $idx($header, ['nacionalidad', 'nac']);
         if ($iPart < 0 || $iMesa < 0 || $iSeq < 0 || $iR1 < 0 || $iR2 < 0 || ($iUsr < 0 && $iCed < 0)) {
@@ -189,8 +208,9 @@ final class ImportacionTorneoExternoService
                         $statsF2
                     );
                 }
-                if ($idUsuario > 0 && $iUsr >= 0) {
-                    self::asegurarInscritoTorneoActivo($pdo, $torneo_id, $idUsuario, $registrado_por);
+                if ($idUsuario > 0) {
+                    $statsF2['_ids_atletas'][$idUsuario] = true;
+                    self::asegurarInscritoTorneoActivo($pdo, $torneo_id, $idUsuario, $registrado_por, $statsF2);
                 }
                 if ($partida < 1 || $mesa < 1 || $secuencia < 1 || $idUsuario < 1) {
                     continue;
@@ -198,9 +218,23 @@ final class ImportacionTorneoExternoService
                 $r1 = (int) ($row[$iR1] ?? 0);
                 $r2 = (int) ($row[$iR2] ?? 0);
                 $ff = $iFf >= 0 ? self::parseFfValor($row[$iFf] ?? 0) : 0;
+                $tarjetaVal = 0;
                 $sancionVal = 0;
-                if ($iSan >= 0) {
-                    $sancionVal = \TorneoCampoNumerico::intEstadistica($row[$iSan] ?? 0);
+                if ($iTar >= 0) {
+                    $tarjetaVal = self::parseMarcaTarjeta($row[$iTar] ?? '');
+                }
+                if ($iSanNum >= 0) {
+                    $celSan = $row[$iSanNum] ?? 0;
+                    if ($iTar < 0) {
+                        $rawS = trim((string) $celSan);
+                        if ($rawS !== '' && !is_numeric($rawS)) {
+                            $tarjetaVal = self::parseMarcaTarjeta($celSan);
+                        } else {
+                            $sancionVal = \TorneoCampoNumerico::intEstadistica($celSan);
+                        }
+                    } else {
+                        $sancionVal = \TorneoCampoNumerico::intEstadistica($celSan);
+                    }
                     $sancionVal = min(80, max(0, $sancionVal));
                 }
                 $efect = self::efectividad($r1, $r2, $puntosTorneo, $ff);
@@ -242,6 +276,8 @@ final class ImportacionTorneoExternoService
                             $params[] = $sancionVal;
                             break;
                         case 'tarjeta':
+                            $params[] = $tarjetaVal;
+                            break;
                         case 'chancleta':
                         case 'zapato':
                             $params[] = 0;
@@ -323,6 +359,11 @@ final class ImportacionTorneoExternoService
             ];
         }
 
+        if (isset($statsF2['_ids_atletas']) && is_array($statsF2['_ids_atletas'])) {
+            $statsF2['atletas_vinculados'] = count($statsF2['_ids_atletas']);
+            unset($statsF2['_ids_atletas']);
+        }
+
         return [
             'insertados' => $insertados,
             'errores' => $errores,
@@ -357,6 +398,9 @@ final class ImportacionTorneoExternoService
             'mapeos_usuario_externo' => 0,
             'columna_usuario_homolog' => false,
             'columna_usuario_resultados' => false,
+            'atletas_vinculados' => 0,
+            'parejas_reconstruidas' => 0,
+            'inscripciones_nuevas' => 0,
         ];
         if ($rowsHomologacion === [] || $rowsResultados === []) {
             $stats['errores'][] = 'Faltan filas en archivo de homologación o de resultados.';
@@ -511,6 +555,12 @@ final class ImportacionTorneoExternoService
         }
         $stats['homologacion_sin_usuario'] = count(array_unique($noEncCed));
         $stats['cedulas_no_encontradas'] = array_values(array_unique($noEncCed));
+        $stats['atletas_vinculados'] = count(array_unique(array_values($extUsuarioToId)));
+        foreach ($parejaToIds as $pk => $idsP) {
+            if (count(array_unique(array_map('intval', $idsP))) >= 2) {
+                $stats['parejas_reconstruidas']++;
+            }
+        }
 
         $enr = self::fase1Enriquecer($pdo, $homologRows);
         $filasHom = $enr['filas'];
@@ -544,7 +594,29 @@ final class ImportacionTorneoExternoService
         $iR1 = $find($hNorm, ['resultado1', 'result1', 'result_1', 'r1', 'pts1', 'pf', 'puntos_favor', 'favor']);
         $iR2 = $find($hNorm, ['resultado2', 'result2', 'result_2', 'r2', 'pts2', 'pc', 'puntos_contra', 'contra']);
         $iFf = $find($hNorm, ['ff', 'forfait']);
-        $iSanRes = $find($hNorm, ['sancionp', 'sancion_p', 'sancion', 'penal', 'penalizacion']);
+        $iTarRes = self::indiceColumnaImport($hNorm, ['tarjeta', 'amarilla', 'roja'], ['tarjeta_amarilla', 'tarjeta_roja', 'marca_tarjeta']);
+        if ($iTarRes < 0) {
+            $iTarRes = $find($hNorm, ['tarjeta', 'marca_tarjeta']);
+        }
+        $iSanRes = -1;
+        foreach ($hNorm as $ri => $col) {
+            $c = (string) $col;
+            if (str_contains($c, 'sancionp') || str_contains($c, 'sancion_p') || str_contains($c, 'penaliza') || $c === 'penal' || str_starts_with($c, 'penal_')) {
+                $iSanRes = $ri;
+                break;
+            }
+        }
+        if ($iSanRes < 0) {
+            foreach ($hNorm as $ri => $col) {
+                if ($col === 'sancion' || $col === 'sanc') {
+                    $iSanRes = $ri;
+                    break;
+                }
+            }
+        }
+        if ($iSanRes < 0) {
+            $iSanRes = $find($hNorm, ['sancionp', 'sancion_p', 'penal', 'penalizacion']);
+        }
         $iCed = $find($hNorm, ['cedula', 'cedula1', 'ci', 'documento']);
         $iNombreRes = $find($hNorm, ['nombre', 'n1', 'jugador', 'atleta']);
         $iNacRes = $find($hNorm, ['nacionalidad', 'nac']);
@@ -591,7 +663,7 @@ final class ImportacionTorneoExternoService
 
         require_once __DIR__ . '/TorneoCampoNumerico.php';
         $nuevasFilas = [];
-        $nuevasFilas[] = ['partida', 'mesa', 'secuencia', 'id_usuario', 'resultado1', 'resultado2', 'ff', 'sancion'];
+        $nuevasFilas[] = ['partida', 'mesa', 'secuencia', 'id_usuario', 'resultado1', 'resultado2', 'ff', 'sancion', 'tarjeta'];
         $vectorPorUsuario = [];
 
         for ($r = 1; $r < count($rowsResultados); $r++) {
@@ -633,11 +705,25 @@ final class ImportacionTorneoExternoService
                 $stats['resultados_sin_resolver']++;
                 continue;
             }
-            self::asegurarInscritoTorneoActivo($pdo, $torneo_id, $idUsuario, $registrado_por);
+            self::asegurarInscritoTorneoActivo($pdo, $torneo_id, $idUsuario, $registrado_por, $stats);
             $ff = $iFf >= 0 ? self::parseFfValor($row[$iFf] ?? 0) : 0;
+            $tarjetaFila = 0;
             $sancionFila = 0;
+            if ($iTarRes >= 0) {
+                $tarjetaFila = self::parseMarcaTarjeta($row[$iTarRes] ?? '');
+            }
             if ($iSanRes >= 0) {
-                $sancionFila = \TorneoCampoNumerico::intEstadistica($row[$iSanRes] ?? 0);
+                $celSan = $row[$iSanRes] ?? 0;
+                if ($iTarRes < 0) {
+                    $rawS = trim((string) $celSan);
+                    if ($rawS !== '' && !is_numeric($rawS)) {
+                        $tarjetaFila = self::parseMarcaTarjeta($celSan);
+                    } else {
+                        $sancionFila = \TorneoCampoNumerico::intEstadistica($celSan);
+                    }
+                } else {
+                    $sancionFila = \TorneoCampoNumerico::intEstadistica($celSan);
+                }
                 $sancionFila = min(80, max(0, $sancionFila));
             }
             $nuevasFilas[] = [
@@ -649,6 +735,7 @@ final class ImportacionTorneoExternoService
                 (string) (int) ($row[$iR2] ?? 0),
                 (string) $ff,
                 (string) $sancionFila,
+                (string) $tarjetaFila,
             ];
             $vectorPorUsuario[$idUsuario] = [
                 'torneo_id' => $torneo_id,
@@ -668,8 +755,17 @@ final class ImportacionTorneoExternoService
         $stats['auditoria_por_ronda'] = $resInsert['auditoria_por_ronda'] ?? [];
         $stats['vector_atletas_mapeados'] = count($vectorPorUsuario);
         foreach ($resInsert['resolucion_identidad_fase2'] ?? [] as $k => $v) {
-            $stats[$k] = (int) ($stats[$k] ?? 0) + (int) $v;
+            if ($k === '_ids_atletas' || $k === 'atletas_vinculados') {
+                continue;
+            }
+            if (is_numeric($v)) {
+                $stats[$k] = (int) ($stats[$k] ?? 0) + (int) $v;
+            }
         }
+        $stats['atletas_vinculados'] = max(
+            (int) ($stats['atletas_vinculados'] ?? 0),
+            (int) ($resInsert['resolucion_identidad_fase2']['atletas_vinculados'] ?? 0)
+        );
         $stats['filas_listas_para_insertar'] = max(0, count($nuevasFilas) - 1);
 
         return $stats;
@@ -786,11 +882,13 @@ final class ImportacionTorneoExternoService
 
     /**
      * Garantiza fila activa en inscritos para el torneo (transparente para partiresul).
+     *
+     * @param array<string, int|bool>|null $statsAcum Si se inserta inscripción nueva, incrementa inscripciones_nuevas
      */
-    private static function asegurarInscritoTorneoActivo(PDO $pdo, int $torneoId, int $idUsuario, int $registradoPor): void
+    private static function asegurarInscritoTorneoActivo(PDO $pdo, int $torneoId, int $idUsuario, int $registradoPor, ?array &$statsAcum = null): bool
     {
         if ($torneoId <= 0 || $idUsuario <= 0) {
-            return;
+            return false;
         }
         require_once __DIR__ . '/InscritosHelper.php';
         $st = $pdo->prepare(
@@ -798,7 +896,7 @@ final class ImportacionTorneoExternoService
         );
         $st->execute([$torneoId, $idUsuario]);
         if ($st->fetchColumn()) {
-            return;
+            return false;
         }
         [$idClub, ] = self::clubYEntidadDesdeTorneo($pdo, $torneoId);
         try {
@@ -811,9 +909,16 @@ final class ImportacionTorneoExternoService
                 'numero' => 0,
                 'codigo_equipo' => '000-000',
             ]);
+            if ($statsAcum !== null) {
+                $statsAcum['inscripciones_nuevas'] = (int) ($statsAcum['inscripciones_nuevas'] ?? 0) + 1;
+            }
+
+            return true;
         } catch (Throwable $e) {
             error_log('ImportacionTorneoExternoService asegurarInscritoTorneoActivo: ' . $e->getMessage());
         }
+
+        return false;
     }
 
     /**
@@ -879,7 +984,7 @@ final class ImportacionTorneoExternoService
         }
 
         if ($idU > 0) {
-            self::asegurarInscritoTorneoActivo($pdo, $torneoId, $idU, $registradoPor);
+            self::asegurarInscritoTorneoActivo($pdo, $torneoId, $idU, $registradoPor, $statsAcum);
         }
         if ($statsAcum !== null && $u === null && $idU > 0) {
             $statsAcum['resoluciones_cedula_sin_usuario_previo'] = (int) ($statsAcum['resoluciones_cedula_sin_usuario_previo'] ?? 0) + 1;
@@ -905,6 +1010,63 @@ final class ImportacionTorneoExternoService
         $s = strtoupper(trim((string) $v));
 
         return in_array($s, ['1', 'S', 'SI', 'Y', 'YES', 'TRUE', 'FF', 'FORFAIT'], true) ? 1 : 0;
+    }
+
+    /**
+     * Marca administrativa (tarjeta amarilla/roja/negra) → código TorneoCampoNumerico (0/1/3/4).
+     */
+    private static function parseMarcaTarjeta(mixed $v): int
+    {
+        require_once __DIR__ . '/TorneoCampoNumerico.php';
+        if ($v === null) {
+            return 0;
+        }
+        if (is_numeric($v) && trim((string) $v) !== '') {
+            return \TorneoCampoNumerico::codigoTarjeta($v);
+        }
+        $s = trim(strtolower((string) $v));
+        if ($s === '' || $s === '-' || $s === 'no' || $s === 'ninguna' || $s === 'n' || $s === 'sin') {
+            return 0;
+        }
+        if (str_contains($s, 'negra') || str_contains($s, 'black')) {
+            return 4;
+        }
+        if (str_contains($s, 'roja') || $s === 'r' || str_contains($s, 'red')) {
+            return 3;
+        }
+        if (str_contains($s, 'amar') || $s === 'a' || str_contains($s, 'yellow')) {
+            return 1;
+        }
+
+        return \TorneoCampoNumerico::codigoTarjeta($v);
+    }
+
+    /**
+     * Índice de columna: primero coincidencia exacta del nombre normalizado, luego contiene (sin confundir sancion vs sancionp).
+     *
+     * @param list<string> $headerNorm Cabecera ya normalizada (minúsculas, guiones bajos)
+     */
+    private static function indiceColumnaImport(array $headerNorm, array $nombresExactos, array $contieneEnOrden): int
+    {
+        foreach ($nombresExactos as $ex) {
+            $ex = strtolower($ex);
+            foreach ($headerNorm as $i => $col) {
+                if ((string) $col === $ex) {
+                    return $i;
+                }
+            }
+        }
+        foreach ($contieneEnOrden as $sub) {
+            $sub = strtolower($sub);
+            foreach ($headerNorm as $i => $col) {
+                $c = (string) $col;
+                if ($c === $sub || str_contains($c, $sub)) {
+                    return $i;
+                }
+            }
+        }
+
+        return -1;
     }
 
     /**

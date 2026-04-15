@@ -875,6 +875,7 @@ if ($action === 'inscripciones_gestor_excel' && ($_SERVER['REQUEST_METHOD'] ?? '
     $tipoReporte = trim((string)($_GET['tipo_reporte'] ?? 'inscritos_detallado'));
     $rondaFiltro = (int)($_GET['ronda'] ?? 0);
     $rondasCantidad = (int)($_GET['rondas_cantidad'] ?? 99);
+    $rondaNumeroExacta = (int)($_GET['ronda_numero'] ?? 0);
     $permitidos = ['inscritos_detallado', 'inscritos_por_equipo', 'partiresul_detallado', 'partiresul_por_ronda', 'equipos_detallado'];
     if (!in_array($tipoReporte, $permitidos, true)) {
         $tipoReporte = 'inscritos_detallado';
@@ -972,7 +973,9 @@ if ($action === 'inscripciones_gestor_excel' && ($_SERVER['REQUEST_METHOD'] ?? '
     echo '<tr><td colspan="' . $colsSpan . '" style="font-weight:bold;text-align:center;background:#e2e8f0;font-size:16px;">' . $esc($torneo['nombre'] ?? '') . '</td></tr>';
     $resumenRonda = 'Todas';
     if ($tipoReporte === 'partiresul_por_ronda') {
-        if ($rondasCantidad === 99 || $rondaFiltro === 99) {
+        if ($rondasCantidad === -1 && $rondaNumeroExacta > 0) {
+            $resumenRonda = 'Solo ronda ' . $rondaNumeroExacta;
+        } elseif ($rondasCantidad === 99 || $rondaFiltro === 99) {
             $resumenRonda = 'Todas';
         } elseif ($rondasCantidad > 0) {
             $resumenRonda = 'Últimas ' . $rondasCantidad;
@@ -1076,7 +1079,10 @@ if ($action === 'inscripciones_gestor_excel' && ($_SERVER['REQUEST_METHOD'] ?? '
         $params = [$torneo_id];
         $whereRonda = '';
         if ($tipoReporte === 'partiresul_por_ronda') {
-            if ($rondasCantidad === 99 || $rondaFiltro === 99) {
+            if ($rondasCantidad === -1 && $rondaNumeroExacta > 0) {
+                $whereRonda = ' AND pr.partida = ? ';
+                $params[] = $rondaNumeroExacta;
+            } elseif ($rondasCantidad === 99 || $rondaFiltro === 99) {
                 $whereRonda = '';
             } elseif ($rondasCantidad > 0) {
                 $stMax = $pdo->prepare("SELECT MAX(partida) FROM partiresul WHERE id_torneo = ?");

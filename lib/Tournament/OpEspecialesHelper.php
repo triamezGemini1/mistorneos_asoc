@@ -775,13 +775,16 @@ final class OpEspecialesHelper
         $lR1 = \InscritosHelper::sqlExprColumnaNumerica('l.resultado1');
         $lR2 = \InscritosHelper::sqlExprColumnaNumerica('l.resultado2');
         $lSn = \InscritosHelper::sqlExprColumnaNumerica('l.sancion');
+        /** Neto GDU: puntos a favor (resultado1) menos sanción en puntos (sancion), acotado como en el panel. */
+        $wNet = "CASE WHEN ({$wSn}) <= 0 THEN ({$wR1}) ELSE GREATEST(0, ({$wR1}) - ({$wSn})) END";
+        $lNet = "CASE WHEN ({$lSn}) <= 0 THEN ({$lR1}) ELSE GREATEST(0, ({$lR1}) - ({$lSn})) END";
 
         $sql = "SELECT
                     w.partida AS partida,
                     w.mesa AS mesa,
                     w.id_usuario AS id_usuario,
-                    {$wR1} AS pf,
-                    MAX({$lR1}) AS max_pf_perdedor_mesa
+                    {$wNet} AS pf,
+                    MAX({$lNet}) AS max_pf_perdedor_mesa
                 FROM partiresul w
                 INNER JOIN partiresul l
                     ON l.id_torneo = w.id_torneo
@@ -802,8 +805,8 @@ final class OpEspecialesHelper
                         (({$lSn}) <= 0 AND ({$lR1}) <= ({$lR2}))
                         OR (({$lSn}) > 0 AND GREATEST(0, ({$lR1}) - ({$lSn})) <= ({$lR2}))
                     )
-                GROUP BY w.partida, w.mesa, w.id_usuario, {$wR1}
-                HAVING ({$wR1}) <= MAX({$lR1}) + 0.00001
+                GROUP BY w.partida, w.mesa, w.id_usuario, {$wNet}
+                HAVING ({$wNet}) <= MAX({$lNet}) + 0.00001
                 ORDER BY w.partida ASC, w.mesa ASC, w.id_usuario ASC";
 
         $st = $pdo->prepare($sql);

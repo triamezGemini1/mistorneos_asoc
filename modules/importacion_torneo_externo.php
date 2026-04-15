@@ -49,6 +49,15 @@ function importacionTorneoExternoSwalPayload(array $res, string $origen, string 
     $html .= '<tr class="table-' . ($ins > 0 ? 'success' : 'warning') . '"><td><strong>Insertadas partiresul</strong></td><td><strong>' . $ins . '</strong></td></tr>';
     $vec = (int) ($res['vector_atletas_mapeados'] ?? 0);
     $html .= '<tr><td>Vector atletas (id únicos)</td><td><strong>' . $vec . '</strong></td></tr>';
+    $av = (int) ($res['atletas_vinculados'] ?? 0);
+    $pr = (int) ($res['parejas_reconstruidas'] ?? 0);
+    $insN = (int) ($res['inscripciones_nuevas'] ?? 0);
+    if ($av > 0 || $pr > 0 || $insN > 0) {
+        $html .= '<tr class="table-light"><td colspan="2" class="fw-bold">Homologación (integridad)</td></tr>';
+        $html .= '<tr><td>Atletas vinculados</td><td><strong>' . $av . '</strong></td></tr>';
+        $html .= '<tr><td>Parejas reconstruidas (id pareja → 2 jugadores)</td><td><strong>' . $pr . '</strong></td></tr>';
+        $html .= '<tr><td>Inscripciones nuevas en el torneo</td><td><strong>' . $insN . '</strong></td></tr>';
+    }
     $rExt = (int) ($res['resoluciones_via_bd_externa'] ?? 0);
     $rAlta = (int) ($res['resoluciones_cedula_sin_usuario_previo'] ?? 0);
     if ($rAlta > 0 || $rExt > 0) {
