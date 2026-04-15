@@ -183,6 +183,30 @@ function clubesColumnExists(PDO $pdo, string $columnName): bool {
 }
 
 /**
+ * Columna en tabla inscritos (cache por request).
+ */
+function inscritosColumnExists(PDO $pdo, string $columnName): bool {
+    static $cache = [];
+    if (isset($cache[$columnName])) {
+        return $cache[$columnName];
+    }
+    try {
+        $stmt = $pdo->prepare("
+            SELECT COUNT(*)
+            FROM INFORMATION_SCHEMA.COLUMNS
+            WHERE TABLE_SCHEMA = DATABASE()
+              AND TABLE_NAME = 'inscritos'
+              AND COLUMN_NAME = ?
+        ");
+        $stmt->execute([$columnName]);
+        $cache[$columnName] = ((int)$stmt->fetchColumn()) > 0;
+    } catch (Throwable $e) {
+        $cache[$columnName] = false;
+    }
+    return $cache[$columnName];
+}
+
+/**
  * Logo de club para embeber en PDF (Dompdf): data URI seguro.
  */
 function reporteInscritosLogoDataUri(?string $relativePath): string {
@@ -211,8 +235,10 @@ function reporteInscritosLogoDataUri(?string $relativePath): string {
  */
 function torneoGestionInscripcionesEquiposAgrupadas(PDO $pdo, int $torneoId): array {
     $usuarioTelefonoCoalesce = usuariosTelefonoCoalesceDosAliases($pdo);
+    $exprInsNumfvd = inscritosColumnExists($pdo, 'numfvd') ? 'COALESCE(i.numfvd, 0)' : '0';
+    $exprInsCedula = inscritosColumnExists($pdo, 'cedula') ? 'i.cedula' : "''";
     $stmt = $pdo->prepare("
-        SELECT i.id_usuario, COALESCE(i.numfvd, 0) AS inscrito_numfvd, i.cedula AS cedula_inscrita,
+        SELECT i.id_usuario, {$exprInsNumfvd} AS inscrito_numfvd, {$exprInsCedula} AS cedula_inscrita,
                TRIM(COALESCE(i.codigo_equipo, '')) AS codigo_equipo,
                COALESCE(u.nombre, u_alt.nombre) AS usuario_nombre,
                COALESCE(u.cedula, u_alt.cedula) AS usuario_cedula,
