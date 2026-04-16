@@ -16,23 +16,63 @@ $genero = isset($_GET['genero']) ? strtoupper((string) $_GET['genero']) : 'F';
 if ($genero !== 'M' && $genero !== 'F') {
     $genero = 'F';
 }
+
+$user = Auth::user();
+$role = is_array($user) ? (string) ($user['role'] ?? '') : '';
+
 $organizacion_id = isset($_GET['organizacion_id']) ? (int) $_GET['organizacion_id'] : 0;
 if ($organizacion_id < 0) {
     $organizacion_id = 0;
 }
 
-$organizaciones = [];
+// admin_club: solo la organización activa del usuario (ignora GET malicioso)
+if ($role === 'admin_club') {
+    $organizacion_id = (int) Auth::getUserOrganizacionId();
+}
+
+$hasCodOrg = false;
 try {
+    $hasCodOrg = (bool) $pdo->query("SHOW COLUMNS FROM organizaciones LIKE 'cod_org'")->fetch(PDO::FETCH_ASSOC);
+} catch (Throwable $ignored) {
     $hasCodOrg = false;
-    try {
-        $hasCodOrg = (bool)$pdo->query("SHOW COLUMNS FROM organizaciones LIKE 'cod_org'")->fetch(PDO::FETCH_ASSOC);
-    } catch (Throwable $ignored) {
-        $hasCodOrg = false;
-    }
-    $orgJoin = $hasCodOrg
-        ? "LEFT JOIN organizaciones o ON (o.id = COALESCE(t.organizacion_id, t.club_responsable) OR o.cod_org = COALESCE(t.organizacion_id, t.club_responsable))"
-        : "LEFT JOIN organizaciones o ON o.id = COALESCE(t.organizacion_id, t.club_responsable)";
-    $stmtOrg = $pdo->query("
+}
+
+$organizaciones = [];
+$org_nombre_sesion = '';
+$ranking_sin_org_admin_general = false;
+
+try {
+    if ($role === 'admin_general') {
+        $stmtOrg = $pdo->query('SELECT id, nombre FROM organizaciones WHERE estatus = 1 ORDER BY nombre ASC');
+        $organizaciones = $stmtOrg->fetchAll(PDO::FETCH_ASSOC) ?: [];
+        if ($organizacion_id > 0) {
+            $valida = false;
+            foreach ($organizaciones as $rowOrg) {
+                if ((int) ($rowOrg['id'] ?? 0) === $organizacion_id) {
+                    $valida = true;
+                    break;
+                }
+            }
+            if (! $valida) {
+                $organizacion_id = 0;
+            }
+        }
+        $ranking_sin_org_admin_general = ($organizacion_id <= 0);
+    } elseif ($role === 'admin_club') {
+        if ($organizacion_id > 0) {
+            $stmtNom = $pdo->prepare(
+                $hasCodOrg
+                    ? 'SELECT nombre FROM organizaciones WHERE estatus = 1 AND (id = ? OR cod_org = ?) LIMIT 1'
+                    : 'SELECT nombre FROM organizaciones WHERE estatus = 1 AND id = ? LIMIT 1'
+            );
+            $stmtNom->execute($hasCodOrg ? [$organizacion_id, $organizacion_id] : [$organizacion_id]);
+            $org_nombre_sesion = (string) ($stmtNom->fetchColumn() ?: '');
+        }
+    } else {
+        $orgJoin = $hasCodOrg
+            ? 'LEFT JOIN organizaciones o ON (o.id = COALESCE(t.organizacion_id, t.club_responsable) OR o.cod_org = COALESCE(t.organizacion_id, t.club_responsable))'
+            : 'LEFT JOIN organizaciones o ON o.id = COALESCE(t.organizacion_id, t.club_responsable)';
+        $stmtOrg = $pdo->query("
         SELECT DISTINCT
             COALESCE(NULLIF(o.cod_org, 0), o.id, t.organizacion_id, t.club_responsable) AS id,
             COALESCE(NULLIF(TRIM(o.nombre), ''), CONCAT('Organización ', COALESCE(t.organizacion_id, t.club_responsable))) AS nombre
@@ -43,13 +83,26 @@ try {
           AND COALESCE(t.organizacion_id, t.club_responsable, 0) > 0
         ORDER BY nombre ASC
     ");
-    $organizaciones = $stmtOrg->fetchAll(PDO::FETCH_ASSOC) ?: [];
+        $organizaciones = $stmtOrg->fetchAll(PDO::FETCH_ASSOC) ?: [];
+    }
 } catch (Throwable $e) {
     $organizaciones = [];
 }
 
 $svc = new RankingAtletasPublicoService($pdo);
-$data = $svc->construirRanking($genero, $organizacion_id);
+if ($role === 'admin_general' && $ranking_sin_org_admin_general) {
+    $data = [
+        'atletas' => [],
+        'criterio_orden' => 'Seleccione la organización cuyo ranking desea consultar. Hasta entonces no se muestran datos acumulados.',
+    ];
+} elseif ($role === 'admin_club' && $organizacion_id <= 0) {
+    $data = [
+        'atletas' => [],
+        'criterio_orden' => 'Su cuenta no tiene una organización asignada. No es posible mostrar el ranking.',
+    ];
+} else {
+    $data = $svc->construirRanking($genero, $organizacion_id);
+}
 $atletas = $data['atletas'];
 $criterio = $data['criterio_orden'];
 
@@ -77,7 +130,7 @@ function fmtfecha(?string $f): string
     <title><?= htmlspecialchars($page_title) ?></title>
     <meta name="description" content="Ranking de atletas <?= htmlspecialchars($titulo_genero) ?>: torneos con ranking activado y rendimiento acumulado (puntos de ranking, efectividad, partidas ganadas).">
     <meta name="robots" content="index, follow">
-    <link rel="canonical" href="<?= htmlspecialchars($base_public . 'ranking_atletas.php?genero=' . $genero) ?>">
+    <link rel="canonical" href="<?= htmlspecialchars($base_public . 'ranking_atletas.php?genero=' . $genero . ($organizacion_id > 0 ? '&organizacion_id=' . (int)$organizacion_id : '')) ?>">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <style>
@@ -133,16 +186,50 @@ function fmtfecha(?string $f): string
                     <a href="resultados.php" class="btn btn-sm btn-volver"><i class="fas fa-trophy me-1"></i>Resultados por evento</a>
                 </div>
             </div>
+            <?php $orgNavQs = $organizacion_id > 0 ? '&organizacion_id=' . (int) $organizacion_id : ''; ?>
             <ul class="nav nav-pills nav-genero gap-2 mt-3">
                 <li class="nav-item">
-                    <a class="nav-link py-2 px-3 <?= $genero === 'F' ? 'active' : '' ?>" href="ranking_atletas.php?genero=F<?= $organizacion_id > 0 ? '&organizacion_id=' . (int)$organizacion_id : '' ?>"><i class="fas fa-venus me-1"></i>Femenino</a>
+                    <a class="nav-link py-2 px-3 <?= $genero === 'F' ? 'active' : '' ?>" href="ranking_atletas.php?genero=F<?= htmlspecialchars($orgNavQs) ?>"><i class="fas fa-venus me-1"></i>Femenino</a>
                 </li>
                 <li class="nav-item">
-                    <a class="nav-link py-2 px-3 <?= $genero === 'M' ? 'active' : '' ?>" href="ranking_atletas.php?genero=M<?= $organizacion_id > 0 ? '&organizacion_id=' . (int)$organizacion_id : '' ?>"><i class="fas fa-mars me-1"></i>Masculino</a>
+                    <a class="nav-link py-2 px-3 <?= $genero === 'M' ? 'active' : '' ?>" href="ranking_atletas.php?genero=M<?= htmlspecialchars($orgNavQs) ?>"><i class="fas fa-mars me-1"></i>Masculino</a>
                 </li>
             </ul>
         </div>
         <div class="p-3 p-md-4">
+            <?php if ($role === 'admin_club'): ?>
+                <div class="alert alert-secondary border mb-3 py-2 px-3">
+                    <i class="fas fa-building me-2"></i>
+                    <strong>Organización:</strong>
+                    <?= $organizacion_id > 0 ? htmlspecialchars($org_nombre_sesion !== '' ? $org_nombre_sesion : ('ID ' . $organizacion_id)) : '—' ?>
+                    <span class="text-muted small ms-1">(solo el ranking de su organización)</span>
+                </div>
+            <?php elseif ($role === 'admin_general'): ?>
+            <form method="get" class="row g-2 align-items-end mb-3">
+                <input type="hidden" name="genero" value="<?= htmlspecialchars($genero) ?>">
+                <div class="col-12 col-md-7">
+                    <label class="form-label small text-muted mb-1">Organización <span class="text-danger">*</span></label>
+                    <select name="organizacion_id" class="form-select form-select-sm">
+                        <option value="0" <?= $organizacion_id === 0 ? 'selected' : '' ?>>— Seleccione organización —</option>
+                        <?php foreach ($organizaciones as $org): ?>
+                            <option value="<?= (int)($org['id'] ?? 0) ?>" <?= ((int)($org['id'] ?? 0) === $organizacion_id) ? 'selected' : '' ?>>
+                                <?= htmlspecialchars((string)($org['nombre'] ?? '')) ?>
+                            </option>
+                        <?php endforeach; ?>
+                    </select>
+                </div>
+                <div class="col-12 col-md-5 d-grid d-md-flex gap-2">
+                    <button type="submit" class="btn btn-sm btn-primary">
+                        <i class="fas fa-filter me-1"></i>Ver ranking
+                    </button>
+                    <?php if ($organizacion_id > 0): ?>
+                        <a href="ranking_atletas.php?genero=<?= htmlspecialchars($genero) ?>" class="btn btn-sm btn-outline-secondary">
+                            <i class="fas fa-eraser me-1"></i>Cambiar organización
+                        </a>
+                    <?php endif; ?>
+                </div>
+            </form>
+            <?php else: ?>
             <form method="get" class="row g-2 align-items-end mb-3">
                 <input type="hidden" name="genero" value="<?= htmlspecialchars($genero) ?>">
                 <div class="col-12 col-md-7">
@@ -167,6 +254,12 @@ function fmtfecha(?string $f): string
                     <?php endif; ?>
                 </div>
             </form>
+            <?php endif; ?>
+            <?php if ($role === 'admin_general' && $ranking_sin_org_admin_general): ?>
+                <div class="alert alert-warning mb-3 py-2">
+                    <i class="fas fa-hand-pointer me-2"></i>Como administrador general, elija una organización arriba y pulse <strong>Ver ranking</strong> para cargar los datos.
+                </div>
+            <?php endif; ?>
             <p class="text-muted small mb-3"><i class="fas fa-info-circle me-1"></i><?= htmlspecialchars($criterio) ?></p>
             <?php if ($atletas === []): ?>
                 <div class="alert alert-info mb-0">

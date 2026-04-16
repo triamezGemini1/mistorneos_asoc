@@ -297,6 +297,12 @@
                             require_once dirname(__DIR__, 4) . '/lib/app_helpers.php';
                         }
                         $url_ranking_atletas_public_panel = rtrim(AppHelpers::getPublicUrl(), '/') . '/ranking_atletas.php';
+                        if (class_exists('Auth') && Auth::user() && (Auth::user()['role'] ?? '') === 'admin_club') {
+                            $oidRankPanel = (int) Auth::getUserOrganizacionId();
+                            if ($oidRankPanel > 0) {
+                                $url_ranking_atletas_public_panel .= '?organizacion_id=' . $oidRankPanel;
+                            }
+                        }
                         ?>
                         <div class="d-grid gap-1">
                             <a href="index.php?page=torneo_gestion&action=cuadricula&torneo_id=<?php echo $torneo['id']; ?>&ronda=<?php echo $ultima_ronda; ?>" 

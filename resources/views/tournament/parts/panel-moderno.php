@@ -668,6 +668,12 @@ tailwind.config = {
                         <?php endif; ?>
                         <?php
                         $url_ranking_atletas_public = rtrim(AppHelpers::getPublicUrl(), '/') . '/ranking_atletas.php';
+                        if (class_exists('Auth') && Auth::user() && (Auth::user()['role'] ?? '') === 'admin_club') {
+                            $oidRank = (int) Auth::getUserOrganizacionId();
+                            if ($oidRank > 0) {
+                                $url_ranking_atletas_public .= '?organizacion_id=' . $oidRank;
+                            }
+                        }
                         ?>
                         <a href="<?php echo htmlspecialchars($url_ranking_atletas_public, ENT_QUOTES, 'UTF-8'); ?>"
                            target="_blank" rel="noopener noreferrer"
