@@ -37,6 +37,13 @@ try {
 } catch (Throwable $ignored) {
     $has_cod_org = false;
 }
+$org_where_expr = $has_cod_org ? "(o.id = ? OR o.cod_org = ?)" : "o.id = ?";
+$club_org_match_expr = $has_cod_org
+    ? "(c.organizacion_id = ? OR c.organizacion_id = (SELECT id FROM organizaciones WHERE cod_org = ? LIMIT 1))"
+    : "c.organizacion_id = ?";
+$torneo_org_match_expr = $has_cod_org
+    ? "(club_responsable = ? OR club_responsable = (SELECT id FROM organizaciones WHERE cod_org = ? LIMIT 1))"
+    : "club_responsable = ?";
 
 // ---------- Vista: Detalle de club (con afiliados) ----------
 if ($organizacion_id && $club_id) {
@@ -49,8 +56,9 @@ if ($organizacion_id && $club_id) {
         $stmt->execute([$club_id]);
         $club = $stmt->fetch(PDO::FETCH_ASSOC);
         if ($club && $club['organizacion_id']) {
-            $stmt = $pdo->prepare("SELECT o.*, e.nombre as entidad_nombre FROM organizaciones o LEFT JOIN entidad e ON o.entidad = e.id WHERE o.id = ?");
-            $stmt->execute([$club['organizacion_id']]);
+            $stmt = $pdo->prepare("SELECT o.*, e.nombre as entidad_nombre FROM organizaciones o LEFT JOIN entidad e ON o.entidad = e.id WHERE {$org_where_expr}");
+            $params = $has_cod_org ? [(int)$club['organizacion_id'], (int)$club['organizacion_id']] : [(int)$club['organizacion_id']];
+            $stmt->execute($params);
             $organizacion = $stmt->fetch(PDO::FETCH_ASSOC);
         }
     } else {
@@ -59,14 +67,31 @@ if ($organizacion_id && $club_id) {
             $stmt = $pdo->prepare("SELECT * FROM clubes WHERE id = ? AND estatus = 1");
             $stmt->execute([$club_id]);
             $club = $stmt->fetch(PDO::FETCH_ASSOC);
-            if ($club && $club['organizacion_id'] == $organizacion_id) {
-                $stmt = $pdo->prepare("SELECT o.*, e.nombre as entidad_nombre FROM organizaciones o LEFT JOIN entidad e ON o.entidad = e.id WHERE o.id = ?");
-                $stmt->execute([$organizacion_id]);
+            $clubPerteneceOrg = false;
+            if ($club) {
+                $orgRefCheck = (int)$organizacion_id;
+                $clubOrgId = (int)($club['organizacion_id'] ?? 0);
+                if ($clubOrgId === $orgRefCheck) {
+                    $clubPerteneceOrg = true;
+                } elseif ($has_cod_org) {
+                    $stOrgId = $pdo->prepare("SELECT id FROM organizaciones WHERE cod_org = ? LIMIT 1");
+                    $stOrgId->execute([$orgRefCheck]);
+                    $orgIdReal = (int)($stOrgId->fetchColumn() ?: 0);
+                    $clubPerteneceOrg = ($orgIdReal > 0 && $clubOrgId === $orgIdReal);
+                }
+            }
+            if ($club && $clubPerteneceOrg) {
+                $stmt = $pdo->prepare("SELECT o.*, e.nombre as entidad_nombre FROM organizaciones o LEFT JOIN entidad e ON o.entidad = e.id WHERE {$org_where_expr}");
+                $stmt->execute($has_cod_org ? [$organizacion_id, $organizacion_id] : [$organizacion_id]);
                 $organizacion = $stmt->fetch(PDO::FETCH_ASSOC);
             }
         }
     }
     if ($club && $organizacion) {
+        $org_scope_ref = (int)($organizacion['cod_org'] ?? 0);
+        if ($org_scope_ref <= 0) {
+            $org_scope_ref = (int)($organizacion['id'] ?? $organizacion_id);
+        }
         $afiliados_page = max(1, (int)($_GET['afiliados_page'] ?? 1));
         $afiliados_per_page = 15;
         $sexo = strtolower(trim((string)($_GET['sexo'] ?? 'todos')));
@@ -104,15 +129,15 @@ if ($organizacion_id && $club_id) {
                   AND COALESCE(u.club_id, 0) = ?
                   AND COALESCE(u.numfvd, 0) > 0
             ");
-            $stTry->execute([$organizacion_id, $clubIdReal]);
+            $stTry->execute([$org_scope_ref, $clubIdReal]);
             $conteoPorClub = (int)$stTry->fetchColumn();
 
             if ($conteoPorClub > 0) {
                 $scopeSql = "u.organizacion_id = ? AND COALESCE(u.club_id, 0) = ? AND COALESCE(u.numfvd, 0) > 0";
-                $scopeParams = [$organizacion_id, $clubIdReal];
+                $scopeParams = [$org_scope_ref, $clubIdReal];
             } else {
                 $scopeSql = "u.organizacion_id = ? AND COALESCE(u.entidad, 0) = ? AND COALESCE(u.numfvd, 0) > 0";
-                $scopeParams = [$organizacion_id, $entidadClub];
+                $scopeParams = [$org_scope_ref, $entidadClub];
             }
 
             $stResumen = $pdo->prepare("
@@ -212,21 +237,21 @@ if ($organizacion_id) {
             FROM organizaciones o
             LEFT JOIN entidad e ON o.entidad = e.id
             LEFT JOIN usuarios u ON o.admin_user_id = u.id
-            WHERE o.id = ?
+            WHERE {$org_where_expr}
         ");
-        $stmt->execute([$organizacion_id]);
+        $stmt->execute($has_cod_org ? [$organizacion_id, $organizacion_id] : [$organizacion_id]);
         $organizacion = $stmt->fetch(PDO::FETCH_ASSOC);
     } else {
         $org_id = Auth::getUserOrganizacionId();
-        if ($org_id == $organizacion_id) {
+        if ($org_id == $organizacion_id || ($has_cod_org && $org_id > 0 && (int)$organizacion_id > 0)) {
             $stmt = $pdo->prepare("
                 SELECT o.*, e.nombre as entidad_nombre, u.nombre as admin_nombre, u.email as admin_email
                 FROM organizaciones o
                 LEFT JOIN entidad e ON o.entidad = e.id
                 LEFT JOIN usuarios u ON o.admin_user_id = u.id
-                WHERE o.id = ? AND o.estatus = 1
+                WHERE {$org_where_expr} AND o.estatus = 1
             ");
-            $stmt->execute([$organizacion_id]);
+            $stmt->execute($has_cod_org ? [$organizacion_id, $organizacion_id] : [$organizacion_id]);
             $organizacion = $stmt->fetch(PDO::FETCH_ASSOC);
         }
     }
@@ -234,6 +259,10 @@ if ($organizacion_id) {
         $organizacion_id = null;
     }
     if ($organizacion) {
+    $organizacion_ref = (int)($organizacion['cod_org'] ?? 0);
+    if ($organizacion_ref <= 0) {
+        $organizacion_ref = (int)($organizacion['id'] ?? $organizacion_id);
+    }
     $clubes_page = max(1, (int)($_GET['clubes_page'] ?? 1));
     $clubes_per_page = 15;
     $hasUsuariosOrganizacionId = false;
@@ -271,23 +300,23 @@ if ($organizacion_id) {
                   AND COALESCE(u.numfvd, 0) > 0
             ) ue
             LEFT JOIN clubes c
-                ON c.organizacion_id = ?
+                ON " . ($has_cod_org ? "(c.organizacion_id = ? OR c.organizacion_id = (SELECT id FROM organizaciones WHERE cod_org = ? LIMIT 1))" : "c.organizacion_id = ?") . "
                AND c.entidad = ue.entidad
                AND c.estatus = 1
             LEFT JOIN entidad e
                 ON e.id = ue.entidad
             ORDER BY nombre ASC
         ");
-        $stmt->execute([$organizacion_id, $organizacion_id]);
+        $stmt->execute($has_cod_org ? [$organizacion_ref, $organizacion_ref, $organizacion_ref] : [$organizacion_ref, $organizacion_ref]);
         $clubes = $stmt->fetchAll(PDO::FETCH_ASSOC);
     } else {
         $stmt = $pdo->prepare("
             SELECT c.id, c.nombre, c.delegado, c.telefono, c.direccion, c.estatus, c.entidad
             FROM clubes c
-            WHERE c.organizacion_id = ? AND c.estatus = 1
+            WHERE {$club_org_match_expr} AND c.estatus = 1
             ORDER BY c.nombre ASC
         ");
-        $stmt->execute([$organizacion_id]);
+        $stmt->execute($has_cod_org ? [$organizacion_ref, $organizacion_ref] : [$organizacion_ref]);
         $clubes = $stmt->fetchAll(PDO::FETCH_ASSOC);
     }
     $stats_afiliados_sin_club = 0;
@@ -313,7 +342,7 @@ if ($organizacion_id) {
                   AND COALESCE(u.entidad, 0) = ?
                   " . ($esFvd ? " AND COALESCE(u.numfvd, 0) > 0 " : "") . "
             ");
-            $st->execute([$organizacion_id, $entidadClub]);
+            $st->execute([$organizacion_ref, $entidadClub]);
         } else {
             $st = $pdo->prepare("
                 SELECT
@@ -353,7 +382,7 @@ if ($organizacion_id) {
             WHERE u.organizacion_id = ?
               AND COALESCE(u.numfvd, 0) > 0
         ");
-        $stTotalFvd->execute([$organizacion_id]);
+        $stTotalFvd->execute([$organizacion_ref]);
         $rowFvd = $stTotalFvd->fetch(PDO::FETCH_ASSOC) ?: [];
         $stats_afiliados_total = (int)($rowFvd['total'] ?? 0);
         $stats_hombres_total = (int)($rowFvd['hombres'] ?? 0);
@@ -441,7 +470,7 @@ if ($is_admin_general && !$organizacion_id && !$club_id && $entidad_id > 0) {
         } else {
             $stmt = $pdo->prepare("
                 SELECT o.id, o.nombre, o.estatus,
-                       (SELECT COUNT(*) FROM clubes WHERE organizacion_id = o.id AND estatus = 1) as total_clubes,
+                       (SELECT COUNT(*) FROM clubes c WHERE " . ($has_cod_org ? "(c.organizacion_id = COALESCE(NULLIF(o.cod_org, 0), o.id) OR c.organizacion_id = o.id)" : "c.organizacion_id = o.id") . " AND c.estatus = 1) as total_clubes,
                        (SELECT COUNT(*) FROM tournaments WHERE " . ($has_cod_org ? "(club_responsable = o.id OR club_responsable = o.cod_org)" : "club_responsable = o.id") . ") as total_torneos
                 FROM organizaciones o
                 WHERE o.entidad = ?
@@ -495,9 +524,13 @@ if ($is_admin_general && !$organizacion_id && !$club_id && $entidad_id > 0) {
                         SUM(CASE WHEN UPPER(COALESCE(u.sexo,'M'))='F' THEN 1 ELSE 0 END) AS mujeres
                     FROM usuarios u
                     INNER JOIN clubes c ON u.club_id = c.id
-                    WHERE c.organizacion_id = ? AND c.estatus = 1
+                    WHERE " . ($has_cod_org ? "(c.organizacion_id = ? OR c.organizacion_id = (SELECT id FROM organizaciones WHERE cod_org = ? LIMIT 1))" : "c.organizacion_id = ?") . " AND c.estatus = 1
                 ");
-                $stmt2->execute([$org['id']]);
+                $orgRef = (int)($org['cod_org'] ?? 0);
+                if ($orgRef <= 0) {
+                    $orgRef = (int)($org['id'] ?? 0);
+                }
+                $stmt2->execute($has_cod_org ? [$orgRef, $orgRef] : [$orgRef]);
                 $r2 = $stmt2->fetch(PDO::FETCH_ASSOC) ?: [];
                 $org['total_afiliados'] = (int)($r2['total_afiliados'] ?? 0);
                 $org['hombres'] = (int)($r2['hombres'] ?? 0);
@@ -550,17 +583,27 @@ if ($is_admin_general && !$organizacion_id && !$club_id) {
         if ($org_ids) {
             $ph = implode(',', array_fill(0, count($org_ids), '?'));
             $stmt = $pdo->prepare("SELECT COUNT(*) FROM clubes WHERE organizacion_id IN ($ph) AND estatus = 1");
-            $stmt->execute($org_ids);
+            if ($has_cod_org) {
+                $stmt = $pdo->prepare("SELECT COUNT(*) FROM clubes c WHERE (c.organizacion_id IN ($ph) OR c.organizacion_id IN (SELECT cod_org FROM organizaciones WHERE id IN ($ph))) AND c.estatus = 1");
+                $stmt->execute(array_merge($org_ids, $org_ids));
+            } else {
+                $stmt->execute($org_ids);
+            }
             $total_clubes = (int)$stmt->fetchColumn();
-            $stmt = $pdo->prepare("SELECT COUNT(*) FROM tournaments WHERE club_responsable IN ($ph)");
-            $stmt->execute($org_ids);
+            if ($has_cod_org) {
+                $stmt = $pdo->prepare("SELECT COUNT(*) FROM tournaments WHERE club_responsable IN ($ph) OR club_responsable IN (SELECT cod_org FROM organizaciones WHERE id IN ($ph))");
+                $stmt->execute(array_merge($org_ids, $org_ids));
+            } else {
+                $stmt = $pdo->prepare("SELECT COUNT(*) FROM tournaments WHERE club_responsable IN ($ph)");
+                $stmt->execute($org_ids);
+            }
             $total_torneos = (int)$stmt->fetchColumn();
             $stmt = $pdo->prepare("
                 SELECT COUNT(*) FROM usuarios u
                 INNER JOIN clubes c ON u.club_id = c.id
-                WHERE c.organizacion_id IN ($ph) AND c.estatus = 1 AND u.role = 'usuario' AND u.status = 0
+                WHERE " . ($has_cod_org ? "(c.organizacion_id IN ($ph) OR c.organizacion_id IN (SELECT cod_org FROM organizaciones WHERE id IN ($ph)))" : "c.organizacion_id IN ($ph)") . " AND c.estatus = 1 AND u.role = 'usuario' AND u.status = 0
             ");
-            $stmt->execute($org_ids);
+            $stmt->execute($has_cod_org ? array_merge($org_ids, $org_ids) : $org_ids);
             $total_afiliados = (int)$stmt->fetchColumn();
         }
         $resumen_entidades[] = [
@@ -580,7 +623,7 @@ if ($is_admin_general && !$organizacion_id && !$club_id) {
 try {
     $stmt = $pdo->query("
         SELECT o.*, e.id as entidad_id, e.nombre as entidad_nombre,
-               (SELECT COUNT(*) FROM clubes WHERE organizacion_id = o.id AND estatus = 1) as total_clubes,
+               (SELECT COUNT(*) FROM clubes c WHERE " . ($has_cod_org ? "(c.organizacion_id = COALESCE(NULLIF(o.cod_org,0), o.id) OR c.organizacion_id = o.id)" : "c.organizacion_id = o.id") . " AND c.estatus = 1) as total_clubes,
                (SELECT COUNT(*) FROM tournaments WHERE " . ($has_cod_org ? "(club_responsable = o.id OR club_responsable = o.cod_org)" : "club_responsable = o.id") . ") as total_torneos
         FROM organizaciones o
         LEFT JOIN entidad e ON o.entidad = e.id

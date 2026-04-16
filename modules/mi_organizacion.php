@@ -25,6 +25,13 @@ try {
 } catch (Throwable $ignored) {
     $has_cod_org = false;
 }
+$org_ref_expr = $has_cod_org ? "COALESCE(NULLIF(o.cod_org, 0), o.id)" : "o.id";
+$org_club_match_expr = $has_cod_org
+    ? "(c.organizacion_id = ? OR c.organizacion_id = (SELECT id FROM organizaciones WHERE cod_org = ? LIMIT 1))"
+    : "c.organizacion_id = ?";
+$org_torneo_match_expr = $has_cod_org
+    ? "(club_responsable = ? OR club_responsable = (SELECT id FROM organizaciones WHERE cod_org = ? LIMIT 1))"
+    : "club_responsable = ?";
 
 // Obtener la organización del usuario
 $organizacion = null;
@@ -368,8 +375,8 @@ if ($is_admin_general) {
     if (!$organizacion_id && $action_get !== 'new') {
         $stmt = DB::pdo()->query("
             SELECT o.*, e.nombre as entidad_nombre, u.nombre as admin_nombre,
-                   (SELECT COUNT(*) FROM clubes WHERE organizacion_id = o.id) as total_clubes,
-                   (SELECT COUNT(*) FROM tournaments WHERE club_responsable = o.id) as total_torneos
+                   (SELECT COUNT(*) FROM clubes c WHERE " . ($has_cod_org ? "(c.organizacion_id = COALESCE(NULLIF(o.cod_org, 0), o.id) OR c.organizacion_id = o.id)" : "c.organizacion_id = o.id") . ") as total_clubes,
+                   (SELECT COUNT(*) FROM tournaments WHERE " . ($has_cod_org ? "(club_responsable = COALESCE(NULLIF(o.cod_org, 0), o.id) OR club_responsable = o.id)" : "club_responsable = o.id") . ") as total_torneos
             FROM organizaciones o
             LEFT JOIN entidad e ON o.entidad = e.id
             LEFT JOIN usuarios u ON o.admin_user_id = u.id
@@ -406,20 +413,24 @@ if ($is_admin_general) {
 // Obtener estadísticas de la organización
 $stats = ['clubes' => 0, 'torneos' => 0, 'afiliados' => 0];
 if ($organizacion) {
-    $stmt = DB::pdo()->prepare("SELECT COUNT(*) FROM clubes WHERE organizacion_id = ?");
-    $stmt->execute([$organizacion['id']]);
+    $orgRef = (int)($organizacion['cod_org'] ?? 0);
+    if ($orgRef <= 0) {
+        $orgRef = (int)($organizacion['id'] ?? 0);
+    }
+    $stmt = DB::pdo()->prepare("SELECT COUNT(*) FROM clubes c WHERE {$org_club_match_expr}");
+    $stmt->execute($has_cod_org ? [$orgRef, $orgRef] : [$orgRef]);
     $stats['clubes'] = (int)$stmt->fetchColumn();
     
-    $stmt = DB::pdo()->prepare("SELECT COUNT(*) FROM tournaments WHERE club_responsable = ?");
-    $stmt->execute([$organizacion['id']]);
+    $stmt = DB::pdo()->prepare("SELECT COUNT(*) FROM tournaments WHERE {$org_torneo_match_expr}");
+    $stmt->execute($has_cod_org ? [$orgRef, $orgRef] : [$orgRef]);
     $stats['torneos'] = (int)$stmt->fetchColumn();
     
     $stmt = DB::pdo()->prepare("
         SELECT COUNT(*) FROM usuarios u 
         INNER JOIN clubes c ON u.club_id = c.id 
-        WHERE c.organizacion_id = ? AND u.role = 'usuario' AND u.status = 0
+        WHERE {$org_club_match_expr} AND u.role = 'usuario' AND u.status = 0
     ");
-    $stmt->execute([$organizacion['id']]);
+    $stmt->execute($has_cod_org ? [$orgRef, $orgRef] : [$orgRef]);
     $stats['afiliados'] = (int)$stmt->fetchColumn();
 }
 ?>
