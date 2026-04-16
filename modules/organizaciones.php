@@ -40,6 +40,8 @@ try {
 require_once __DIR__ . '/../lib/OrganizacionDashboardStats.php';
 $usuarios_territorio_expr = OrganizacionDashboardStats::usuarioTerritorioCoalesceExpr($pdo);
 $org_where_expr = $has_cod_org ? "(o.id = ? OR o.cod_org = ?)" : "o.id = ?";
+// Sin alias de tabla (p. ej. SELECT … FROM organizaciones WHERE …)
+$org_where_expr_bare = $has_cod_org ? "(id = ? OR cod_org = ?)" : "id = ?";
 $club_org_match_expr = $has_cod_org
     ? "(c.organizacion_id = ? OR c.organizacion_id = (SELECT id FROM organizaciones WHERE cod_org = ? LIMIT 1))"
     : "c.organizacion_id = ?";
@@ -65,7 +67,7 @@ if ($organizacion_id && $club_id) {
         }
     } else {
         $org_id_user = (int) Auth::getUserOrganizacionId();
-        $stmtChk = $pdo->prepare("SELECT id FROM organizaciones WHERE {$org_where_expr} AND estatus = 1 LIMIT 1");
+        $stmtChk = $pdo->prepare("SELECT id FROM organizaciones WHERE {$org_where_expr_bare} AND estatus = 1 LIMIT 1");
         $stmtChk->execute($has_cod_org ? [$organizacion_id, $organizacion_id] : [$organizacion_id]);
         $orgPkResuelto = (int) $stmtChk->fetchColumn();
         if ($org_id_user > 0 && $orgPkResuelto > 0 && $orgPkResuelto === $org_id_user) {

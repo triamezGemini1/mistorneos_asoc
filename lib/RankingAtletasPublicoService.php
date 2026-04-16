@@ -37,6 +37,18 @@ final class RankingAtletasPublicoService
         }
     }
 
+    /** Algunas BD no tienen tournaments.organizacion_id; no usar COALESCE(t.organizacion_id, …) en ese caso. */
+    private function hasColumnTournamentsOrganizacionId(): bool
+    {
+        try {
+            $this->pdo->query('SELECT `organizacion_id` FROM `tournaments` LIMIT 0');
+
+            return true;
+        } catch (Throwable $e) {
+            return false;
+        }
+    }
+
     /**
      * Filas de participación + torneo para un sexo (M|F).
      *
@@ -49,17 +61,28 @@ final class RankingAtletasPublicoService
         $pub = $this->hasColumnPublicarLanding()
             ? ' AND (t.publicar_landing = 1 OR t.publicar_landing IS NULL)'
             : '';
+
+        $tOrgRef = $this->hasColumnTournamentsOrganizacionId()
+            ? 'COALESCE(t.organizacion_id, t.club_responsable, 0)'
+            : 'COALESCE(t.club_responsable, 0)';
+
         $whereOrg = '';
+        /** @var list<int|float|string> $orgParams */
+        $orgParams = [];
         if ($organizacionId > 0) {
-            // PDO con emulación desactivada no permite repetir el mismo nombre de parámetro dos veces en MySQL.
-            $whereOrg = $this->hasColumnCodOrg()
-                ? " AND EXISTS (
+            // Solo placeholders posicionales (?): evita HY093 con PDO nativo y nombres duplicados.
+            if ($this->hasColumnCodOrg()) {
+                $whereOrg = " AND EXISTS (
                         SELECT 1
                         FROM organizaciones ox
-                        WHERE (ox.id = :organizacion_id_a OR ox.cod_org = :organizacion_id_b)
-                          AND (ox.id = COALESCE(t.organizacion_id, t.club_responsable, 0) OR ox.cod_org = COALESCE(t.organizacion_id, t.club_responsable, 0))
-                    )"
-                : " AND COALESCE(t.organizacion_id, t.club_responsable, 0) = :organizacion_id";
+                        WHERE (ox.id = ? OR ox.cod_org = ?)
+                          AND (ox.id = {$tOrgRef} OR ox.cod_org = {$tOrgRef})
+                    )";
+                $orgParams = [$organizacionId, $organizacionId];
+            } else {
+                $whereOrg = " AND {$tOrgRef} = ?";
+                $orgParams = [$organizacionId];
+            }
         }
         $wEst = InscritosHelper::sqlWhereActivoConAlias('i');
         $ig = InscritosHelper::sqlExprColumnaNumerica('i.ganados');
@@ -85,7 +108,7 @@ final class RankingAtletasPublicoService
             FROM inscritos i
             INNER JOIN usuarios u ON i.id_usuario = u.id
             INNER JOIN tournaments t ON i.torneo_id = t.id
-            WHERE u.sexo = :sexo
+            WHERE u.sexo = ?
             AND $wEst
             AND t.estatus = 1
             AND COALESCE(t.ranking, 0) = 1
@@ -95,15 +118,7 @@ final class RankingAtletasPublicoService
             ORDER BY u.id ASC, t.fechator DESC
         ";
         $st = $this->pdo->prepare($sql);
-        $params = ['sexo' => $sexo];
-        if ($organizacionId > 0) {
-            if ($this->hasColumnCodOrg()) {
-                $params['organizacion_id_a'] = $organizacionId;
-                $params['organizacion_id_b'] = $organizacionId;
-            } else {
-                $params['organizacion_id'] = $organizacionId;
-            }
-        }
+        $params = array_merge([$sexo], $orgParams);
         $st->execute($params);
 
         return $st->fetchAll(PDO::FETCH_ASSOC) ?: [];
