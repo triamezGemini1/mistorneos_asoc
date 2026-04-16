@@ -393,6 +393,12 @@ if ($current_page === 'estadisticas_torneos') {
                 <span>Directorio de Clubes</span>
               </a>
             </li>
+            <li class="nav-item mb-1">
+              <a href="<?= htmlspecialchars($dashboard_href('entidades', ['action' => 'index'])) ?>#estructura-asociaciones" class="nav-link nav-sub-sub-link <?= $current_page === 'entidades' ? 'active' : '' ?>">
+                <i class="fas fa-project-diagram me-2"></i>
+                <span>Estructura asociaciones</span>
+              </a>
+            </li>
           </ul>
         </li>
         <!-- 3. Afiliaciones (acordeón: Invitar, Solicitudes) -->

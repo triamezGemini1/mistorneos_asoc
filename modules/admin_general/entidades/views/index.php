@@ -193,4 +193,23 @@ $csrf_token = class_exists('CSRF') ? CSRF::token() : '';
             </div>
         </div>
     </div>
+
+    <div class="card shadow-sm mt-4" id="estructura-asociaciones">
+        <div class="card-header bg-light">
+            <h5 class="mb-0"><i class="fas fa-project-diagram me-2"></i>Estructura automática de asociaciones</h5>
+        </div>
+        <div class="card-body">
+            <p class="text-muted mb-3">
+                Crea, para cada asociación (entidad activa), una organización con <code>tipo_org = 0</code> y un club dependiente directo con el mismo nombre.
+                El proceso evita duplicados si la estructura ya existe.
+            </p>
+            <form method="post" action="index.php?page=entidades" onsubmit="return confirm('Se creará la estructura de organizaciones y clubes para asociaciones activas. ¿Desea continuar?');">
+                <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($csrf_token) ?>">
+                <input type="hidden" name="crud_action" value="crear_estructura_asociaciones">
+                <button type="submit" class="btn btn-primary">
+                    <i class="fas fa-sitemap me-1"></i>Generar estructura de asociaciones
+                </button>
+            </form>
+        </div>
+    </div>
 </div>
