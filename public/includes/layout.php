@@ -12,6 +12,9 @@ if (!$user || !is_array($user)) {
     return;
 }
 $current_page = (isset($page) && $page !== '') ? $page : ($_GET['page'] ?? 'home');
+$layout_nav_action = trim((string) ($_GET['action'] ?? ''));
+require_once __DIR__ . '/../../lib/ReportReturnNavigation.php';
+ReportReturnNavigation::updateSessionFromRequest($current_page, $layout_nav_action);
 
 // Base URL para CSS/JS (carpeta public/) — evita doble public/public
 // Priorizar SCRIPT_NAME para que la base coincida con la petición real y no se carguen assets desde otra app (ej. phpMyAdmin)
@@ -148,6 +151,10 @@ if ($from_url !== '') {
     if ($safe) {
         $nav_origin = htmlspecialchars($decoded, ENT_QUOTES, 'UTF-8');
     }
+}
+if ($nav_origin === '' && ReportReturnNavigation::isReportView($current_page, $layout_nav_action)) {
+    $storedReturn = ReportReturnNavigation::getStoredReturnRelativeUrl();
+    $nav_origin = htmlspecialchars($storedReturn !== '' ? $storedReturn : 'index.php?page=home', ENT_QUOTES, 'UTF-8');
 }
 $body_page_extra = '';
 if ($current_page === 'torneo_gestion') {

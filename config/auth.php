@@ -593,13 +593,10 @@ class Auth {
     }
     try {
       $pdo = DB::pdo();
-      if (self::hasCodOrg()) {
-        $stmt = $pdo->prepare('SELECT * FROM organizaciones WHERE (id = ? OR cod_org = ?) AND estatus = 1 LIMIT 1');
-        $stmt->execute([$org_id, $org_id]);
-      } else {
-        $stmt = $pdo->prepare('SELECT * FROM organizaciones WHERE id = ? AND estatus = 1 LIMIT 1');
-        $stmt->execute([$org_id]);
-      }
+      // getUserOrganizacionId() es siempre la PK: no usar (id OR cod_org) con el mismo parámetro
+      // (colisión: otra fila puede tener cod_org = id de Caracas y devolver la org equivocada → 0 torneos).
+      $stmt = $pdo->prepare('SELECT * FROM organizaciones WHERE id = ? AND estatus = 1 LIMIT 1');
+      $stmt->execute([(int) $org_id]);
       $row = $stmt->fetch(PDO::FETCH_ASSOC);
 
       return $row ?: null;

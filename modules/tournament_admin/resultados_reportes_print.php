@@ -3,6 +3,7 @@
  * Impresión por tipo (mismo contenido que PDF). Letter. tipo en GET.
  */
 require_once __DIR__ . '/../../lib/app_helpers.php';
+require_once __DIR__ . '/../../lib/ReportReturnNavigation.php';
 require_once __DIR__ . '/../../lib/ResultadosReporteData.php';
 require_once __DIR__ . '/../../lib/ResultadosPorClubHelper.php';
 
@@ -65,6 +66,7 @@ $title = $titles[$tipo] ?? 'Reporte';
 <body>
 <div class="no-print">
     <button type="button" onclick="window.print()">Imprimir / Guardar PDF</button>
+    <a href="<?= $esc(ReportReturnNavigation::getReturnAbsoluteUrl()) ?>">Volver a pantalla anterior</a>
     <a href="<?= $esc(AppHelpers::url('index.php', ['page' => 'torneo_gestion', 'action' => 'resultados_reportes', 'torneo_id' => (int)$torneo_id])) ?>">Volver a reportes</a>
     <?php
     $origen = [
@@ -78,7 +80,7 @@ $title = $titles[$tipo] ?? 'Reporte';
     ];
     $act = $origen[$tipo] ?? 'resultados_reportes';
     ?>
-    <a href="<?= $esc(AppHelpers::url('index.php', ['page' => 'torneo_gestion', 'action' => $act, 'torneo_id' => (int)$torneo_id])) ?>">Volver al origen</a>
+    <a href="<?= $esc(AppHelpers::url('index.php', ['page' => 'torneo_gestion', 'action' => $act, 'torneo_id' => (int)$torneo_id])) ?>">Volver a la vista en torneo</a>
 </div>
 
 <?php
