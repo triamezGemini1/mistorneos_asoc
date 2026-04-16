@@ -319,15 +319,36 @@ class Auth {
       return null;
     }
     try {
-      $stmt = DB::pdo()->prepare(self::hasCodOrg()
-        ? "SELECT COALESCE(NULLIF(cod_org, 0), id) FROM organizaciones WHERE admin_user_id = ? AND estatus = 1 LIMIT 1"
-        : "SELECT id FROM organizaciones WHERE admin_user_id = ? AND estatus = 1 LIMIT 1");
+      // IMPORTANTE: este método devuelve SIEMPRE el ID físico (PK) de organizaciones
+      // para mantener compatibilidad con módulos legacy.
+      $stmt = DB::pdo()->prepare("SELECT id FROM organizaciones WHERE admin_user_id = ? AND estatus = 1 LIMIT 1");
       $stmt->execute([self::id()]);
       $org_id = $stmt->fetchColumn();
       self::$cached_organizacion_id = $org_id ? (int)$org_id : null;
       return self::$cached_organizacion_id;
     } catch (Exception $e) {
       self::$cached_organizacion_id = null;
+      return null;
+    }
+  }
+
+  /**
+   * Referencia canónica de organización para nuevos flujos (cod_org si existe, fallback id).
+   */
+  public static function getUserOrganizacionRef(): ?int {
+    $u = self::user();
+    if (!$u || $u['role'] !== 'admin_club') {
+      return null;
+    }
+    try {
+      if (self::hasCodOrg()) {
+        $stmt = DB::pdo()->prepare("SELECT COALESCE(NULLIF(cod_org, 0), id) FROM organizaciones WHERE admin_user_id = ? AND estatus = 1 LIMIT 1");
+        $stmt->execute([self::id()]);
+        $ref = $stmt->fetchColumn();
+        return $ref ? (int)$ref : null;
+      }
+      return self::getUserOrganizacionId();
+    } catch (Exception $e) {
       return null;
     }
   }
