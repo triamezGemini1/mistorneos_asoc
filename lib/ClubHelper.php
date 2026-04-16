@@ -154,7 +154,7 @@ class ClubHelper {
     public static function isClubManagedByAdmin(int $admin_club_user_id, int $club_id): bool {
         try {
             $pdo = DB::pdo();
-            $stmt = $pdo->prepare("SELECT organizacion_id FROM clubes WHERE id = ? LIMIT 1");
+            $stmt = $pdo->prepare("SELECT cod_org FROM clubes WHERE id = ? LIMIT 1");
             $stmt->execute([$club_id]);
             $club_org_id = $stmt->fetchColumn();
             if ($club_org_id) {
@@ -206,8 +206,8 @@ class ClubHelper {
             $stmt = DB::pdo()->prepare("
                 SELECT c.id, c.nombre, c.delegado
                 FROM clubes c
-                INNER JOIN clubes c2 ON c.organizacion_id = c2.organizacion_id AND c2.id = ?
-                WHERE c.id != ? AND c.estatus = 1 AND c.organizacion_id IS NOT NULL
+                INNER JOIN clubes c2 ON c.cod_org = c2.cod_org AND c2.id = ?
+                WHERE c.id != ? AND c.estatus = 1 AND c.cod_org IS NOT NULL
                 ORDER BY c.nombre ASC
             ");
             $stmt->execute([$club_principal_id, $club_principal_id]);

@@ -2055,7 +2055,7 @@ final class ImportacionTorneoExternoService
     /**
      * Organización y entidad por defecto según el torneo (club_responsable puede ser id de organización o de club).
      *
-     * @return array{0: int, 1: int} [organizacion_id, entidad]
+     * @return array{0: int, 1: int} [ref organización, entidad]
      */
     public static function organizacionYEntidadDefaultPorTorneo(PDO $pdo, int $torneoId): array
     {
@@ -2071,11 +2071,11 @@ final class ImportacionTorneoExternoService
         if ($o) {
             return [(int) ($o['id'] ?? 0), (int) ($o['entidad'] ?? 0)];
         }
-        $stC = $pdo->prepare('SELECT organizacion_id, entidad FROM clubes WHERE id = ? LIMIT 1');
+        $stC = $pdo->prepare('SELECT cod_org, entidad FROM clubes WHERE id = ? LIMIT 1');
         $stC->execute([$cr]);
         $c = $stC->fetch(PDO::FETCH_ASSOC);
         if ($c) {
-            return [(int) ($c['organizacion_id'] ?? 0), (int) ($c['entidad'] ?? 0)];
+            return [(int) ($c['cod_org'] ?? 0), (int) ($c['entidad'] ?? 0)];
         }
 
         return [0, 0];
@@ -2092,14 +2092,14 @@ final class ImportacionTorneoExternoService
         }
         if ($orgId > 0) {
             if (self::hasCodOrg($pdo)) {
-                $st = $pdo->prepare('SELECT id FROM clubes WHERE (organizacion_id = ? OR organizacion_id = (SELECT id FROM organizaciones WHERE cod_org = ? LIMIT 1)) AND UPPER(TRIM(nombre)) = UPPER(?) LIMIT 1');
+                $st = $pdo->prepare('SELECT id FROM clubes WHERE (cod_org = ? OR cod_org = (SELECT id FROM organizaciones WHERE cod_org = ? LIMIT 1)) AND UPPER(TRIM(nombre)) = UPPER(?) LIMIT 1');
                 $st->execute([$orgId, $orgId, $nombre]);
             } else {
-                $st = $pdo->prepare('SELECT id FROM clubes WHERE organizacion_id = ? AND UPPER(TRIM(nombre)) = UPPER(?) LIMIT 1');
+                $st = $pdo->prepare('SELECT id FROM clubes WHERE cod_org = ? AND UPPER(TRIM(nombre)) = UPPER(?) LIMIT 1');
                 $st->execute([$orgId, $nombre]);
             }
         } else {
-            $st = $pdo->prepare('SELECT id FROM clubes WHERE (organizacion_id IS NULL OR organizacion_id = 0) AND UPPER(TRIM(nombre)) = UPPER(?) LIMIT 1');
+            $st = $pdo->prepare('SELECT id FROM clubes WHERE (cod_org IS NULL OR cod_org = 0) AND UPPER(TRIM(nombre)) = UPPER(?) LIMIT 1');
             $st->execute([$nombre]);
         }
 
@@ -2109,7 +2109,7 @@ final class ImportacionTorneoExternoService
     /**
      * Crea clubes desde Excel/CSV para que existan antes de homologar inscritos (mismo ámbito que el torneo).
      * Cabecera obligatoria: nombre (o club / nombre_club).
-     * Opcionales: direccion, telefono, email, delegado, organizacion_id, entidad, codigo_externo (solo informativo en log).
+     * Opcionales: direccion, telefono, email, delegado, cod_org (o organizacion_id en cabecera), entidad, codigo_externo (solo informativo en log).
      *
      * @param list<list<string>> $rows Primera fila = cabeceras
      *
@@ -2157,7 +2157,7 @@ final class ImportacionTorneoExternoService
         $iTel = $find($header, ['telefono', 'teléfono', 'celular', 'phone']);
         $iEmail = $find($header, ['email', 'correo', 'mail']);
         $iDel = $find($header, ['delegado', 'contacto', 'responsable']);
-        $iOrg = $find($header, ['organizacion_id', 'id_organizacion', 'organizacion']);
+        $iOrg = $find($header, ['cod_org', 'organizacion_id', 'id_organizacion', 'organizacion']);
         $iEnt = $find($header, ['entidad', 'cod_entidad', 'id_entidad']);
 
         $pdo->beginTransaction();
@@ -2195,7 +2195,7 @@ final class ImportacionTorneoExternoService
                 $del = $iDel >= 0 ? trim((string) ($row[$iDel] ?? '')) : '';
 
                 $stmt = $pdo->prepare(
-                    'INSERT INTO clubes (nombre, direccion, delegado, telefono, email, estatus, organizacion_id, entidad)
+                    'INSERT INTO clubes (nombre, direccion, delegado, telefono, email, estatus, cod_org, entidad)
                      VALUES (?, ?, ?, ?, ?, 1, ?, ?)'
                 );
                 $stmt->execute([

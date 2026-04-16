@@ -124,20 +124,20 @@ if (!$usuario && $torneo) {
         $stmt = $pdo->prepare("
             SELECT c.id, c.nombre
             FROM clubes c
-            WHERE c.organizacion_id = ? AND (c.estatus = 1 OR c.estatus = '1')
+            WHERE c.cod_org = ? AND (c.estatus = 1 OR c.estatus = '1')
               AND (COALESCE(c.permite_inscripcion_linea, 1) = 1)
             ORDER BY c.nombre ASC
         ");
         $stmt->execute([$org_id]);
         $clubes_organizacion = $stmt->fetchAll(PDO::FETCH_ASSOC);
         if (empty($clubes_organizacion)) {
-            $stmt = $pdo->prepare("SELECT organizacion_id FROM clubes WHERE id = ?");
+            $stmt = $pdo->prepare("SELECT cod_org FROM clubes WHERE id = ?");
             $stmt->execute([$org_id]);
             $club_org = $stmt->fetchColumn();
             if ($club_org) {
                 $stmt = $pdo->prepare("
                     SELECT c.id, c.nombre FROM clubes c
-                    WHERE c.organizacion_id = ? AND (c.estatus = 1 OR c.estatus = '1')
+                    WHERE c.cod_org = ? AND (c.estatus = 1 OR c.estatus = '1')
                       AND (COALESCE(c.permite_inscripcion_linea, 1) = 1)
                     ORDER BY c.nombre ASC
                 ");

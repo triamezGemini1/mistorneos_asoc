@@ -81,7 +81,7 @@ if (!$organizacion) {
     exit(1);
 }
 
-$stmt = $pdo->prepare("SELECT id, nombre, organizacion_id FROM clubes WHERE id = ? AND estatus = 1");
+$stmt = $pdo->prepare("SELECT id, nombre, cod_org FROM clubes WHERE id = ? AND estatus = 1");
 $clubes_ok = [];
 foreach ($club_ids as $cid) {
     $stmt->execute([$cid]);
@@ -90,7 +90,7 @@ foreach ($club_ids as $cid) {
         echo "Error: No existe el club con ID {$cid} o está inactivo." . PHP_EOL;
         exit(1);
     }
-    if ((int)$club['organizacion_id'] !== $organizacion_id) {
+    if ((int)($club['cod_org'] ?? $club['organizacion_id'] ?? 0) !== $organizacion_id) {
         echo "Error: El club \"{$club['nombre']}\" (ID {$cid}) no pertenece a la organización \"{$organizacion['nombre']}\"." . PHP_EOL;
         exit(1);
     }

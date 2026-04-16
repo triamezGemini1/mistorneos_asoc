@@ -1,4 +1,4 @@
-﻿<?php
+<?php
 /**
  * Panel de Gestión: administradores de las organizaciones.
  * Muestra Nombre, Organización, Rol y toggle Activar/Desactivar (is_active).
@@ -28,7 +28,7 @@ try {
                o.nombre AS organizacion_nombre
         FROM usuarios u
         LEFT JOIN clubes c ON c.id = u.club_id
-        LEFT JOIN organizaciones o ON o.id = c.organizacion_id
+        LEFT JOIN organizaciones o ON o.id = c.cod_org
         WHERE u.role IN ('admin_general','admin_torneo','admin_club','operador')
         ORDER BY u.role = 'admin_general' DESC, u.username
     ")->fetchAll(PDO::FETCH_ASSOC);

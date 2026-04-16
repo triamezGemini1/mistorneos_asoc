@@ -73,9 +73,9 @@ try {
         }
     }
     
-    // Insertar en la base de datos (organizacion_id y entidad obligatorios)
-    $cols = ['nombre', 'direccion', 'delegado', 'telefono', 'email', 'logo', 'estatus', 'organizacion_id'];
-    $vals = [':nombre', ':direccion', ':delegado', ':telefono', ':email', ':logo', ':estatus', ':organizacion_id'];
+    // Insertar en la base de datos (cod_org y entidad obligatorios)
+    $cols = ['nombre', 'direccion', 'delegado', 'telefono', 'email', 'logo', 'estatus', 'cod_org'];
+    $vals = [':nombre', ':direccion', ':delegado', ':telefono', ':email', ':logo', ':estatus', ':cod_org'];
     try {
         $chkEnt = DB::pdo()->query("SHOW COLUMNS FROM clubes LIKE 'entidad'");
         if ($chkEnt && $chkEnt->rowCount() > 0) {
@@ -97,7 +97,7 @@ try {
         ':email' => $email ?: null,
         ':logo' => $logo,
         ':estatus' => $estatus,
-        ':organizacion_id' => $organizacion_id
+        ':cod_org' => $organizacion_id
     ];
     if (in_array('entidad', $cols)) {
         $params[':entidad'] = $entidad;

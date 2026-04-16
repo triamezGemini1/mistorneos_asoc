@@ -59,10 +59,10 @@ try {
             u.email as admin_email,
             o.telefono as club_telefono,
             o.responsable as club_delegado,
-            (SELECT COUNT(*) FROM clubes cx WHERE cx.organizacion_id = o.id AND cx.entidad = ? AND cx.estatus = 1) as supervised_clubs_count,
-            (SELECT COUNT(*) FROM usuarios ux WHERE ux.organizacion_id = o.id AND ux.entidad = ?) as total_afiliados,
-            (SELECT COUNT(*) FROM usuarios ux WHERE ux.organizacion_id = o.id AND ux.entidad = ? AND UPPER(COALESCE(ux.sexo,'M')) = 'M') as hombres,
-            (SELECT COUNT(*) FROM usuarios ux WHERE ux.organizacion_id = o.id AND ux.entidad = ? AND UPPER(COALESCE(ux.sexo,'M')) = 'F') as mujeres,
+            (SELECT COUNT(*) FROM clubes cx WHERE cx.cod_org = o.id AND cx.entidad = ? AND cx.estatus = 1) as supervised_clubs_count,
+            (SELECT COUNT(*) FROM usuarios ux WHERE ux.cod_org = o.id AND ux.entidad = ?) as total_afiliados,
+            (SELECT COUNT(*) FROM usuarios ux WHERE ux.cod_org = o.id AND ux.entidad = ? AND UPPER(COALESCE(ux.sexo,'M')) = 'M') as hombres,
+            (SELECT COUNT(*) FROM usuarios ux WHERE ux.cod_org = o.id AND ux.entidad = ? AND UPPER(COALESCE(ux.sexo,'M')) = 'F') as mujeres,
             (SELECT COUNT(*) FROM tournaments t WHERE " . ($has_cod_org ? "(t.club_responsable = o.id OR t.club_responsable = o.cod_org)" : "t.club_responsable = o.id") . " AND t.estatus = 1) as total_torneos
         FROM organizaciones o
         LEFT JOIN usuarios u ON u.id = o.admin_user_id

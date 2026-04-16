@@ -177,7 +177,7 @@ final class AtletasAdminSyncService
                 'fechnac' => self::normalizarFecha($a['fechnac'] ?? null),
                 'club_id' => $clubId,
                 'entidad' => $entidad,
-                'organizacion_id' => $organizacionId,
+                'cod_org' => $organizacionId,
                 '_allow_club_for_usuario' => true,
             ];
 
@@ -185,7 +185,7 @@ final class AtletasAdminSyncService
             if (!empty($create['success'])) {
                 $newUserId = (int)($create['user_id'] ?? 0);
                 if ($newUserId > 0) {
-                    $upd = $pdoMain->prepare("UPDATE usuarios SET numfvd = ?, organizacion_id = ? WHERE id = ?");
+                    $upd = $pdoMain->prepare("UPDATE usuarios SET numfvd = ?, cod_org = ? WHERE id = ?");
                     $upd->execute([$numfvd, $organizacionId, $newUserId]);
                 }
                 $reporte['creados']++;
@@ -275,7 +275,7 @@ final class AtletasAdminSyncService
     public static function sincronizarUsuariosDesdeAtletas(PDO $pdoMain, string $csvDir): array
     {
         $usuarios = $pdoMain->query(
-            "SELECT id, cedula, sexo, numfvd, club_id, entidad, organizacion_id, celular, email, fechnac FROM usuarios"
+            "SELECT id, cedula, sexo, numfvd, club_id, entidad, cod_org, celular, email, fechnac FROM usuarios"
         )->fetchAll(PDO::FETCH_ASSOC);
 
         $usuariosPorCedula = [];
@@ -301,7 +301,7 @@ final class AtletasAdminSyncService
             'fechnac_actualizados' => 0,
             'club_id_actualizados' => 0,
             'entidad_actualizados' => 0,
-            'organizacion_id_actualizados' => 0,
+            'cod_org_actualizados' => 0,
             'numfvd_actualizados' => 0,
             'sexo_actualizados' => 0,
             'por_club' => [],
@@ -312,7 +312,7 @@ final class AtletasAdminSyncService
 
         $stmtUpdate = $pdoMain->prepare(
             "UPDATE usuarios
-             SET sexo = ?, numfvd = ?, club_id = ?, entidad = ?, organizacion_id = ?, celular = ?, email = ?, fechnac = ?
+             SET sexo = ?, numfvd = ?, club_id = ?, entidad = ?, cod_org = ?, celular = ?, email = ?, fechnac = ?
              WHERE id = ?"
         );
 
@@ -347,7 +347,7 @@ final class AtletasAdminSyncService
                 $oldNumfvd = (int)($u['numfvd'] ?? 0);
                 $oldClubId = (int)($u['club_id'] ?? 0);
                 $oldEntidad = (int)($u['entidad'] ?? 0);
-                $oldOrganizacionId = (int)($u['organizacion_id'] ?? 0);
+                $oldOrganizacionId = (int)($u['cod_org'] ?? 0);
                 $oldCel = self::nullableString($u['celular'] ?? null);
                 $oldEmail = self::nullableString($u['email'] ?? null);
                 $oldFechnac = self::normalizarFecha($u['fechnac'] ?? null);
@@ -370,7 +370,7 @@ final class AtletasAdminSyncService
                     $huboCambio = true;
                 }
                 if ($oldOrganizacionId !== $nuevaOrganizacionId) {
-                    $reporte['organizacion_id_actualizados']++;
+                    $reporte['cod_org_actualizados']++;
                     $huboCambio = true;
                 }
                 if ($oldCel !== $nuevoCel) {

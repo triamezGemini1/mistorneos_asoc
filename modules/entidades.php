@@ -167,7 +167,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
                     $syncCodStmt->execute([$codigo, $orgId]);
                 }
 
-                $checkClubSql = "SELECT id FROM clubes WHERE organizacion_id = ? AND LOWER(TRIM(nombre)) = LOWER(TRIM(?)) LIMIT 1";
+                $checkClubSql = "SELECT id FROM clubes WHERE cod_org = ? AND LOWER(TRIM(nombre)) = LOWER(TRIM(?)) LIMIT 1";
                 $checkClubStmt = $pdo->prepare($checkClubSql);
                 $checkClubStmt->execute([$orgId, $nombre]);
                 $clubId = (int)$checkClubStmt->fetchColumn();

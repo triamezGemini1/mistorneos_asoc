@@ -49,7 +49,7 @@ foreach ($admins as $a) {
         $org_id = (int)$pdo->lastInsertId();
         echo "  -> Organización creada id=$org_id\n";
 
-        $pdo->prepare("UPDATE clubes SET organizacion_id = ? WHERE id = ?")->execute([$org_id, $club_id]);
+        $pdo->prepare("UPDATE clubes SET cod_org = ? WHERE id = ?")->execute([$org_id, $club_id]);
         echo "  -> Club $club_id asignado a organización $org_id\n";
 
         // Tabla clubes_asociados ya no existe; omitir migración de asociados
@@ -60,7 +60,7 @@ foreach ($admins as $a) {
             $asociados = $stmt->fetchAll(PDO::FETCH_COLUMN);
         } catch (Exception $ignored) {}
         foreach ($asociados as $aid) {
-            $pdo->prepare("UPDATE clubes SET organizacion_id = ? WHERE id = ?")->execute([$org_id, $aid]);
+            $pdo->prepare("UPDATE clubes SET cod_org = ? WHERE id = ?")->execute([$org_id, $aid]);
             echo "  -> Club asociado $aid asignado a organización $org_id\n";
         }
 
@@ -77,7 +77,7 @@ $stmt = $pdo->query("
     FROM usuarios u
     INNER JOIN clubes c ON c.id = u.club_id
     INNER JOIN organizaciones o ON o.admin_user_id = u.id AND o.estatus = 1
-    WHERE u.role = 'admin_club' AND u.club_id IS NOT NULL AND (c.organizacion_id IS NULL OR c.organizacion_id != o.id)
+    WHERE u.role = 'admin_club' AND u.club_id IS NOT NULL AND (c.cod_org IS NULL OR c.cod_org != o.id)
 ");
 $pendientes = $stmt->fetchAll(PDO::FETCH_ASSOC);
 foreach ($pendientes as $p) {
@@ -85,12 +85,12 @@ foreach ($pendientes as $p) {
     $org_id = (int)$p['org_id'];
     echo "Vincular club principal $club_id a org $org_id\n";
     try {
-        $pdo->prepare("UPDATE clubes SET organizacion_id = ? WHERE id = ?")->execute([$org_id, $club_id]);
+        $pdo->prepare("UPDATE clubes SET cod_org = ? WHERE id = ?")->execute([$org_id, $club_id]);
         try {
             $stmt2 = $pdo->prepare("SELECT club_asociado_id FROM clubes_asociados WHERE club_principal_id = ?");
             $stmt2->execute([$club_id]);
             foreach ($stmt2->fetchAll(PDO::FETCH_COLUMN) as $aid) {
-                $pdo->prepare("UPDATE clubes SET organizacion_id = ? WHERE id = ?")->execute([$org_id, $aid]);
+                $pdo->prepare("UPDATE clubes SET cod_org = ? WHERE id = ?")->execute([$org_id, $aid]);
             }
         } catch (Exception $ignored) {}
         echo "  OK\n";

@@ -37,11 +37,11 @@ final class RankingAtletasPublicoService
         }
     }
 
-    /** Algunas BD no tienen tournaments.organizacion_id; no usar COALESCE(t.organizacion_id, …) en ese caso. */
-    private function hasColumnTournamentsOrganizacionId(): bool
+    /** Algunas BD no tienen tournaments.cod_org; no usar COALESCE(t.cod_org, …) en ese caso. */
+    private function hasColumnTournamentsCodOrg(): bool
     {
         try {
-            $this->pdo->query('SELECT `organizacion_id` FROM `tournaments` LIMIT 0');
+            $this->pdo->query('SELECT `cod_org` FROM `tournaments` LIMIT 0');
 
             return true;
         } catch (Throwable $e) {
@@ -62,8 +62,8 @@ final class RankingAtletasPublicoService
             ? ' AND (t.publicar_landing = 1 OR t.publicar_landing IS NULL)'
             : '';
 
-        $tOrgRef = $this->hasColumnTournamentsOrganizacionId()
-            ? 'COALESCE(t.organizacion_id, t.club_responsable, 0)'
+        $tOrgRef = $this->hasColumnTournamentsCodOrg()
+            ? 'COALESCE(t.cod_org, t.club_responsable, 0)'
             : 'COALESCE(t.club_responsable, 0)';
 
         $whereOrg = '';

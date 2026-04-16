@@ -283,7 +283,7 @@ class DashboardData
             if (empty($admin_clubs_list)) {
                 $sql = "SELECT u.id as admin_id, u.username as admin_username, u.nombre as admin_nombre, u.entidad,
                     u.club_id as club_principal_id, c.nombre as club_principal_nombre,
-                    (SELECT COUNT(*) FROM clubes cx WHERE cx.organizacion_id = (SELECT id FROM organizaciones WHERE admin_user_id = u.id LIMIT 1) AND cx.estatus = 1) as supervised_clubs_count,
+                    (SELECT COUNT(*) FROM clubes cx WHERE cx.cod_org = (SELECT id FROM organizaciones WHERE admin_user_id = u.id LIMIT 1) AND cx.estatus = 1) as supervised_clubs_count,
                     (SELECT COUNT(*) FROM usuarios ux WHERE ux.club_id = u.club_id AND ux.role = 'usuario' AND ux.status = 0) as total_users,
                     (SELECT COUNT(*) FROM usuarios ux WHERE ux.club_id = u.club_id AND ux.role = 'usuario' AND ux.status = 0 AND (ux.sexo = 'M' OR UPPER(ux.sexo) = 'M')) as hombres,
                     (SELECT COUNT(*) FROM usuarios ux WHERE ux.club_id = u.club_id AND ux.role = 'usuario' AND ux.status = 0 AND (ux.sexo = 'F' OR UPPER(ux.sexo) = 'F')) as mujeres,
@@ -427,12 +427,12 @@ class DashboardData
                    COUNT(DISTINCT u.id) as total_atletas,
                    SUM(CASE WHEN u.sexo = 'M' OR u.sexo = 1 THEN 1 ELSE 0 END) as hombres,
                    SUM(CASE WHEN u.sexo = 'F' OR u.sexo = 2 THEN 1 ELSE 0 END) as mujeres,
-                   (SELECT COUNT(*) FROM tournaments t WHERE t.club_responsable = COALESCE(c.organizacion_id, c.id) AND t.estatus = 1) as torneos_count,
-                   (SELECT COUNT(*) FROM inscritos i INNER JOIN tournaments t ON i.torneo_id = t.id WHERE t.club_responsable = COALESCE(c.organizacion_id, c.id)) as inscritos_count
+                   (SELECT COUNT(*) FROM tournaments t WHERE t.club_responsable = COALESCE(c.cod_org, c.id) AND t.estatus = 1) as torneos_count,
+                   (SELECT COUNT(*) FROM inscritos i INNER JOIN tournaments t ON i.torneo_id = t.id WHERE t.club_responsable = COALESCE(c.cod_org, c.id)) as inscritos_count
             FROM clubes c
             LEFT JOIN usuarios u ON u.club_id = c.id AND u.role = 'usuario' AND u.status = 0
             WHERE c.id IN ($ph)
-            GROUP BY c.id, c.nombre, c.organizacion_id
+            GROUP BY c.id, c.nombre, c.cod_org
             ORDER BY c.nombre ASC
         ";
         $stmt = DB::pdo()->prepare($sql);

@@ -320,7 +320,7 @@ class StatisticsHelper {
             // Clubes supervisados (LIMIT 50 para rendimiento)
             $stmt = $pdo->prepare("
                 SELECT 
-                    c.id, c.nombre, c.delegado, c.telefono, c.organizacion_id,
+                    c.id, c.nombre, c.delegado, c.telefono, c.cod_org,
                     COUNT(DISTINCT u.id) as total_afiliados,
                     SUM(CASE WHEN u.sexo = 'M' OR UPPER(u.sexo) = 'M' THEN 1 ELSE 0 END) as hombres,
                     SUM(CASE WHEN u.sexo = 'F' OR UPPER(u.sexo) = 'F' THEN 1 ELSE 0 END) as mujeres,
@@ -328,7 +328,7 @@ class StatisticsHelper {
                 FROM clubes c
                 LEFT JOIN usuarios u ON u.club_id = c.id AND u.role = 'usuario' AND u.status = 0
                 WHERE c.id IN ($placeholders) AND c.estatus = 1
-                GROUP BY c.id, c.nombre, c.delegado, c.telefono, c.organizacion_id
+                GROUP BY c.id, c.nombre, c.delegado, c.telefono, c.cod_org
                 ORDER BY c.nombre ASC
                 LIMIT 50
             ");
@@ -337,7 +337,7 @@ class StatisticsHelper {
             $torneos_by_responsable = [];
             $responsable_ids = [];
             foreach ($stats['supervised_clubs'] as $row) {
-                $rid = (int)(!empty($row['organizacion_id']) ? $row['organizacion_id'] : $row['id']);
+                $rid = (int)(!empty($row['cod_org']) ? $row['cod_org'] : $row['id']);
                 if ($rid > 0) {
                     $responsable_ids[$rid] = true;
                 }
@@ -351,7 +351,7 @@ class StatisticsHelper {
                 }
             }
             foreach ($stats['supervised_clubs'] as &$club) {
-                $key = (int)(!empty($club['organizacion_id']) ? $club['organizacion_id'] : $club['id']);
+                $key = (int)(!empty($club['cod_org']) ? $club['cod_org'] : $club['id']);
                 $club['total_torneos'] = $torneos_by_responsable[$key] ?? 0;
                 $club['total_afiliados'] = (int)($club['total_afiliados'] ?? 0);
                 $club['hombres'] = (int)($club['hombres'] ?? 0);

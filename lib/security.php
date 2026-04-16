@@ -284,6 +284,7 @@ final class Security
                 'sexo' => 'sexo',
                 'club_id' => 'club_id',
                 'entidad' => 'entidad',
+                'cod_org' => 'cod_org',
                 'uuid' => 'uuid',
                 'photo_path' => 'photo_path'
             ];

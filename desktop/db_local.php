@@ -112,7 +112,7 @@ class DB_Local
                 normas TEXT,
                 afiche TEXT,
                 club_responsable INTEGER,
-                organizacion_id INTEGER,
+                cod_org INTEGER,
                 owner_user_id INTEGER,
                 entidad INTEGER DEFAULT 0,
                 created_at TEXT,
@@ -127,6 +127,7 @@ class DB_Local
         try { $pdo->exec("ALTER TABLE tournaments ADD COLUMN modalidad INTEGER DEFAULT 0"); } catch (Throwable $e) { }
         try { $pdo->exec("ALTER TABLE tournaments ADD COLUMN lugar TEXT"); } catch (Throwable $e) { }
         try { $pdo->exec("ALTER TABLE tournaments ADD COLUMN es_evento_masivo INTEGER DEFAULT 0"); } catch (Throwable $e) { }
+        try { $pdo->exec("ALTER TABLE tournaments RENAME COLUMN organizacion_id TO cod_org"); } catch (Throwable $e) { }
 
         // inscritos (con codigo_equipo para torneos por equipos)
         $pdo->exec("
@@ -273,14 +274,15 @@ class DB_Local
             CREATE TABLE IF NOT EXISTS clubes (
                 id INTEGER PRIMARY KEY,
                 nombre TEXT NOT NULL,
-                organizacion_id INTEGER,
+                cod_org INTEGER,
                 entidad INTEGER DEFAULT 0,
                 estatus INTEGER DEFAULT 1,
                 sync_status INTEGER DEFAULT 0
             )
         ");
-        $pdo->exec("CREATE INDEX IF NOT EXISTS idx_clubes_organizacion ON clubes(organizacion_id)");
+        $pdo->exec("CREATE INDEX IF NOT EXISTS idx_clubes_cod_org ON clubes(cod_org)");
         $pdo->exec("CREATE INDEX IF NOT EXISTS idx_clubes_entidad ON clubes(entidad)");
+        try { $pdo->exec("ALTER TABLE clubes RENAME COLUMN organizacion_id TO cod_org"); } catch (Throwable $e) { }
 
         $pdo->exec("
             CREATE TABLE IF NOT EXISTS auditoria (

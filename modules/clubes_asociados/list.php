@@ -286,8 +286,8 @@ try {
     if (empty($club_ids) && $organizacion_id) {
         // Fallback canónico: clubes por referencia de organización (cod_org/id)
         $stFallback = DB::pdo()->prepare($has_cod_org
-            ? "SELECT id FROM clubes WHERE (organizacion_id = ? OR organizacion_id = (SELECT id FROM organizaciones WHERE cod_org = ? LIMIT 1)) AND estatus = 1"
-            : "SELECT id FROM clubes WHERE organizacion_id = ? AND estatus = 1");
+            ? "SELECT id FROM clubes WHERE (cod_org = ? OR organizacion_id = (SELECT id FROM organizaciones WHERE cod_org = ? LIMIT 1)) AND estatus = 1"
+            : "SELECT id FROM clubes WHERE cod_org = ? AND estatus = 1");
         $stFallback->execute($has_cod_org ? [$organizacion_id, $organizacion_id] : [$organizacion_id]);
         $club_ids = array_map('intval', $stFallback->fetchAll(PDO::FETCH_COLUMN) ?: []);
     }
@@ -319,13 +319,13 @@ try {
                     SUM(CASE WHEN u.sexo = 'M' THEN 1 ELSE 0 END) as hombres,
                     SUM(CASE WHEN u.sexo = 'F' THEN 1 ELSE 0 END) as mujeres,
                     (SELECT COUNT(*) FROM tournaments WHERE " . ($has_cod_org
-                        ? "(club_responsable = c.organizacion_id OR club_responsable = (SELECT cod_org FROM organizaciones WHERE id = c.organizacion_id LIMIT 1))"
-                        : "club_responsable = c.organizacion_id") . " AND estatus = 1) as torneos_count,
+                        ? "(club_responsable = c.cod_org OR club_responsable = (SELECT cod_org FROM organizaciones WHERE id = c.cod_org LIMIT 1))"
+                        : "club_responsable = c.cod_org") . " AND estatus = 1) as torneos_count,
                     (SELECT COUNT(*) FROM inscritos i 
                      INNER JOIN tournaments t ON i.torneo_id = t.id 
                      WHERE " . ($has_cod_org
-                        ? "(t.club_responsable = c.organizacion_id OR t.club_responsable = (SELECT cod_org FROM organizaciones WHERE id = c.organizacion_id LIMIT 1))"
-                        : "t.club_responsable = c.organizacion_id") . ") as inscritos_count
+                        ? "(t.club_responsable = c.cod_org OR t.club_responsable = (SELECT cod_org FROM organizaciones WHERE id = c.cod_org LIMIT 1))"
+                        : "t.club_responsable = c.cod_org") . ") as inscritos_count
                 FROM clubes c
                 LEFT JOIN usuarios u ON u.club_id = c.id AND u.role = 'usuario' AND (u.status = 'approved' OR u.status = 1)
                 WHERE c.id IN ($placeholders)

@@ -1,4 +1,4 @@
-﻿<?php
+<?php
 /**
  * Cambia el estatus de un torneo (Activo/Inactivo) y registra la acción en auditoría.
  * POST: torneo_id, estatus (0|1)
@@ -39,7 +39,7 @@ try {
 
     $admin = $_SESSION['desktop_user'] ?? [];
     $usuario_id = (int)($admin['id'] ?? 0);
-    $organizacion_id = isset($torneo['organizacion_id']) ? (int)$torneo['organizacion_id'] : null;
+    $organizacion_id = isset($torneo['cod_org']) ? (int)$torneo['cod_org'] : null;
 
     $pdo->prepare("
         INSERT INTO auditoria (usuario_id, accion, detalle, entidad_tipo, entidad_id, organizacion_id, sync_status)

@@ -271,8 +271,8 @@ class Auth {
       }
       if ($u['role'] === 'admin_torneo' && !empty($u['club_id'])) {
         $orgJoin = self::hasCodOrg()
-          ? "LEFT JOIN organizaciones o ON (c.organizacion_id = o.id OR c.organizacion_id = o.cod_org) AND o.estatus = 1"
-          : "LEFT JOIN organizaciones o ON c.organizacion_id = o.id AND o.estatus = 1";
+          ? "LEFT JOIN organizaciones o ON (c.cod_org = o.id OR c.cod_org = o.cod_org) AND o.estatus = 1"
+          : "LEFT JOIN organizaciones o ON c.cod_org = o.id AND o.estatus = 1";
         $stmt = DB::pdo()->prepare("SELECT c.nombre, c.logo AS club_logo, o.nombre AS org_nombre, o.logo AS org_logo FROM clubes c {$orgJoin} WHERE c.id = ? LIMIT 1");
         $stmt->execute([$u['club_id']]);
         $row = $stmt->fetch(PDO::FETCH_ASSOC);
@@ -285,8 +285,8 @@ class Auth {
       }
       if (($u['role'] === 'operador' || $u['role'] === 'usuario') && !empty($u['club_id'])) {
         $orgJoin = self::hasCodOrg()
-          ? "LEFT JOIN organizaciones o ON (c.organizacion_id = o.id OR c.organizacion_id = o.cod_org) AND o.estatus = 1"
-          : "LEFT JOIN organizaciones o ON c.organizacion_id = o.id AND o.estatus = 1";
+          ? "LEFT JOIN organizaciones o ON (c.cod_org = o.id OR c.cod_org = o.cod_org) AND o.estatus = 1"
+          : "LEFT JOIN organizaciones o ON c.cod_org = o.id AND o.estatus = 1";
         $stmt = DB::pdo()->prepare("SELECT c.nombre, c.logo AS club_logo, o.nombre AS org_nombre, o.logo AS org_logo FROM clubes c {$orgJoin} WHERE c.id = ? LIMIT 1");
         $stmt->execute([$u['club_id']]);
         $row = $stmt->fetch(PDO::FETCH_ASSOC);
@@ -332,7 +332,7 @@ class Auth {
             $stmt2 = DB::pdo()->prepare("
               SELECT o.id
               FROM clubes c
-              INNER JOIN organizaciones o ON (c.organizacion_id = o.id OR c.organizacion_id = o.cod_org)
+              INNER JOIN organizaciones o ON (c.cod_org = o.id OR c.cod_org = o.cod_org)
               WHERE c.id = ? AND o.estatus = 1
               LIMIT 1
             ");
@@ -340,7 +340,7 @@ class Auth {
             $stmt2 = DB::pdo()->prepare("
               SELECT o.id
               FROM clubes c
-              INNER JOIN organizaciones o ON c.organizacion_id = o.id
+              INNER JOIN organizaciones o ON c.cod_org = o.id
               WHERE c.id = ? AND o.estatus = 1
               LIMIT 1
             ");
@@ -405,7 +405,7 @@ class Auth {
         if ($stmt2->fetch()) return $resp;
       }
       // Es un club: obtener organizacion_id del club
-      $stmt3 = DB::pdo()->prepare("SELECT organizacion_id FROM clubes WHERE id = ? LIMIT 1");
+      $stmt3 = DB::pdo()->prepare("SELECT cod_org FROM clubes WHERE id = ? LIMIT 1");
       $stmt3->execute([$resp]);
       $org = $stmt3->fetchColumn();
       return $org !== false && $org !== null ? (int)$org : null;
@@ -437,8 +437,8 @@ class Auth {
     if ($club_id <= 0) return false;
     try {
       $stmt = DB::pdo()->prepare(self::hasCodOrg()
-        ? "SELECT 1 FROM clubes WHERE id = ? AND (organizacion_id = ? OR organizacion_id = (SELECT id FROM organizaciones WHERE cod_org = ? LIMIT 1)) AND estatus = 1 LIMIT 1"
-        : "SELECT 1 FROM clubes WHERE id = ? AND organizacion_id = ? AND estatus = 1 LIMIT 1");
+        ? "SELECT 1 FROM clubes WHERE id = ? AND (cod_org = ? OR cod_org = (SELECT id FROM organizaciones WHERE cod_org = ? LIMIT 1)) AND estatus = 1 LIMIT 1"
+        : "SELECT 1 FROM clubes WHERE id = ? AND cod_org = ? AND estatus = 1 LIMIT 1");
       $stmt->execute(self::hasCodOrg() ? [$club_id, $org_id, $org_id] : [$club_id, $org_id]);
       return $stmt->fetch() !== false;
     } catch (Exception $e) {

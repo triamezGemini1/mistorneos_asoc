@@ -147,7 +147,7 @@ if (in_array($action, ['new', 'edit'])) {
                     $default_organizacion_nombre = $stmt->fetchColumn();
                 }
             } elseif ($user_role === 'admin_torneo' && $user_club_id) {
-                $stmt = DB::pdo()->prepare("SELECT organizacion_id FROM clubes WHERE id = ?");
+                $stmt = DB::pdo()->prepare("SELECT cod_org FROM clubes WHERE id = ?");
                 $stmt->execute([$user_club_id]);
                 $default_organizacion_id = $stmt->fetchColumn();
                 $default_organizacion_id = $default_organizacion_id ? (int)$default_organizacion_id : null;

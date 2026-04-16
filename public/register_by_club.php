@@ -127,8 +127,8 @@ if ($org_id > 0) {
 }
 if ($club_id > 0) {
     $org_join = $has_cod_org
-        ? "LEFT JOIN organizaciones o ON (c.organizacion_id = o.id OR c.organizacion_id = o.cod_org)"
-        : "LEFT JOIN organizaciones o ON c.organizacion_id = o.id";
+        ? "LEFT JOIN organizaciones o ON (c.cod_org = o.id OR c.cod_org = o.cod_org)"
+        : "LEFT JOIN organizaciones o ON c.cod_org = o.id";
     $stmt = $pdo->prepare("SELECT c.*, o.entidad as org_entidad FROM clubes c {$org_join} WHERE c.id = ? AND c.estatus = 1");
     $stmt->execute([$club_id]);
     $club_info = $stmt->fetch(PDO::FETCH_ASSOC);

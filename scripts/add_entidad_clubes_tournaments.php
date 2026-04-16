@@ -2,7 +2,7 @@
 /**
  * Añade columna entidad a clubes y tournaments si no existe.
  * Rellena entidad desde la organización correspondiente.
- * Requiere: clubes.organizacion_id y organizaciones.entidad.
+ * Requiere: clubes.cod_org y organizaciones.entidad.
  */
 $base = dirname(__DIR__);
 require_once $base . '/config/bootstrap.php';
@@ -29,9 +29,9 @@ try {
 try {
     $stmt = $pdo->query("
         UPDATE clubes c
-        INNER JOIN organizaciones o ON o.id = c.organizacion_id
+        INNER JOIN organizaciones o ON o.id = c.cod_org
         SET c.entidad = o.entidad
-        WHERE c.organizacion_id IS NOT NULL
+        WHERE c.cod_org IS NOT NULL
     ");
     $n = $stmt->rowCount();
     echo "Clubes actualizados con entidad desde organización: $n\n";

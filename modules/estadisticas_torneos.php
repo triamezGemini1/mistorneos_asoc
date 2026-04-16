@@ -91,7 +91,7 @@ $sql = "
     FROM tournaments t
     LEFT JOIN organizaciones org ON t.club_responsable = org.id AND org.estatus = 1
     LEFT JOIN clubes c ON t.club_responsable = c.id AND c.estatus = 1
-    LEFT JOIN organizaciones org2 ON c.organizacion_id = org2.id AND org2.estatus = 1
+    LEFT JOIN organizaciones org2 ON c.cod_org = org2.id AND org2.estatus = 1
     WHERE $where_fecha
     $where_extra
     ORDER BY COALESCE(org.entidad, org2.entidad, 999) ASC, COALESCE(org.nombre, org2.nombre) ASC, t.fechator DESC, t.id DESC
@@ -113,7 +113,7 @@ try {
                 t.id, t.nombre, t.fechator, t.rondas, t.estatus,
                 t.club_responsable,
                 c.nombre as org_nombre,
-                c.organizacion_id as org_id,
+                c.cod_org as org_id,
                 COALESCE(u.entidad, 0) as entidad,
                 (SELECT COUNT(*) FROM inscritos i 
                  WHERE i.torneo_id = t.id AND i.estatus = 'confirmado') as total_jugadores

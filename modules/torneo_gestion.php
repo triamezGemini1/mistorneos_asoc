@@ -3971,7 +3971,7 @@ function obtenerDatosEquiposAdmin($torneo_id) {
     $stmt = $pdo->prepare("SELECT * FROM tournaments WHERE id = ?");
     $stmt->execute([$torneo_id]);
     $torneo = $stmt->fetch(PDO::FETCH_ASSOC);
-    $orgId = (int)($torneo['organizacion_id'] ?? 0);
+    $orgId = (int)($torneo['cod_org'] ?? 0);
     $porEntidad = torneo_listado_equipos_por_entidad($orgId);
     
     // Obtener todos los equipos del torneo (de todos los clubes)
@@ -4181,7 +4181,7 @@ function obtenerDatosGestionarInscripcionesEquipos($torneo_id) {
         throw new Exception('Torneo no encontrado');
     }
 
-    $orgId = (int)($torneo['organizacion_id'] ?? 0);
+    $orgId = (int)($torneo['cod_org'] ?? 0);
     $porEntidad = torneo_listado_equipos_por_entidad($orgId);
     
     // Obtener todos los equipos del torneo ordenados por club (o entidad si org. 32) y cÃ³digo de equipo (secuencial)
@@ -4370,18 +4370,18 @@ function obtenerDatosInscribirEquipoSitio($torneo_id) {
     $clubes_disponibles = [];
     $where_club_activo = "(c.estatus = 1 OR c.estatus = '1' OR c.estatus = 'activo')";
     if ($org_torneo_id) {
-        $stmt = $pdo->prepare("SELECT c.id, c.nombre, c.entidad FROM clubes c WHERE (c.organizacion_id = ?" . (organizacionesHasCodOrg() ? " OR c.organizacion_id = (SELECT id FROM organizaciones WHERE cod_org = ? LIMIT 1)" : "") . ") AND {$where_club_activo} ORDER BY c.nombre ASC");
+        $stmt = $pdo->prepare("SELECT c.id, c.nombre, c.entidad FROM clubes c WHERE (c.cod_org = ?" . (organizacionesHasCodOrg() ? " OR c.cod_org = (SELECT id FROM organizaciones WHERE cod_org = ? LIMIT 1)" : "") . ") AND {$where_club_activo} ORDER BY c.nombre ASC");
         $stmt->execute(organizacionesHasCodOrg() ? [$org_torneo_id, $org_torneo_id] : [$org_torneo_id]);
         $clubes_disponibles = $stmt->fetchAll(PDO::FETCH_ASSOC);
     } elseif ($is_admin_general) {
         $stmt = $pdo->query("SELECT id, nombre, entidad FROM clubes WHERE (estatus = 1 OR estatus = '1' OR estatus = 'activo') ORDER BY nombre ASC");
         $clubes_disponibles = $stmt->fetchAll(PDO::FETCH_ASSOC);
     } elseif ($user_club_id) {
-        $stmt = $pdo->prepare('SELECT organizacion_id FROM clubes WHERE id = ? LIMIT 1');
+        $stmt = $pdo->prepare('SELECT cod_org FROM clubes WHERE id = ? LIMIT 1');
         $stmt->execute([$user_club_id]);
         $org_usuario = $stmt->fetchColumn();
         if ($org_usuario) {
-            $stmt = $pdo->prepare("SELECT c.id, c.nombre, c.entidad FROM clubes c WHERE (c.organizacion_id = ?" . (organizacionesHasCodOrg() ? " OR c.organizacion_id = (SELECT id FROM organizaciones WHERE cod_org = ? LIMIT 1)" : "") . ") AND {$where_club_activo} ORDER BY c.nombre ASC");
+            $stmt = $pdo->prepare("SELECT c.id, c.nombre, c.entidad FROM clubes c WHERE (c.cod_org = ?" . (organizacionesHasCodOrg() ? " OR c.cod_org = (SELECT id FROM organizaciones WHERE cod_org = ? LIMIT 1)" : "") . ") AND {$where_club_activo} ORDER BY c.nombre ASC");
             $stmt->execute(organizacionesHasCodOrg() ? [(int)$org_usuario, (int)$org_usuario] : [(int)$org_usuario]);
             $clubes_disponibles = $stmt->fetchAll(PDO::FETCH_ASSOC);
         }
@@ -4520,7 +4520,7 @@ function obtenerDatosInscribirSitio($torneo_id, $user_id, $is_admin_general) {
             SELECT DISTINCT u.id, u.username, u.nombre, u.cedula, c.nombre as club_nombre, c.id as club_id
             FROM usuarios u
             LEFT JOIN clubes c ON u.club_id = c.id
-            LEFT JOIN organizaciones o ON (c.organizacion_id = o.id" . (organizacionesHasCodOrg() ? " OR c.organizacion_id = o.cod_org" : "") . ") AND o.estatus = 1
+            LEFT JOIN organizaciones o ON (c.cod_org = o.id" . (organizacionesHasCodOrg() ? " OR c.cod_org = o.cod_org" : "") . ") AND o.estatus = 1
             WHERE u.role = 'usuario'
               AND u.status = 0
               AND (u.entidad = ? OR o.entidad = ?)
@@ -4538,7 +4538,7 @@ function obtenerDatosInscribirSitio($torneo_id, $user_id, $is_admin_general) {
                 LEFT JOIN clubes c ON u.club_id = c.id
                 WHERE u.role = 'usuario'
                   AND u.status = 0
-                  AND (c.organizacion_id = ?" . (organizacionesHasCodOrg() ? " OR c.organizacion_id = (SELECT id FROM organizaciones WHERE cod_org = ? LIMIT 1)" : "") . ")
+                  AND (c.cod_org = ?" . (organizacionesHasCodOrg() ? " OR c.cod_org = (SELECT id FROM organizaciones WHERE cod_org = ? LIMIT 1)" : "") . ")
                 ORDER BY COALESCE(u.nombre, u.username) ASC
             ");
             $stmt->execute(organizacionesHasCodOrg() ? [$org_id, $org_id] : [$org_id]);
@@ -4572,7 +4572,7 @@ function obtenerDatosInscribirSitio($torneo_id, $user_id, $is_admin_general) {
         $stmt = $pdo->prepare("
             SELECT c.id, c.nombre
             FROM clubes c
-            INNER JOIN organizaciones o ON (c.organizacion_id = o.id" . (organizacionesHasCodOrg() ? " OR c.organizacion_id = o.cod_org" : "") . ") AND o.estatus = 1
+            INNER JOIN organizaciones o ON (c.cod_org = o.id" . (organizacionesHasCodOrg() ? " OR c.cod_org = o.cod_org" : "") . ") AND o.estatus = 1
             WHERE o.entidad = ? AND c.estatus = 1
             ORDER BY c.nombre ASC
         ");
@@ -4581,7 +4581,7 @@ function obtenerDatosInscribirSitio($torneo_id, $user_id, $is_admin_general) {
     } else {
         $org_id = (int)($torneo['club_responsable'] ?? 0);
         if ($org_id > 0) {
-            $stmt = $pdo->prepare("SELECT id, nombre FROM clubes WHERE (organizacion_id = ?" . (organizacionesHasCodOrg() ? " OR organizacion_id = (SELECT id FROM organizaciones WHERE cod_org = ? LIMIT 1)" : "") . ") AND estatus = 1 ORDER BY nombre ASC");
+            $stmt = $pdo->prepare("SELECT id, nombre FROM clubes WHERE (cod_org = ?" . (organizacionesHasCodOrg() ? " OR cod_org = (SELECT id FROM organizaciones WHERE cod_org = ? LIMIT 1)" : "") . ") AND estatus = 1 ORDER BY nombre ASC");
             $stmt->execute(organizacionesHasCodOrg() ? [$org_id, $org_id] : [$org_id]);
             $clubes_disponibles = $stmt->fetchAll(PDO::FETCH_ASSOC);
         }

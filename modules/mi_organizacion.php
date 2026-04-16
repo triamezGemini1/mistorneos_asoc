@@ -28,8 +28,8 @@ try {
 }
 $org_ref_expr = $has_cod_org ? "COALESCE(NULLIF(o.cod_org, 0), o.id)" : "o.id";
 $org_club_match_expr = $has_cod_org
-    ? "(c.organizacion_id = ? OR c.organizacion_id = (SELECT id FROM organizaciones WHERE cod_org = ? LIMIT 1))"
-    : "c.organizacion_id = ?";
+    ? "(c.cod_org = ? OR c.cod_org = (SELECT id FROM organizaciones WHERE cod_org = ? LIMIT 1))"
+    : "c.cod_org = ?";
 $org_torneo_match_expr = $has_cod_org
     ? "(club_responsable = ? OR club_responsable = (SELECT id FROM organizaciones WHERE cod_org = ? LIMIT 1))"
     : "club_responsable = ?";
@@ -391,16 +391,16 @@ $entidades_options = [];
 if ($is_admin_general) {
     if (!$organizacion_id && $action_get !== 'new') {
         $dashColsLista = OrganizacionDashboardStats::columnFlags(DB::pdo());
-        $has_t_org_lista = $dashColsLista['has_tournament_organizacion_id'];
+        $has_t_org_lista = $dashColsLista['has_tournament_cod_org'];
         $sub_clubes_lista = "(SELECT COUNT(DISTINCT c.id) FROM clubes c WHERE c.estatus = 1 "
             . "AND (COALESCE(o.entidad,0) = 0 OR COALESCE(c.entidad,0) = COALESCE(o.entidad,0)) "
-            . "AND (c.organizacion_id = o.id "
-            . ($has_cod_org ? "OR c.organizacion_id = COALESCE(NULLIF(o.cod_org, 0), o.id) " : "")
+            . "AND (c.cod_org = o.id "
+            . ($has_cod_org ? "OR c.cod_org = COALESCE(NULLIF(o.cod_org, 0), o.id) " : "")
             . "OR (COALESCE(o.entidad,0) > 0 AND COALESCE(c.entidad,0) = COALESCE(o.entidad,0)))";
         if ($has_t_org_lista) {
             $sub_torneos_lista = "(SELECT COUNT(DISTINCT t.id) FROM tournaments t WHERE t.estatus = 1 "
                 . "AND (COALESCE(o.entidad,0) = 0 OR COALESCE(t.entidad,0) = COALESCE(o.entidad,0)) "
-                . "AND ((t.organizacion_id IS NOT NULL AND t.organizacion_id > 0 AND t.organizacion_id = o.id) OR ((t.organizacion_id IS NULL OR t.organizacion_id = 0) AND "
+                . "AND ((t.cod_org IS NOT NULL AND t.cod_org > 0 AND t.cod_org = o.id) OR ((t.cod_org IS NULL OR t.cod_org = 0) AND "
                 . ($has_cod_org ? "(t.club_responsable = COALESCE(NULLIF(o.cod_org, 0), o.id) OR t.club_responsable = o.id)" : "t.club_responsable = o.id")
                 . ")))";
         } else {
@@ -445,7 +445,7 @@ if ($is_admin_general) {
     }
 }
 
-// Estadísticas globales (compatibles con BD sin usuarios.organizacion_id; torneos priorizan tournaments.organizacion_id)
+// Estadísticas globales (compatibles con BD sin usuarios.organizacion_id; torneos priorizan tournaments.cod_org)
 $stats = [
     'clubes' => 0,
     'torneos' => 0,

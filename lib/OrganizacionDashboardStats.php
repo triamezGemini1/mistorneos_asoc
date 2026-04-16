@@ -6,34 +6,34 @@ require_once __DIR__ . '/InscritosHelper.php';
 
 /**
  * Estadísticas de organización alineadas con el esquema real:
- * - usuarios: entidad (canónica) y club_id; columna organizacion_id opcional.
- * - clubes: organizacion_id (PK o cod_org) y/o entidad.
- * - tournaments: prioriza organizacion_id = PK de organizaciones; respaldo club_responsable / entidad.
+ * - usuarios: entidad (geográfica) y club_id; columna opcional cod_org (afiliación).
+ * - clubes: cod_org (organizaciones.cod_org) y/o entidad territorial.
+ * - tournaments: cod_org, club_responsable y/o entidad territorial.
  */
 final class OrganizacionDashboardStats
 {
-    /** @var array{has_usuario_organizacion_id: bool, has_tournament_organizacion_id: bool}|null */
+    /** @var array{has_usuario_cod_org: bool, has_tournament_cod_org: bool}|null */
     private static ?array $columnFlags = null;
 
-    /** @return array{has_usuario_organizacion_id: bool, has_tournament_organizacion_id: bool} */
+    /** @return array{has_usuario_cod_org: bool, has_tournament_cod_org: bool} */
     public static function columnFlags(PDO $pdo): array
     {
         if (self::$columnFlags !== null) {
             return self::$columnFlags;
         }
         self::$columnFlags = [
-            'has_usuario_organizacion_id' => false,
-            'has_tournament_organizacion_id' => false,
+            'has_usuario_cod_org' => false,
+            'has_tournament_cod_org' => false,
         ];
         // Comprobar columnas con SELECT LIMIT 0: más fiable que SHOW COLUMNS si el esquema difiere entre entornos.
         try {
-            $pdo->query('SELECT `organizacion_id` FROM `usuarios` LIMIT 0');
-            self::$columnFlags['has_usuario_organizacion_id'] = true;
+            $pdo->query('SELECT `cod_org` FROM `usuarios` LIMIT 0');
+            self::$columnFlags['has_usuario_cod_org'] = true;
         } catch (Throwable $ignored) {
         }
         try {
-            $pdo->query('SELECT `organizacion_id` FROM `tournaments` LIMIT 0');
-            self::$columnFlags['has_tournament_organizacion_id'] = true;
+            $pdo->query('SELECT `cod_org` FROM `tournaments` LIMIT 0');
+            self::$columnFlags['has_tournament_cod_org'] = true;
         } catch (Throwable $ignored) {
         }
 
@@ -51,7 +51,7 @@ final class OrganizacionDashboardStats
     {
         $ids = self::idsRef($org_pk, $org_ref);
         $ph = implode(',', array_fill(0, count($ids), '?'));
-        $sql = "c.estatus = 1 AND (c.organizacion_id IN ({$ph}) OR (? > 0 AND COALESCE(c.entidad, 0) = ?))";
+        $sql = "c.estatus = 1 AND (c.cod_org IN ({$ph}) OR (? > 0 AND COALESCE(c.entidad, 0) = ?))";
 
         return [$sql, array_merge($ids, [$org_entidad, $org_entidad])];
     }
@@ -99,14 +99,14 @@ final class OrganizacionDashboardStats
         $idParams = count($ids) > 0 ? $ids : [$org_pk];
         $ph = implode(',', array_fill(0, count($idParams), '?'));
 
-        // Incluir torneos sin entidad (0): datos legacy; el acople real es organizacion_id / club_responsable.
+        // Incluir torneos sin entidad (0): datos legacy; el acople real es cod_org / club_responsable.
         $entPart = "(? = 0 OR COALESCE({$a}.entidad, 0) = ? OR COALESCE({$a}.entidad, 0) = 0)";
         $entParams = [$org_entidad, $org_entidad];
 
         $fechaPart = $activosProximos ? " AND {$a}.fechator >= CURDATE()" : '';
 
-        if ($flags['has_tournament_organizacion_id']) {
-            // club_responsable y, a veces, organizacion_id en torneos guardan cod_org (p. ej. 13) y no la PK: hay que matchear id y cod_org.
+        if ($flags['has_tournament_cod_org']) {
+            // club_responsable y cod_org en torneos pueden guardar cod_org (p. ej. 13) y no la PK: hay que matchear id y cod_org.
             $legacyClub = "{$a}.club_responsable IN ({$ph})";
             $legacyParams = $idParams;
             if ($has_cod_org) {
@@ -114,9 +114,9 @@ final class OrganizacionDashboardStats
                 $legacyParams = array_merge($idParams, [$org_ref]);
             }
             $sql = "{$entPart}{$fechaPart} AND {$a}.estatus = 1 AND (
-                ({$a}.organizacion_id IS NOT NULL AND {$a}.organizacion_id > 0 AND {$a}.organizacion_id IN ({$ph}))
+                ({$a}.cod_org IS NOT NULL AND {$a}.cod_org > 0 AND {$a}.cod_org IN ({$ph}))
                 OR (
-                    ({$a}.organizacion_id IS NULL OR {$a}.organizacion_id = 0)
+                    ({$a}.cod_org IS NULL OR {$a}.cod_org = 0)
                     AND ({$legacyClub})
                 )
             )";
@@ -172,13 +172,13 @@ final class OrganizacionDashboardStats
     {
         $flags = self::columnFlags($pdo);
 
-        return $flags['has_usuario_organizacion_id']
-            ? '(? > 0 AND COALESCE(NULLIF(u.organizacion_id, 0), COALESCE(u.entidad, 0)) = ?)'
+        return $flags['has_usuario_cod_org']
+            ? '(? > 0 AND COALESCE(NULLIF(u.cod_org, 0), COALESCE(u.entidad, 0)) = ?)'
             : '(? > 0 AND COALESCE(u.entidad, 0) = ?)';
     }
 
     /**
-     * Expresión SQL (sin WHERE) para “territorio” del usuario: entidad, u opcionalmente organizacion_id.
+     * Expresión SQL (sin WHERE) para “territorio” del usuario: entidad, u opcionalmente cod_org.
      */
     public static function usuarioTerritorioCoalesceExpr(PDO $pdo, string $alias = 'u'): string
     {
@@ -187,8 +187,8 @@ final class OrganizacionDashboardStats
             $alias = 'u';
         }
 
-        return $flags['has_usuario_organizacion_id']
-            ? "COALESCE(NULLIF({$alias}.organizacion_id, 0), COALESCE({$alias}.entidad, 0))"
+        return $flags['has_usuario_cod_org']
+            ? "COALESCE(NULLIF({$alias}.cod_org, 0), COALESCE({$alias}.entidad, 0))"
             : "COALESCE({$alias}.entidad, 0)";
     }
 

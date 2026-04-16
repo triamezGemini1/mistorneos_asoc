@@ -1787,7 +1787,7 @@ function obtenerDatosInscribirEquipoSitio(int $torneo_id): array
         if ($es_parejas && $is_admin_general) {
             $org_torneo_id = Auth::getTournamentOrganizacionId($torneo_id);
             if ($org_torneo_id) {
-                $stmt = $pdo->prepare("SELECT id FROM clubes WHERE organizacion_id = ? AND (estatus = 1 OR estatus = '1' OR estatus = 'activo')");
+                $stmt = $pdo->prepare("SELECT id FROM clubes WHERE cod_org = ? AND (estatus = 1 OR estatus = '1' OR estatus = 'activo')");
                 $stmt->execute([$org_torneo_id]);
                 $clubes_ids = array_column($stmt->fetchAll(PDO::FETCH_ASSOC), 'id');
             }
@@ -1834,18 +1834,18 @@ function obtenerDatosInscribirEquipoSitio(int $torneo_id): array
     $clubes_disponibles = [];
     $where_club_activo = "(c.estatus = 1 OR c.estatus = '1' OR c.estatus = 'activo')";
     if ($org_torneo_id) {
-        $stmt = $pdo->prepare("SELECT c.id, c.nombre FROM clubes c WHERE c.organizacion_id = ? AND {$where_club_activo} ORDER BY c.nombre ASC");
+        $stmt = $pdo->prepare("SELECT c.id, c.nombre FROM clubes c WHERE c.cod_org = ? AND {$where_club_activo} ORDER BY c.nombre ASC");
         $stmt->execute([$org_torneo_id]);
         $clubes_disponibles = $stmt->fetchAll(PDO::FETCH_ASSOC);
     } elseif ($is_admin_general) {
         $stmt = $pdo->query("SELECT id, nombre FROM clubes WHERE (estatus = 1 OR estatus = '1' OR estatus = 'activo') ORDER BY nombre ASC");
         $clubes_disponibles = $stmt->fetchAll(PDO::FETCH_ASSOC);
     } elseif ($user_club_id) {
-        $stmt = $pdo->prepare('SELECT organizacion_id FROM clubes WHERE id = ? LIMIT 1');
+        $stmt = $pdo->prepare('SELECT cod_org FROM clubes WHERE id = ? LIMIT 1');
         $stmt->execute([$user_club_id]);
         $org_usuario = $stmt->fetchColumn();
         if ($org_usuario) {
-            $stmt = $pdo->prepare("SELECT c.id, c.nombre FROM clubes c WHERE c.organizacion_id = ? AND {$where_club_activo} ORDER BY c.nombre ASC");
+            $stmt = $pdo->prepare("SELECT c.id, c.nombre FROM clubes c WHERE c.cod_org = ? AND {$where_club_activo} ORDER BY c.nombre ASC");
             $stmt->execute([(int)$org_usuario]);
             $clubes_disponibles = $stmt->fetchAll(PDO::FETCH_ASSOC);
         }

@@ -152,7 +152,7 @@ try {
             }
             
             // Obtener organización del club del admin_torneo
-            $stmt_org = DB::pdo()->prepare("SELECT organizacion_id FROM clubes WHERE id = ?");
+            $stmt_org = DB::pdo()->prepare("SELECT cod_org FROM clubes WHERE id = ?");
             $stmt_org->execute([$user_club_id]);
             $organizacion_id = (int)$stmt_org->fetchColumn();
             
@@ -173,7 +173,7 @@ try {
                 $club_responsable = (int)$orgRefData['ref'];
             } else {
                 // Es un ID de club, obtener su organización
-                $stmt_org = DB::pdo()->prepare("SELECT organizacion_id FROM clubes WHERE id = ?");
+                $stmt_org = DB::pdo()->prepare("SELECT cod_org FROM clubes WHERE id = ?");
                 $stmt_org->execute([$club_responsable]);
                 $organizacion_id = (int)$stmt_org->fetchColumn();
                 $orgRefData = $resolveOrgRef(DB::pdo(), $organizacion_id);
@@ -198,7 +198,7 @@ try {
     }
     
     // Insertar en la base de datos (primero sin archivos para obtener el ID)
-    // Verificar columnas existentes (organizacion_id, owner_user_id, entidad)
+    // Verificar columnas existentes (cod_org, owner_user_id, entidad)
     $tiene_organizacion = false;
     $tiene_owner = false;
     $tiene_entidad = false;
@@ -207,7 +207,7 @@ try {
     $tiene_parent_event_id = false;
     try {
         $cols = DB::pdo()->query("SHOW COLUMNS FROM tournaments")->fetchAll(PDO::FETCH_COLUMN);
-        $tiene_organizacion = in_array('organizacion_id', $cols);
+        $tiene_organizacion = in_array('cod_org', $cols);
         $tiene_owner = in_array('owner_user_id', $cols);
         $tiene_entidad = in_array('entidad', $cols);
         $tiene_permite_inscripcion = in_array('permite_inscripcion_linea', $cols);
@@ -224,8 +224,8 @@ try {
     $owner_user_id = $user_id;
     
     if ($tiene_organizacion && $tiene_owner && $tiene_entidad) {
-        $ins_cols = "nombre, fechator, lugar, clase, modalidad, tiempo, puntos, rondas, costo, ranking, pareclub, estatus, es_evento_masivo, club_responsable, organizacion_id, owner_user_id, entidad, cuenta_id, invitacion, normas, afiche";
-        $ins_vals = ":nombre, :fechator, :lugar, :clase, :modalidad, :tiempo, :puntos, :rondas, :costo, :ranking, :pareclub, :estatus, :es_evento_masivo, :club_responsable, :organizacion_id, :owner_user_id, :entidad, :cuenta_id, '', '', ''";
+        $ins_cols = "nombre, fechator, lugar, clase, modalidad, tiempo, puntos, rondas, costo, ranking, pareclub, estatus, es_evento_masivo, club_responsable, cod_org, owner_user_id, entidad, cuenta_id, invitacion, normas, afiche";
+        $ins_vals = ":nombre, :fechator, :lugar, :clase, :modalidad, :tiempo, :puntos, :rondas, :costo, :ranking, :pareclub, :estatus, :es_evento_masivo, :club_responsable, :cod_org, :owner_user_id, :entidad, :cuenta_id, '', '', ''";
         if ($tiene_permite_inscripcion) {
             $ins_cols .= ", permite_inscripcion_linea";
             $ins_vals .= ", :permite_inscripcion_linea";
@@ -263,7 +263,7 @@ try {
             ':estatus' => $estatus,
             ':es_evento_masivo' => $es_evento_masivo,
             ':club_responsable' => $club_responsable,
-            ':organizacion_id' => $organizacion_id,
+            ':cod_org' => $organizacion_id,
             ':owner_user_id' => $owner_user_id,
             ':entidad' => $entidad,
             ':cuenta_id' => $cuenta_id
@@ -288,10 +288,10 @@ try {
         $stmt = DB::pdo()->prepare("
             INSERT INTO tournaments (
                 nombre, fechator, lugar, clase, modalidad, tiempo, puntos, rondas, 
-                costo, ranking, pareclub, estatus, es_evento_masivo, club_responsable, organizacion_id, owner_user_id, cuenta_id" . ($tiene_parent_event_id ? ', parent_event_id' : '') . ", invitacion, normas, afiche
+                costo, ranking, pareclub, estatus, es_evento_masivo, club_responsable, cod_org, owner_user_id, cuenta_id" . ($tiene_parent_event_id ? ', parent_event_id' : '') . ", invitacion, normas, afiche
             ) VALUES (
                 :nombre, :fechator, :lugar, :clase, :modalidad, :tiempo, :puntos, :rondas,
-                :costo, :ranking, :pareclub, :estatus, :es_evento_masivo, :club_responsable, :organizacion_id, :owner_user_id, :cuenta_id" . ($tiene_parent_event_id ? ', 0' : '') . ", '', '', ''
+                :costo, :ranking, :pareclub, :estatus, :es_evento_masivo, :club_responsable, :cod_org, :owner_user_id, :cuenta_id" . ($tiene_parent_event_id ? ', 0' : '') . ", '', '', ''
             )
         ");
         
@@ -310,7 +310,7 @@ try {
             ':estatus' => $estatus,
             ':es_evento_masivo' => $es_evento_masivo,
             ':club_responsable' => $club_responsable,
-            ':organizacion_id' => $organizacion_id,
+            ':cod_org' => $organizacion_id,
             ':owner_user_id' => $owner_user_id,
             ':cuenta_id' => $cuenta_id
         ]);
@@ -377,10 +377,10 @@ try {
         $stmt = DB::pdo()->prepare("
             INSERT INTO tournaments (
                 nombre, fechator, lugar, clase, modalidad, tiempo, puntos, rondas, 
-                costo, ranking, pareclub, estatus, es_evento_masivo, club_responsable, organizacion_id, entidad, cuenta_id" . ($tiene_parent_event_id ? ', parent_event_id' : '') . ", invitacion, normas, afiche
+                costo, ranking, pareclub, estatus, es_evento_masivo, club_responsable, cod_org, entidad, cuenta_id" . ($tiene_parent_event_id ? ', parent_event_id' : '') . ", invitacion, normas, afiche
             ) VALUES (
                 :nombre, :fechator, :lugar, :clase, :modalidad, :tiempo, :puntos, :rondas,
-                :costo, :ranking, :pareclub, :estatus, :es_evento_masivo, :club_responsable, :organizacion_id, :entidad, :cuenta_id" . ($tiene_parent_event_id ? ', 0' : '') . ", '', '', ''
+                :costo, :ranking, :pareclub, :estatus, :es_evento_masivo, :club_responsable, :cod_org, :entidad, :cuenta_id" . ($tiene_parent_event_id ? ', 0' : '') . ", '', '', ''
             )
         ");
         
@@ -399,7 +399,7 @@ try {
             ':estatus' => $estatus,
             ':es_evento_masivo' => $es_evento_masivo,
             ':club_responsable' => $club_responsable,
-            ':organizacion_id' => $organizacion_id,
+            ':cod_org' => $organizacion_id,
             ':entidad' => $entidad,
             ':cuenta_id' => $cuenta_id
         ]);
@@ -407,10 +407,10 @@ try {
         $stmt = DB::pdo()->prepare("
             INSERT INTO tournaments (
                 nombre, fechator, lugar, clase, modalidad, tiempo, puntos, rondas, 
-                costo, ranking, pareclub, estatus, es_evento_masivo, club_responsable, organizacion_id, cuenta_id" . ($tiene_parent_event_id ? ', parent_event_id' : '') . ", invitacion, normas, afiche
+                costo, ranking, pareclub, estatus, es_evento_masivo, club_responsable, cod_org, cuenta_id" . ($tiene_parent_event_id ? ', parent_event_id' : '') . ", invitacion, normas, afiche
             ) VALUES (
                 :nombre, :fechator, :lugar, :clase, :modalidad, :tiempo, :puntos, :rondas,
-                :costo, :ranking, :pareclub, :estatus, :es_evento_masivo, :club_responsable, :organizacion_id, :cuenta_id" . ($tiene_parent_event_id ? ', 0' : '') . ", '', '', ''
+                :costo, :ranking, :pareclub, :estatus, :es_evento_masivo, :club_responsable, :cod_org, :cuenta_id" . ($tiene_parent_event_id ? ', 0' : '') . ", '', '', ''
             )
         ");
         
@@ -429,7 +429,7 @@ try {
             ':estatus' => $estatus,
             ':es_evento_masivo' => $es_evento_masivo,
             ':club_responsable' => $club_responsable,
-            ':organizacion_id' => $organizacion_id,
+            ':cod_org' => $organizacion_id,
             ':cuenta_id' => $cuenta_id
         ]);
     } elseif ($tiene_entidad) {
@@ -462,7 +462,7 @@ try {
             ':cuenta_id' => $cuenta_id
         ]);
     } else {
-        // Sin columna organizacion_id ni owner_user_id (esquema antiguo)
+        // Sin columna cod_org ni owner_user_id (esquema antiguo)
         $stmt = DB::pdo()->prepare("
             INSERT INTO tournaments (
                 nombre, fechator, lugar, clase, modalidad, tiempo, puntos, rondas, 

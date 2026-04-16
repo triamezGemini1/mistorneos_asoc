@@ -70,17 +70,17 @@ try {
         }
     } else {
         $orgJoin = $hasCodOrg
-            ? 'LEFT JOIN organizaciones o ON (o.id = COALESCE(t.organizacion_id, t.club_responsable) OR o.cod_org = COALESCE(t.organizacion_id, t.club_responsable))'
-            : 'LEFT JOIN organizaciones o ON o.id = COALESCE(t.organizacion_id, t.club_responsable)';
+            ? 'LEFT JOIN organizaciones o ON (o.id = COALESCE(t.cod_org, t.club_responsable) OR o.cod_org = COALESCE(t.cod_org, t.club_responsable))'
+            : 'LEFT JOIN organizaciones o ON o.id = COALESCE(t.cod_org, t.club_responsable)';
         $stmtOrg = $pdo->query("
         SELECT DISTINCT
-            COALESCE(NULLIF(o.cod_org, 0), o.id, t.organizacion_id, t.club_responsable) AS id,
-            COALESCE(NULLIF(TRIM(o.nombre), ''), CONCAT('Organización ', COALESCE(t.organizacion_id, t.club_responsable))) AS nombre
+            COALESCE(NULLIF(o.cod_org, 0), o.id, t.cod_org, t.club_responsable) AS id,
+            COALESCE(NULLIF(TRIM(o.nombre), ''), CONCAT('Organización ', COALESCE(t.cod_org, t.club_responsable))) AS nombre
         FROM tournaments t
         {$orgJoin}
         WHERE t.estatus = 1
           AND COALESCE(t.ranking, 0) = 1
-          AND COALESCE(t.organizacion_id, t.club_responsable, 0) > 0
+          AND COALESCE(t.cod_org, t.club_responsable, 0) > 0
         ORDER BY nombre ASC
     ");
         $organizaciones = $stmtOrg->fetchAll(PDO::FETCH_ASSOC) ?: [];

@@ -157,9 +157,9 @@ if ($torneo_id <= 0) {
 
                 $org_id = isset($torneo['club_responsable']) && (int)$torneo['club_responsable'] > 0 ? (int)$torneo['club_responsable'] : null;
                 $cols_clubes_list = ['id', 'nombre', 'direccion', 'delegado', 'telefono', 'email', 'logo', 'estatus'];
-                $has_organizacion_id = in_array('organizacion_id', $pdo->query("SHOW COLUMNS FROM clubes")->fetchAll(PDO::FETCH_COLUMN), true);
+                $has_organizacion_id = in_array('cod_org', $pdo->query("SHOW COLUMNS FROM clubes")->fetchAll(PDO::FETCH_COLUMN), true);
                 if ($has_organizacion_id) {
-                    $cols_clubes_list[] = 'organizacion_id';
+                    $cols_clubes_list[] = 'cod_org';
                 }
                 if (in_array('id_directorio_club', $pdo->query("SHOW COLUMNS FROM clubes")->fetchAll(PDO::FETCH_COLUMN), true)) {
                     $cols_clubes_list[] = 'id_directorio_club';
@@ -171,7 +171,7 @@ if ($torneo_id <= 0) {
                 $pagination = new Pagination($total, $current_page, $per_page);
                 // Orden: primero los clubes de la organización que organiza el torneo, luego el resto; dentro de cada grupo por nombre
                 $order_sql = $has_organizacion_id && $org_id !== null
-                    ? "ORDER BY (CASE WHEN organizacion_id = " . (int)$org_id . " THEN 0 ELSE 1 END), nombre ASC"
+                    ? "ORDER BY (CASE WHEN cod_org = " . (int)$org_id . " THEN 0 ELSE 1 END), nombre ASC"
                     : "ORDER BY nombre ASC";
                 $stmt = $pdo->prepare("
                     SELECT " . implode(', ', $cols_clubes_list) . "
@@ -546,7 +546,7 @@ $fechator_fmt = $torneo && !empty($torneo['fechator']) ? date('d/m/Y', strtotime
                                                 <td class="text-center align-middle">
                                                     <?php
                                                     $estatus_club = (int)($row['estatus'] ?? 1);
-                                                    $es_de_org = isset($org_id) && isset($row['organizacion_id']) && (int)$row['organizacion_id'] === $org_id;
+                                                    $es_de_org = isset($org_id) && isset($row['cod_org']) && (int)$row['cod_org'] === $org_id;
                                                     ?>
                                                     <?php if ($es_de_org): ?>
                                                         <span class="badge bg-primary" title="Club de la organización que organiza este torneo">Mi organización</span>

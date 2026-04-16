@@ -296,7 +296,7 @@ class LandingDataService
             return null;
         }
         try {
-            $stmt = $this->pdo->prepare("SELECT organizacion_id FROM clubes WHERE id = ? AND estatus = 1");
+            $stmt = $this->pdo->prepare("SELECT cod_org FROM clubes WHERE id = ? AND estatus = 1");
             $stmt->execute([$club_id]);
             $val = $stmt->fetchColumn();
             return $val !== false && $val !== null ? (int)$val : null;
@@ -377,7 +377,7 @@ class LandingDataService
                     COUNT(DISTINCT c.id) AS total_clubes
                 FROM entidad e
                 LEFT JOIN organizaciones o ON o.entidad = e.{$idColSafe} AND o.estatus = 1
-                LEFT JOIN clubes c ON (c.organizacion_id = o.id" . ($this->hasCodOrgColumn ? " OR c.organizacion_id = o.cod_org" : "") . ") AND c.estatus = 1
+                LEFT JOIN clubes c ON (c.cod_org = o.id" . ($this->hasCodOrgColumn ? " OR c.cod_org = o.cod_org" : "") . ") AND c.estatus = 1
                 GROUP BY e.{$idColSafe}, e.nombre
                 ORDER BY e.nombre ASC
             ");
@@ -419,7 +419,7 @@ class LandingDataService
                     COUNT(DISTINCT c.id) as total_clubes
                 FROM entidad e
                 INNER JOIN organizaciones o ON o.entidad = e.{$idColSafe} AND o.estatus = 1
-                LEFT JOIN clubes c ON (c.organizacion_id = o.id" . ($this->hasCodOrgColumn ? " OR c.organizacion_id = o.cod_org" : "") . ") AND c.estatus = 1
+                LEFT JOIN clubes c ON (c.cod_org = o.id" . ($this->hasCodOrgColumn ? " OR c.cod_org = o.cod_org" : "") . ") AND c.estatus = 1
                 GROUP BY e.{$idColSafe}, e.nombre
                 HAVING total_organizaciones > 0
                 ORDER BY e.nombre ASC
@@ -441,7 +441,7 @@ class LandingDataService
                     COUNT(DISTINCT o.id) AS total_organizaciones,
                     COUNT(DISTINCT c.id) AS total_clubes
                 FROM organizaciones o
-                LEFT JOIN clubes c ON (c.organizacion_id = o.id" . ($this->hasCodOrgColumn ? " OR c.organizacion_id = o.cod_org" : "") . ") AND c.estatus = 1
+                LEFT JOIN clubes c ON (c.cod_org = o.id" . ($this->hasCodOrgColumn ? " OR c.cod_org = o.cod_org" : "") . ") AND c.estatus = 1
                 WHERE o.estatus = 1 AND o.entidad > 0
                 GROUP BY o.entidad
                 ORDER BY nombre ASC
@@ -473,7 +473,7 @@ class LandingDataService
                     o.responsable,
                     o.telefono,
                     o.email,
-                    (SELECT COUNT(*) FROM clubes c WHERE (c.organizacion_id = o.id" . ($this->hasCodOrgColumn ? " OR c.organizacion_id = o.cod_org" : "") . ") AND c.estatus = 1) as total_clubes,
+                    (SELECT COUNT(*) FROM clubes c WHERE (c.cod_org = o.id" . ($this->hasCodOrgColumn ? " OR c.cod_org = o.cod_org" : "") . ") AND c.estatus = 1) as total_clubes,
                     (SELECT COUNT(*) FROM tournaments t
                      WHERE (t.club_responsable = o.id" . ($this->hasCodOrgColumn ? " OR t.club_responsable = o.cod_org" : "") . ") AND t.estatus = 1 AND t.fechator >= CURDATE()) as torneos_activos
                 FROM organizaciones o
@@ -519,7 +519,7 @@ class LandingDataService
                     (SELECT COUNT(*) FROM tournaments t
                      WHERE t.club_responsable = ? AND t.estatus = 1 AND t.fechator >= CURDATE()) as torneos_activos
                 FROM clubes c
-                WHERE c.organizacion_id = ? AND c.estatus = 1
+                WHERE c.cod_org = ? AND c.estatus = 1
                 ORDER BY c.nombre ASC
             ");
             $stmt->execute([$org_id, $orgRealId]);

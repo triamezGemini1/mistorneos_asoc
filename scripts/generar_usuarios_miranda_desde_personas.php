@@ -92,7 +92,7 @@ if (empty($clubes_miranda)) {
     try {
         $stmt = $pdo->prepare("
             SELECT DISTINCT c.id, c.nombre FROM clubes c
-            INNER JOIN organizaciones o ON c.organizacion_id = o.id AND o.estatus = 1
+            INNER JOIN organizaciones o ON c.cod_org = o.id AND o.estatus = 1
             INNER JOIN usuarios u ON o.admin_user_id = u.id AND u.role = 'admin_club'
             WHERE u.entidad = ? AND c.estatus = 1
             ORDER BY c.nombre ASC

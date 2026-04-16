@@ -75,10 +75,10 @@ class InvitationPDFGenerator {
                 }
             }
             
-            // Fallback: si hay organizacion_id separado, usarlo
-            if (!$club_data && !empty($tournament_data['organizacion_id'])) {
-                $club_data = self::getOrganizacionData((int)$tournament_data['organizacion_id']);
-                $admin_data = self::getOrganizacionAdminData((int)$tournament_data['organizacion_id']);
+            // Fallback: si hay cod_org en el torneo, usarlo
+            if (!$club_data && !empty($tournament_data['cod_org'])) {
+                $club_data = self::getOrganizacionData((int)$tournament_data['cod_org']);
+                $admin_data = self::getOrganizacionAdminData((int)$tournament_data['cod_org']);
             }
             
             // Generar link de invitación
@@ -141,7 +141,7 @@ class InvitationPDFGenerator {
     private static function getOrganizacionData(int $organizacion_id): ?array {
         $stmt = DB::pdo()->prepare("
             SELECT o.id, o.nombre, o.direccion, o.responsable as delegado, o.telefono, o.email,
-                   (SELECT COUNT(*) FROM clubes WHERE organizacion_id = o.id AND estatus = 1) as total_clubes
+                   (SELECT COUNT(*) FROM clubes WHERE cod_org = o.id AND estatus = 1) as total_clubes
             FROM organizaciones o
             WHERE o.id = ? AND o.estatus = 1
         ");

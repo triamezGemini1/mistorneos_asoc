@@ -208,7 +208,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
                         <div class="col-md-4"><small>Fechas nac. actualizadas: <strong><?= (int)$d['fechnac_actualizados'] ?></strong></small></div>
                         <div class="col-md-4"><small>Club ID actualizados: <strong><?= (int)$d['club_id_actualizados'] ?></strong></small></div>
                         <div class="col-md-4"><small>Entidad actualizadas: <strong><?= (int)($d['entidad_actualizados'] ?? 0) ?></strong></small></div>
-                        <div class="col-md-4"><small>Organizacion ID actualizados: <strong><?= (int)($d['organizacion_id_actualizados'] ?? 0) ?></strong></small></div>
+                        <div class="col-md-4"><small>cod_org actualizados: <strong><?= (int)($d['cod_org_actualizados'] ?? $d['organizacion_id_actualizados'] ?? 0) ?></strong></small></div>
                         <div class="col-md-4"><small>NumFVD actualizados: <strong><?= (int)$d['numfvd_actualizados'] ?></strong></small></div>
                         <div class="col-md-4"><small>Sexo actualizados: <strong><?= (int)$d['sexo_actualizados'] ?></strong></small></div>
                     </div>

@@ -6,9 +6,9 @@ $pdo = DB::pdo();
 
 echo "=== Verificación de índices ===\n\n";
 
-// Verificar índice en clubes.organizacion_id
-$stmt = $pdo->query("SHOW INDEX FROM clubes WHERE Column_name = 'organizacion_id'");
-echo "clubes.organizacion_id: " . ($stmt->rowCount() > 0 ? "✅ Tiene índice" : "❌ Sin índice") . "\n";
+// Verificar índice en clubes.cod_org
+$stmt = $pdo->query("SHOW INDEX FROM clubes WHERE Column_name = 'cod_org'");
+echo "clubes.cod_org: " . ($stmt->rowCount() > 0 ? "✅ Tiene índice" : "❌ Sin índice") . "\n";
 
 // Verificar índice en tournaments.club_responsable
 $stmt = $pdo->query("SHOW INDEX FROM tournaments WHERE Column_name = 'club_responsable'");
@@ -36,7 +36,7 @@ echo "usuarios: " . $stmt->fetchColumn() . "\n";
 echo "\n=== Test de tiempo de consultas ===\n";
 
 $start = microtime(true);
-$stmt = $pdo->prepare("SELECT COUNT(*) FROM clubes WHERE organizacion_id = ?");
+$stmt = $pdo->prepare("SELECT COUNT(*) FROM clubes WHERE cod_org = ?");
 $stmt->execute([1]);
 $result = $stmt->fetchColumn();
 $time1 = (microtime(true) - $start) * 1000;
@@ -53,7 +53,7 @@ $start = microtime(true);
 $stmt = $pdo->prepare("
     SELECT COUNT(*) FROM usuarios u 
     INNER JOIN clubes c ON u.club_id = c.id 
-    WHERE c.organizacion_id = ? AND u.role = 'usuario' AND u.status = 'approved'
+    WHERE c.cod_org = ? AND u.role = 'usuario' AND u.status = 'approved'
 ");
 $stmt->execute([1]);
 $result = $stmt->fetchColumn();

@@ -321,7 +321,7 @@ if ($action === 'new' && ($current_user['role'] === 'admin_general' || $current_
     } else {
         $club_id_user = (int)($current_user['club_id'] ?? 0);
         if ($club_id_user > 0) {
-            $stmt = DB::pdo()->prepare("SELECT organizacion_id FROM clubes WHERE id = ?");
+            $stmt = DB::pdo()->prepare("SELECT cod_org FROM clubes WHERE id = ?");
             $stmt->execute([$club_id_user]);
             $organizacion_id_new = $stmt->fetchColumn() ? (int)$stmt->fetchColumn() : null;
         }

@@ -120,7 +120,7 @@ function handleAssignAdminTorneo() {
         }
 
         $entidad_org = 0;
-        $stmt_org = $pdo->prepare("SELECT c.organizacion_id FROM clubes c WHERE c.id = ?");
+        $stmt_org = $pdo->prepare("SELECT c.cod_org FROM clubes c WHERE c.id = ?");
         $stmt_org->execute([$club_id]);
         $org_id = $stmt_org->fetchColumn();
         if ($org_id) {
@@ -188,7 +188,7 @@ function handleAssignOperador() {
         }
         // Al asignar operador, se incorpora al usuario a la organización del admin (club_id y entidad de la organización)
         $entidad_org = 0;
-        $stmt_org = $pdo->prepare("SELECT c.organizacion_id FROM clubes c WHERE c.id = ?");
+        $stmt_org = $pdo->prepare("SELECT c.cod_org FROM clubes c WHERE c.id = ?");
         $stmt_org->execute([$club_id]);
         $org_id = $stmt_org->fetchColumn();
         if ($org_id) {
@@ -277,7 +277,7 @@ function handleChangeRole() {
             $stmt->execute(['usuario', null, $user_id]);
         } else {
             $entidad_org = 0;
-            $stmt_org = $pdo->prepare("SELECT c.organizacion_id FROM clubes c WHERE c.id = ?");
+            $stmt_org = $pdo->prepare("SELECT c.cod_org FROM clubes c WHERE c.id = ?");
             $stmt_org->execute([$club_id]);
             $org_id = $stmt_org->fetchColumn();
             if ($org_id) {

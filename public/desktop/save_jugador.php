@@ -1,4 +1,4 @@
-﻿<?php
+<?php
 /**
  * Guarda un jugador desde el formulario inline (AJAX).
  * Acepta texto para Entidad/Organización/Club: si existe en SQLite usa su ID; si no, crea el registro con sync_status=0.
@@ -127,7 +127,7 @@ try {
 
     $organizacion_id = null;
     if ($club_id) {
-        $st = $pdo->prepare("SELECT organizacion_id FROM clubes WHERE id = ?");
+        $st = $pdo->prepare("SELECT cod_org FROM clubes WHERE id = ?");
         $st->execute([$club_id]);
         $r = $st->fetch(PDO::FETCH_ASSOC);
         if ($r && isset($r['organizacion_id'])) {

@@ -70,7 +70,7 @@ class ClubRepository
 
     /**
      * Crea un nuevo club.
-     * Usa solo columnas existentes en la tabla clubes (nombre, direccion, delegado, telefono, email, estatus, organizacion_id, entidad, logo).
+     * Usa solo columnas existentes en la tabla clubes (nombre, direccion, delegado, telefono, email, estatus, cod_org, entidad, logo).
      */
     public function create(array $data): int
     {
@@ -78,7 +78,7 @@ class ClubRepository
         $placeholders = ['?', '?'];
         $values = [$data['nombre'], $data['estatus'] ?? 1];
 
-        $opt = ['direccion' => null, 'delegado' => null, 'telefono' => null, 'email' => null, 'organizacion_id' => null, 'entidad' => 0, 'logo' => null];
+        $opt = ['direccion' => null, 'delegado' => null, 'telefono' => null, 'email' => null, 'cod_org' => null, 'entidad' => 0, 'logo' => null];
         foreach (array_keys($opt) as $key) {
             if (array_key_exists($key, $data)) {
                 $cols[] = $key;
@@ -102,7 +102,7 @@ class ClubRepository
         $fields = [];
         $values = [];
         
-        $allowedFields = ['nombre', 'direccion', 'delegado', 'telefono', 'email', 'logo', 'estatus', 'organizacion_id', 'entidad'];
+        $allowedFields = ['nombre', 'direccion', 'delegado', 'telefono', 'email', 'logo', 'estatus', 'cod_org', 'entidad'];
         
         foreach ($allowedFields as $field) {
             if (array_key_exists($field, $data)) {
