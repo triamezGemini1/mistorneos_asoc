@@ -23,15 +23,14 @@ try {
 } catch (Throwable $ignored) {
     $has_cod_org = false;
 }
-$org_where = $has_cod_org ? "(o.id = ? OR o.cod_org = ?)" : "o.id = ?";
-
+// getUserOrganizacionId() devuelve siempre la PK (id); no usar (id OR cod_org) con el mismo valor (colisiones id=cod_org de otra fila).
 $stmt = $pdo->prepare("
     SELECT o.*, e.nombre as entidad_nombre
     FROM organizaciones o
     LEFT JOIN entidad e ON o.entidad = e.id
-    WHERE {$org_where} AND o.estatus = 1
+    WHERE o.id = ? AND o.estatus = 1
 ");
-$stmt->execute($has_cod_org ? [$organizacion_id, $organizacion_id] : [$organizacion_id]);
+$stmt->execute([(int) $organizacion_id]);
 $organizacion = $stmt->fetch(PDO::FETCH_ASSOC);
 
 if (!$organizacion) {

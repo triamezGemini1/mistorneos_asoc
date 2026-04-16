@@ -193,10 +193,8 @@ class StatisticsHelper {
             if (!$organizacionRow) {
                 $oid = (int) Auth::getUserOrganizacionId();
                 if ($oid > 0) {
-                    $stmtOrgRow = $pdo->prepare($hasCodOrg
-                        ? 'SELECT o.* FROM organizaciones o WHERE (o.id = ? OR o.cod_org = ?) AND o.estatus = 1 LIMIT 1'
-                        : 'SELECT o.* FROM organizaciones o WHERE o.id = ? AND o.estatus = 1 LIMIT 1');
-                    $stmtOrgRow->execute($hasCodOrg ? [$oid, $oid] : [$oid]);
+                    $stmtOrgRow = $pdo->prepare('SELECT o.* FROM organizaciones o WHERE o.id = ? AND o.estatus = 1 LIMIT 1');
+                    $stmtOrgRow->execute([$oid]);
                     $organizacionRow = $stmtOrgRow->fetch(PDO::FETCH_ASSOC) ?: null;
                 }
             }

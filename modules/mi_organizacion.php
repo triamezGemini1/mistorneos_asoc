@@ -49,31 +49,29 @@ if ($is_admin_general) {
         $organizacion_id = null;
         $organizacion = [];
     } elseif ($organizacion_id) {
-        $whereOrg = $has_cod_org ? "WHERE (o.id = ? OR o.cod_org = ?)" : "WHERE o.id = ?";
+        // id en URL es siempre PK: evitar (id OR cod_org) con el mismo parámetro (colisión entre orgs).
         $stmt = DB::pdo()->prepare("
             SELECT o.*, e.nombre as entidad_nombre, u.nombre as admin_nombre, u.email as admin_email
             FROM organizaciones o
             LEFT JOIN entidad e ON o.entidad = e.id
             LEFT JOIN usuarios u ON o.admin_user_id = u.id
-            {$whereOrg}
+            WHERE o.id = ?
         ");
-        $paramsOrg = $has_cod_org ? [$organizacion_id, $organizacion_id] : [$organizacion_id];
-        $stmt->execute($paramsOrg);
+        $stmt->execute([(int) $organizacion_id]);
         $organizacion = $stmt->fetch(PDO::FETCH_ASSOC);
     }
 } else {
     // Admin club solo puede ver su organización
     $org_id_user = Auth::getUserOrganizacionId();
     if ($org_id_user) {
-        $whereOrgUser = $has_cod_org ? "WHERE (o.id = ? OR o.cod_org = ?) AND o.estatus = 1" : "WHERE o.id = ? AND o.estatus = 1";
         $stmt = DB::pdo()->prepare("
             SELECT o.*, e.nombre as entidad_nombre
             FROM organizaciones o
             LEFT JOIN entidad e ON o.entidad = e.id
-            {$whereOrgUser}
+            WHERE o.id = ? AND o.estatus = 1
             LIMIT 1
         ");
-        $stmt->execute($has_cod_org ? [$org_id_user, $org_id_user] : [$org_id_user]);
+        $stmt->execute([(int) $org_id_user]);
         $organizacion = $stmt->fetch(PDO::FETCH_ASSOC);
     }
     if (!$organizacion) {
@@ -371,16 +369,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
 
 // Recargar datos después de actualización
 if ($organizacion_id && empty($organizacion)) {
-    $whereOrgReload = $has_cod_org ? "WHERE (o.id = ? OR o.cod_org = ?)" : "WHERE o.id = ?";
     $stmt = DB::pdo()->prepare("
         SELECT o.*, e.nombre as entidad_nombre, u.nombre as admin_nombre, u.email as admin_email
         FROM organizaciones o
         LEFT JOIN entidad e ON o.entidad = e.id
         LEFT JOIN usuarios u ON o.admin_user_id = u.id
-        {$whereOrgReload}
+        WHERE o.id = ?
     ");
-    $paramsOrgReload = $has_cod_org ? [$organizacion_id, $organizacion_id] : [$organizacion_id];
-    $stmt->execute($paramsOrgReload);
+    $stmt->execute([(int) $organizacion_id]);
     $organizacion = $stmt->fetch(PDO::FETCH_ASSOC);
 }
 

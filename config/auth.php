@@ -261,7 +261,7 @@ class Auth {
     }
     try {
       if ($u['role'] === 'admin_club') {
-        $stmt = DB::pdo()->prepare("SELECT nombre, logo FROM organizaciones WHERE admin_user_id = ? AND estatus = 1 LIMIT 1");
+        $stmt = DB::pdo()->prepare("SELECT nombre, logo FROM organizaciones WHERE admin_user_id = ? AND estatus = 1 ORDER BY id ASC LIMIT 1");
         $stmt->execute([self::id()]);
         $row = $stmt->fetch(PDO::FETCH_ASSOC);
         if ($row) {
@@ -321,7 +321,7 @@ class Auth {
     try {
       // IMPORTANTE: este método devuelve SIEMPRE el ID físico (PK) de organizaciones
       // para mantener compatibilidad con módulos legacy.
-      $stmt = DB::pdo()->prepare("SELECT id FROM organizaciones WHERE admin_user_id = ? AND estatus = 1 LIMIT 1");
+      $stmt = DB::pdo()->prepare("SELECT id FROM organizaciones WHERE admin_user_id = ? AND estatus = 1 ORDER BY id ASC LIMIT 1");
       $stmt->execute([self::id()]);
       $org_id = $stmt->fetchColumn();
       if (!$org_id) {
@@ -334,6 +334,7 @@ class Auth {
               FROM clubes c
               INNER JOIN organizaciones o ON (c.cod_org = o.id OR c.cod_org = o.cod_org)
               WHERE c.id = ? AND o.estatus = 1
+              ORDER BY o.id ASC
               LIMIT 1
             ");
           } else {
@@ -367,7 +368,7 @@ class Auth {
     }
     try {
       if (self::hasCodOrg()) {
-        $stmt = DB::pdo()->prepare("SELECT COALESCE(NULLIF(cod_org, 0), id) FROM organizaciones WHERE admin_user_id = ? AND estatus = 1 LIMIT 1");
+        $stmt = DB::pdo()->prepare("SELECT COALESCE(NULLIF(cod_org, 0), id) FROM organizaciones WHERE admin_user_id = ? AND estatus = 1 ORDER BY id ASC LIMIT 1");
         $stmt->execute([self::id()]);
         $ref = $stmt->fetchColumn();
         return $ref ? (int)$ref : null;

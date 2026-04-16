@@ -39,9 +39,6 @@ try {
 }
 require_once __DIR__ . '/../lib/OrganizacionDashboardStats.php';
 $usuarios_territorio_expr = OrganizacionDashboardStats::usuarioTerritorioCoalesceExpr($pdo);
-$org_where_expr = $has_cod_org ? "(o.id = ? OR o.cod_org = ?)" : "o.id = ?";
-// Sin alias de tabla (p. ej. SELECT … FROM organizaciones WHERE …)
-$org_where_expr_bare = $has_cod_org ? "(id = ? OR cod_org = ?)" : "id = ?";
 $club_org_match_expr = $has_cod_org
     ? "(c.cod_org = ? OR c.cod_org = (SELECT id FROM organizaciones WHERE cod_org = ? LIMIT 1))"
     : "c.cod_org = ?";
@@ -60,24 +57,30 @@ if ($organizacion_id && $club_id) {
         $stmt->execute([$club_id]);
         $club = $stmt->fetch(PDO::FETCH_ASSOC);
         if ($club && !empty($club['cod_org'])) {
-            $stmt = $pdo->prepare("SELECT o.*, e.nombre as entidad_nombre FROM organizaciones o LEFT JOIN entidad e ON o.entidad = e.id WHERE {$org_where_expr}");
-            $params = $has_cod_org ? [(int)$club['cod_org'], (int)$club['cod_org']] : [(int)$club['cod_org']];
-            $stmt->execute($params);
+            $cref = (int) $club['cod_org'];
+            // cod_org en clubes puede ser PK o cod_org de la tabla organizaciones: priorizar coincidencia por PK.
+            $stmt = $pdo->prepare('SELECT o.*, e.nombre as entidad_nombre FROM organizaciones o LEFT JOIN entidad e ON o.entidad = e.id WHERE o.id = ? AND o.estatus = 1 LIMIT 1');
+            $stmt->execute([$cref]);
             $organizacion = $stmt->fetch(PDO::FETCH_ASSOC);
+            if (!$organizacion && $has_cod_org) {
+                $stmt = $pdo->prepare('SELECT o.*, e.nombre as entidad_nombre FROM organizaciones o LEFT JOIN entidad e ON o.entidad = e.id WHERE o.cod_org = ? AND o.estatus = 1 LIMIT 1');
+                $stmt->execute([$cref]);
+                $organizacion = $stmt->fetch(PDO::FETCH_ASSOC);
+            }
         }
     } else {
         $org_id_user = (int) Auth::getUserOrganizacionId();
-        $stmtChk = $pdo->prepare("SELECT id FROM organizaciones WHERE {$org_where_expr_bare} AND estatus = 1 LIMIT 1");
-        $stmtChk->execute($has_cod_org ? [$organizacion_id, $organizacion_id] : [$organizacion_id]);
+        $stmtChk = $pdo->prepare('SELECT id FROM organizaciones WHERE id = ? AND estatus = 1 LIMIT 1');
+        $stmtChk->execute([(int) $organizacion_id]);
         $orgPkResuelto = (int) $stmtChk->fetchColumn();
         if ($org_id_user > 0 && $orgPkResuelto > 0 && $orgPkResuelto === $org_id_user) {
             $stmt = $pdo->prepare("
                 SELECT o.*, e.nombre as entidad_nombre
                 FROM organizaciones o
                 LEFT JOIN entidad e ON o.entidad = e.id
-                WHERE {$org_where_expr} AND o.estatus = 1
+                WHERE o.id = ? AND o.estatus = 1
             ");
-            $stmt->execute($has_cod_org ? [$organizacion_id, $organizacion_id] : [$organizacion_id]);
+            $stmt->execute([(int) $organizacion_id]);
             $organizacion = $stmt->fetch(PDO::FETCH_ASSOC);
         } else {
             $organizacion = null;
@@ -257,21 +260,21 @@ if ($organizacion_id) {
             FROM organizaciones o
             LEFT JOIN entidad e ON o.entidad = e.id
             LEFT JOIN usuarios u ON o.admin_user_id = u.id
-            WHERE {$org_where_expr}
+            WHERE o.id = ?
         ");
-        $stmt->execute($has_cod_org ? [$organizacion_id, $organizacion_id] : [$organizacion_id]);
+        $stmt->execute([(int) $organizacion_id]);
         $organizacion = $stmt->fetch(PDO::FETCH_ASSOC);
     } else {
-        $org_id = Auth::getUserOrganizacionId();
-        if ($org_id == $organizacion_id || ($has_cod_org && $org_id > 0 && (int)$organizacion_id > 0)) {
+        $org_id = (int) Auth::getUserOrganizacionId();
+        if ($org_id > 0 && $org_id === (int) $organizacion_id) {
             $stmt = $pdo->prepare("
                 SELECT o.*, e.nombre as entidad_nombre, u.nombre as admin_nombre, u.email as admin_email
                 FROM organizaciones o
                 LEFT JOIN entidad e ON o.entidad = e.id
                 LEFT JOIN usuarios u ON o.admin_user_id = u.id
-                WHERE {$org_where_expr} AND o.estatus = 1
+                WHERE o.id = ? AND o.estatus = 1
             ");
-            $stmt->execute($has_cod_org ? [$organizacion_id, $organizacion_id] : [$organizacion_id]);
+            $stmt->execute([$org_id]);
             $organizacion = $stmt->fetch(PDO::FETCH_ASSOC);
         }
     }
