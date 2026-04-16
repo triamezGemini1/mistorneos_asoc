@@ -89,12 +89,30 @@ function fmtfecha(?string $f): string
             color: white;
             padding: 1.75rem;
         }
+        .header-rank h1.h3 {
+            font-size: clamp(1.35rem, 2.5vw, 1.85rem);
+            font-weight: 700;
+        }
+        .header-rank .opacity-90,
+        .header-rank .small {
+            font-size: 1rem !important;
+        }
         .nav-genero .nav-link { color: #64748b; font-weight: 600; border-radius: 10px; }
         .nav-genero .nav-link.active {
             background: linear-gradient(135deg, #0f172a, #1e40af);
             color: #fff;
         }
-        .tabla-rank th { font-size: 0.8rem; color: #475569; background: #f8fafc; }
+        .tabla-rank th {
+            font-size: 1.05rem;
+            font-weight: 700;
+            color: #334155;
+            background: #f8fafc;
+            padding: 0.65rem 0.5rem;
+        }
+        .tabla-rank td {
+            font-size: 1.05rem;
+            padding: 0.55rem 0.45rem;
+        }
         .pos-1 { background: linear-gradient(90deg, #fef3c7, #fde68a); }
         .pos-2 { background: linear-gradient(90deg, #f1f5f9, #e2e8f0); }
         .pos-3 { background: linear-gradient(90deg, #fed7aa, #fdba74); }
@@ -104,7 +122,14 @@ function fmtfecha(?string $f): string
             border: 1px solid rgba(255,255,255,0.3);
         }
         .btn-volver:hover { background: rgba(255,255,255,0.25); color: white; }
-        .detalle-torneos { font-size: 0.85rem; background: #f8fafc; }
+        .detalle-torneos { font-size: 1rem; background: #f8fafc; }
+        .detalle-torneos .table th {
+            font-size: 0.95rem;
+            font-weight: 700;
+        }
+        .detalle-torneos .table td {
+            font-size: 0.95rem;
+        }
         .card-rank-wide { max-width: min(1680px, 100%); }
         .card-detalle-atleta { border: 1px solid #e2e8f0; border-radius: 12px; padding: 1rem; margin-bottom: 1rem; background: #fff; }
         .tabla-matriz {
@@ -122,8 +147,8 @@ function fmtfecha(?string $f): string
             font-feature-settings: "tnum" 1, "lnum" 1;
         }
         .tabla-matriz .col-rank-num {
-            width: 1.65rem;
-            font-size: 0.68rem;
+            width: 1.85rem;
+            font-size: 0.82rem;
             font-weight: 800;
             font-variant-numeric: tabular-nums;
             color: #0f172a;
@@ -135,7 +160,7 @@ function fmtfecha(?string $f): string
             overflow: hidden;
             text-overflow: ellipsis;
             white-space: nowrap;
-            font-size: 0.86rem;
+            font-size: 1.05rem;
             font-weight: 600;
             line-height: 1.42;
             letter-spacing: 0.015em;
@@ -143,18 +168,18 @@ function fmtfecha(?string $f): string
         }
         /* Pos / P Gan / Pts: mitad del ancho actual (50 % de 2.65rem × 0.5) */
         .tabla-matriz .col-torneo-sub {
-            width: calc(2.65rem * 0.25);
-            min-width: calc(2.65rem * 0.25);
-            max-width: calc(2.65rem * 0.25);
+            width: calc(2.65rem * 0.32);
+            min-width: calc(2.65rem * 0.32);
+            max-width: calc(2.65rem * 0.32);
             box-sizing: border-box;
             font-variant-numeric: tabular-nums;
             font-weight: 600;
             line-height: 1.22;
             text-align: center;
-            font-size: 0.52rem;
-            letter-spacing: -0.03em;
+            font-size: 0.68rem;
+            letter-spacing: -0.02em;
             color: #1e293b;
-            padding: 0.1rem 0.02rem !important;
+            padding: 0.14rem 0.04rem !important;
         }
         /* Pts Σ, Efect. Σ, G Σ: sin cambios respecto a la versión anterior */
         .tabla-matriz .col-stat-total {
@@ -166,29 +191,29 @@ function fmtfecha(?string $f): string
             font-weight: 800;
             line-height: 1.25;
             text-align: right;
-            font-size: 0.68rem;
+            font-size: 0.85rem;
             color: #0f172a;
-            padding: 0.22rem 0.18rem !important;
+            padding: 0.26rem 0.2rem !important;
         }
         .tabla-matriz thead .sub-h.col-torneo-sub {
             white-space: normal;
-            font-size: 0.38rem;
+            font-size: 0.52rem;
             font-weight: 800;
-            line-height: 1.02;
-            padding: 0.06rem 0.02rem !important;
+            line-height: 1.08;
+            padding: 0.1rem 0.04rem !important;
             letter-spacing: 0.02em;
         }
         .tabla-matriz thead th.col-stat-total {
             white-space: normal;
-            font-size: 0.52rem;
+            font-size: 0.68rem;
             line-height: 1.15;
             vertical-align: middle;
         }
         .tabla-matriz thead .torneo-nombre {
-            font-size: 0.36rem;
+            font-size: 0.5rem;
             font-weight: 800;
-            line-height: 1.05;
-            padding: 0.06rem 0.02rem !important;
+            line-height: 1.12;
+            padding: 0.1rem 0.04rem !important;
             word-break: break-word;
             hyphens: auto;
             white-space: normal;
@@ -198,9 +223,9 @@ function fmtfecha(?string $f): string
             border-color: #1e293b !important;
         }
         .tabla-matriz thead .sub-h {
-            font-size: 0.42rem;
+            font-size: 0.55rem;
             font-weight: 700;
-            padding: 0.08rem 0.03rem !important;
+            padding: 0.1rem 0.04rem !important;
             letter-spacing: 0.03em;
             text-transform: uppercase;
             color: #1e293b;

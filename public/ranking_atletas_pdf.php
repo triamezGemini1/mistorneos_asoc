@@ -47,11 +47,11 @@ table.matriz-pdf {
   border-collapse: collapse;
   margin-top: 12px;
   font-family: DejaVu Sans, Arial, Helvetica, sans-serif;
-  font-size: 5.5pt;
+  font-size: 7pt;
 }
 table.matriz-pdf th, table.matriz-pdf td {
   border: 1px solid #333;
-  padding: 1px 2px;
+  padding: 2px 3px;
   vertical-align: middle;
 }
 table.matriz-pdf thead th { font-weight: bold; }
@@ -63,18 +63,17 @@ table.matriz-pdf tbody tr:nth-child(even) { background: #f4f6f8; }
   max-width: 103px;
   width: 103px;
   overflow: hidden;
-  font-size: 6.8pt;
+  font-size: 8.5pt;
   font-weight: bold;
   line-height: 1.3;
   color: #111;
 }
-.torneo-h { font-size: 3.5pt; line-height: 1.05; background: #334155; color: #fff; padding: 1px 1px !important; }
-/* Pos/P Gan/Pts: ~mitad del ancho previo (11pt → 6.5pt, mínimo legible en Dompdf); totales sin cambio (33pt) */
+.torneo-h { font-size: 4.5pt; line-height: 1.1; background: #334155; color: #fff; padding: 2px 2px !important; }
 .stat-pdf {
-  width: 6.5pt;
-  min-width: 6.5pt;
-  max-width: 6.5pt;
-  font-size: 5pt;
+  width: 7.5pt;
+  min-width: 7.5pt;
+  max-width: 7.5pt;
+  font-size: 6.25pt;
   font-weight: bold;
   font-variant-numeric: tabular-nums;
   padding: 0 0 !important;
@@ -85,7 +84,7 @@ table.matriz-pdf tbody tr:nth-child(even) { background: #f4f6f8; }
   width: 33pt;
   min-width: 33pt;
   max-width: 33pt;
-  font-size: 6.5pt;
+  font-size: 8pt;
   font-weight: bold;
   font-variant-numeric: tabular-nums;
   padding: 2px 4px !important;
@@ -145,7 +144,7 @@ foreach ($atletas as $a) {
     $html .= '</tr>';
 }
 $html .= '</tbody></table>';
-$html .= '<p style="font-size:7pt;color:#666;margin-top:10px;">Pos = posición en el torneo; P Gan = partidas ganadas; Pts = puntos de ranking en el evento.</p>';
+$html .= '<p style="font-size:8.5pt;color:#666;margin-top:10px;">Pos = posición en el torneo; P Gan = partidas ganadas; Pts = puntos de ranking en el evento.</p>';
 
 try {
     $report = new ReportGenerator('Ranking de atletas — Matriz', 'landscape');

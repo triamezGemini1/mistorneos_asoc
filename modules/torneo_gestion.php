@@ -6525,8 +6525,11 @@ function recalcularPosiciones($torneo_id) {
             return;
         }
 
+        // Solo parejas (2) y parejas fijas (4): ptosrnk usa partidas ganadas agregadas de la unidad.
+        // Modalidad equipos (3): puntos por posición según clasificación del equipo (clasiequi + tabla clasiranking);
+        // partidas ganadas y participación por integrante.
         $ganadosEquipoPorCodigo = [];
-        if (in_array($modalidadNum, [2, 3, 4], true)) {
+        if (in_array($modalidadNum, [2, 4], true)) {
             $stmtEqG = $pdo->prepare(
                 'SELECT codigo_equipo, ganados FROM equipos WHERE id_torneo = ? AND estatus = 0 AND codigo_equipo IS NOT NULL AND codigo_equipo != \'\''
             );
@@ -6589,7 +6592,7 @@ function recalcularPosiciones($torneo_id) {
             $id = (int)$inscrito['id'];
             $ganados = (int)($inscrito['ganados'] ?? 0);
             $codEq = trim((string)($inscrito['codigo_equipo'] ?? ''));
-            if (in_array($modalidadNum, [2, 3, 4], true) && $codEq !== '' && array_key_exists($codEq, $ganadosEquipoPorCodigo)) {
+            if (in_array($modalidadNum, [2, 4], true) && $codEq !== '' && array_key_exists($codEq, $ganadosEquipoPorCodigo)) {
                 $ganados = $ganadosEquipoPorCodigo[$codEq];
             }
             $clasiequi = (int)($inscrito['clasiequi'] ?? 0);
@@ -6597,8 +6600,7 @@ function recalcularPosiciones($torneo_id) {
             // Calcular puntos de ranking segÃºn la posiciÃ³n actual
             $ptosrnk = 1; // Por defecto, punto por participaciÃ³n
 
-            // En modalidades por unidad (parejas / equipos), el componente "puntos por clasificaciÃ³n" debe venir de
-            // la clasificaciÃ³n de la unidad (clasiequi), no de la posiciÃ³n individual del integrante.
+            // Puntos por posición (tabla clasiranking): parejas/parejas fijas y equipos usan clasificación de la unidad (clasiequi).
             $clasificacionRanking = $posicion;
             if (in_array($modalidadNum, [2, 3, 4], true) && $clasiequi > 0) {
                 $clasificacionRanking = $clasiequi;

@@ -50,7 +50,8 @@ final class RankingAtletasPublicoService
     }
 
     /**
-     * En parejas / equipos / parejas fijas, unifica ptosrnk entre integrantes de la misma unidad (por si hubiera datos históricos dispares).
+     * En parejas / parejas fijas, unifica ptosrnk entre integrantes de la misma unidad (por si hubiera datos históricos dispares).
+     * En equipos (3) cada jugador puede tener ptosrnk distinto (mismos puntos por posición de equipo, ganados individuales).
      *
      * @param list<array<string, mixed>> $filas
      */
@@ -59,7 +60,7 @@ final class RankingAtletasPublicoService
         $grupos = [];
         foreach ($filas as $idx => $row) {
             $mod = (int) ($row['modalidad'] ?? 0);
-            if (! in_array($mod, [2, 3, 4], true)) {
+            if (! in_array($mod, [2, 4], true)) {
                 continue;
             }
             $ce = trim((string) ($row['codigo_equipo'] ?? ''));
@@ -124,7 +125,10 @@ final class RankingAtletasPublicoService
         $epe = 'COALESCE(CAST(e.perdidos AS SIGNED), 0)';
         $ee = 'COALESCE(CAST(e.efectividad AS SIGNED), 0)';
         $ep = 'COALESCE(CAST(e.puntos AS SIGNED), 0)';
-        $unidad = '(t.modalidad IN (2, 3, 4) AND NULLIF(TRIM(i.codigo_equipo), \'\') IS NOT NULL AND e.codigo_equipo IS NOT NULL)';
+        // Posición mostrada: unidad en parejas (2), equipos (3) y parejas fijas (4).
+        $unidadPos = '(t.modalidad IN (2, 3, 4) AND NULLIF(TRIM(i.codigo_equipo), \'\') IS NOT NULL AND e.codigo_equipo IS NOT NULL)';
+        // Estadísticas agregadas de tabla equipos solo en parejas / parejas fijas; en equipos (3) se muestran datos individuales.
+        $statsEquipo = '(t.modalidad IN (2, 4) AND NULLIF(TRIM(i.codigo_equipo), \'\') IS NOT NULL AND e.codigo_equipo IS NOT NULL)';
         $sql = "
             SELECT
                 u.id AS id_usuario,
@@ -136,23 +140,23 @@ final class RankingAtletasPublicoService
                 t.nombre AS torneo_nombre,
                 t.fechator,
                 t.modalidad,
-                CASE WHEN {$unidad}
+                CASE WHEN {$unidadPos}
                     THEN COALESCE(NULLIF(i.clasiequi, 0), NULLIF(CAST(e.posicion AS SIGNED), 0), COALESCE(i.posicion, 0))
                     ELSE COALESCE(i.posicion, 0)
                 END AS posicion,
-                CASE WHEN {$unidad}
+                CASE WHEN {$statsEquipo}
                     THEN {$eg}
                     ELSE {$ig}
                 END AS ganados,
-                CASE WHEN {$unidad}
+                CASE WHEN {$statsEquipo}
                     THEN {$epe}
                     ELSE COALESCE(CAST(i.perdidos AS SIGNED), 0)
                 END AS perdidos,
-                CASE WHEN {$unidad}
+                CASE WHEN {$statsEquipo}
                     THEN {$ee}
                     ELSE {$ie}
                 END AS efectividad,
-                CASE WHEN {$unidad}
+                CASE WHEN {$statsEquipo}
                     THEN {$ep}
                     ELSE {$ip}
                 END AS puntos,

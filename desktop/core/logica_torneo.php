@@ -316,7 +316,7 @@ function recalcularPosiciones($torneo_id) {
     if (empty($inscritos)) return;
 
     $ganadosEquipoPorCodigo = [];
-    if (in_array($modalidadNum, [2, 3, 4], true)) {
+    if (in_array($modalidadNum, [2, 4], true)) {
         $stmtEqG = $pdo->prepare("SELECT codigo_equipo, ganados FROM equipos WHERE id_torneo = ? AND estatus = 0 AND codigo_equipo IS NOT NULL AND codigo_equipo != ''");
         $stmtEqG->execute([$torneo_id]);
         while ($rowEq = $stmtEqG->fetch(PDO::FETCH_ASSOC)) {
@@ -369,7 +369,7 @@ function recalcularPosiciones($torneo_id) {
         $id = (int)$inscrito['id'];
         $ganados = (int)($inscrito['ganados'] ?? 0);
         $codEq = trim((string)($inscrito['codigo_equipo'] ?? ''));
-        if (in_array($modalidadNum, [2, 3, 4], true) && $codEq !== '' && array_key_exists($codEq, $ganadosEquipoPorCodigo)) {
+        if (in_array($modalidadNum, [2, 4], true) && $codEq !== '' && array_key_exists($codEq, $ganadosEquipoPorCodigo)) {
             $ganados = $ganadosEquipoPorCodigo[$codEq];
         }
         $clasiequi = (int)($inscrito['clasiequi'] ?? 0);
