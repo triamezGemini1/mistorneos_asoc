@@ -205,7 +205,7 @@ function recalcularRankingSegunModalidad($torneo_id) {
         return;
     }
     $modalidad = (int)($row['modalidad'] ?? 1);
-    if ($modalidad === 3) {
+    if (in_array($modalidad, [2, 3, 4], true)) {
         recalcularClasificacionEquiposYJugadores($torneo_id);
     } else {
         recalcularPosiciones($torneo_id);
@@ -223,7 +223,13 @@ function actualizarEstadisticasEquipos($torneo_id) {
     $stmt = $pdo->prepare("SELECT modalidad FROM tournaments WHERE id = ?");
     $stmt->execute([$torneo_id]);
     $torneo = $stmt->fetch(PDO::FETCH_ASSOC);
-    if (!$torneo || (int)($torneo['modalidad'] ?? 0) !== 3) return;
+    if (! $torneo) {
+        return;
+    }
+    $mod = (int) ($torneo['modalidad'] ?? 0);
+    if (! in_array($mod, [2, 3, 4], true)) {
+        return;
+    }
 
     $ent = logica_torneo_where_entidad();
     $sql = "SELECT codigo_equipo, SUM(puntos) as puntos_equipo, SUM(ganados) as ganados_equipo, SUM(perdidos) as perdidos_equipo, SUM(efectividad) as efectividad_equipo, SUM(sancion) as sancion_equipo, COUNT(*) as total_jugadores FROM inscritos WHERE torneo_id = ? AND codigo_equipo IS NOT NULL AND codigo_equipo != '' AND estatus != 4" . $ent['sql'] . " GROUP BY codigo_equipo";
@@ -309,6 +315,18 @@ function recalcularPosiciones($torneo_id) {
     $inscritos = $stmt->fetchAll(PDO::FETCH_ASSOC);
     if (empty($inscritos)) return;
 
+    $ganadosEquipoPorCodigo = [];
+    if (in_array($modalidadNum, [2, 3, 4], true)) {
+        $stmtEqG = $pdo->prepare("SELECT codigo_equipo, ganados FROM equipos WHERE id_torneo = ? AND estatus = 0 AND codigo_equipo IS NOT NULL AND codigo_equipo != ''");
+        $stmtEqG->execute([$torneo_id]);
+        while ($rowEq = $stmtEqG->fetch(PDO::FETCH_ASSOC)) {
+            $cod = trim((string) ($rowEq['codigo_equipo'] ?? ''));
+            if ($cod !== '') {
+                $ganadosEquipoPorCodigo[$cod] = (int) ($rowEq['ganados'] ?? 0);
+            }
+        }
+    }
+
     $existeClasiRanking = false;
     try {
         if ($pdo->getAttribute(PDO::ATTR_DRIVER_NAME) === 'sqlite') {
@@ -350,11 +368,15 @@ function recalcularPosiciones($torneo_id) {
     foreach ($inscritos as $inscrito) {
         $id = (int)$inscrito['id'];
         $ganados = (int)($inscrito['ganados'] ?? 0);
+        $codEq = trim((string)($inscrito['codigo_equipo'] ?? ''));
+        if (in_array($modalidadNum, [2, 3, 4], true) && $codEq !== '' && array_key_exists($codEq, $ganadosEquipoPorCodigo)) {
+            $ganados = $ganadosEquipoPorCodigo[$codEq];
+        }
         $clasiequi = (int)($inscrito['clasiequi'] ?? 0);
         $ptosrnk = 1;
 
         $clasificacionRanking = $posicion;
-        if ($modalidadNum === 3 && $clasiequi > 0) {
+        if (in_array($modalidadNum, [2, 3, 4], true) && $clasiequi > 0) {
             $clasificacionRanking = $clasiequi;
         }
 

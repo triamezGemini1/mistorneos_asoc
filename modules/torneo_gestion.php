@@ -6232,7 +6232,8 @@ function recalcularRankingSegunModalidad($torneo_id) {
         return;
     }
     $modalidad = (int)($row['modalidad'] ?? 1);
-    if ($modalidad === 3) {
+    // Parejas (2), equipos (3) y parejas fijas (4): misma cadena (tabla equipos, clasiequi, ptosrnk por clasificación de unidad).
+    if (in_array($modalidad, [2, 3, 4], true)) {
         recalcularClasificacionEquiposYJugadores($torneo_id);
     } else {
         recalcularPosiciones($torneo_id);
@@ -6240,13 +6241,13 @@ function recalcularRankingSegunModalidad($torneo_id) {
 }
 
 /**
- * Recalcula toda la clasificaciÃ³n para torneos por equipos:
- * 1) Actualiza estadÃ­sticas de equipos, clasificaciÃ³n de equipos y sincroniza clasiequi en inscritos
- * 2) Recalcula posiciones y ptosrnk (modalidad 3: puntos por posiciÃ³n segÃºn clasiequi del equipo)
- * 3) Numera 1..4 dentro de cada cÃ³digo de equipo segÃºn clasificaciÃ³n individual
+ * Recalcula toda la clasificaciÃ³n para torneos por unidad (parejas 2, equipos 3, parejas fijas 4):
+ * 1) Actualiza estadÃ­sticas en tabla equipos, orden de equipos y sincroniza clasiequi en inscritos
+ * 2) Recalcula posiciones y ptosrnk (puntos por posiciÃ³n segÃºn clasiequi de la unidad y ganados agregados del equipo)
+ * 3) Numera 1..N dentro de cada cÃ³digo de equipo segÃºn clasificaciÃ³n individual
  */
 function recalcularClasificacionEquiposYJugadores($torneo_id) {
-    // Primero clasiequi: recalcularPosiciones usa clasiequi para ptosrnk en equipos.
+    // Primero clasiequi: recalcularPosiciones usa clasiequi para ptosrnk en modalidades por unidad.
     actualizarEstadisticasEquipos($torneo_id);
     recalcularPosiciones($torneo_id);
     asignarNumeroSecuencialPorEquipo($torneo_id);
@@ -6260,13 +6261,14 @@ function recalcularClasificacionEquiposYJugadores($torneo_id) {
 function actualizarEstadisticasEquipos($torneo_id) {
     $pdo = DB::pdo();
     
-    // Verificar si el torneo es modalidad equipos (modalidad 3)
     $stmt = $pdo->prepare("SELECT modalidad FROM tournaments WHERE id = ?");
     $stmt->execute([$torneo_id]);
     $torneo = $stmt->fetch(PDO::FETCH_ASSOC);
-    
-    if (!$torneo || (int)($torneo['modalidad'] ?? 0) !== 3) {
-        // No es torneo de equipos, no hay nada que actualizar
+    if (! $torneo) {
+        return;
+    }
+    $mod = (int) ($torneo['modalidad'] ?? 0);
+    if (! in_array($mod, [2, 3, 4], true)) {
         return;
     }
     
@@ -6523,6 +6525,20 @@ function recalcularPosiciones($torneo_id) {
             return;
         }
 
+        $ganadosEquipoPorCodigo = [];
+        if (in_array($modalidadNum, [2, 3, 4], true)) {
+            $stmtEqG = $pdo->prepare(
+                'SELECT codigo_equipo, ganados FROM equipos WHERE id_torneo = ? AND estatus = 0 AND codigo_equipo IS NOT NULL AND codigo_equipo != \'\''
+            );
+            $stmtEqG->execute([$torneo_id]);
+            while ($rowEq = $stmtEqG->fetch(PDO::FETCH_ASSOC)) {
+                $cod = trim((string) ($rowEq['codigo_equipo'] ?? ''));
+                if ($cod !== '') {
+                    $ganadosEquipoPorCodigo[$cod] = (int) ($rowEq['ganados'] ?? 0);
+                }
+            }
+        }
+
         $existeClasiRanking = false;
         try {
             $drv = $pdo->getAttribute(PDO::ATTR_DRIVER_NAME);
@@ -6572,15 +6588,19 @@ function recalcularPosiciones($torneo_id) {
         foreach ($inscritos as $inscrito) {
             $id = (int)$inscrito['id'];
             $ganados = (int)($inscrito['ganados'] ?? 0);
+            $codEq = trim((string)($inscrito['codigo_equipo'] ?? ''));
+            if (in_array($modalidadNum, [2, 3, 4], true) && $codEq !== '' && array_key_exists($codEq, $ganadosEquipoPorCodigo)) {
+                $ganados = $ganadosEquipoPorCodigo[$codEq];
+            }
             $clasiequi = (int)($inscrito['clasiequi'] ?? 0);
             
             // Calcular puntos de ranking segÃºn la posiciÃ³n actual
             $ptosrnk = 1; // Por defecto, punto por participaciÃ³n
 
-            // En modalidad equipos, el componente "puntos por clasificaciÃ³n" debe venir de la
-            // clasificaciÃ³n del equipo (clasiequi), no de la posiciÃ³n individual del integrante.
+            // En modalidades por unidad (parejas / equipos), el componente "puntos por clasificaciÃ³n" debe venir de
+            // la clasificaciÃ³n de la unidad (clasiequi), no de la posiciÃ³n individual del integrante.
             $clasificacionRanking = $posicion;
-            if ($modalidadNum === 3 && $clasiequi > 0) {
+            if (in_array($modalidadNum, [2, 3, 4], true) && $clasiequi > 0) {
                 $clasificacionRanking = $clasiequi;
             }
 

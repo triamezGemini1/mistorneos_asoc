@@ -50,6 +50,37 @@ final class RankingAtletasPublicoService
     }
 
     /**
+     * En parejas / equipos / parejas fijas, unifica ptosrnk entre integrantes de la misma unidad (por si hubiera datos históricos dispares).
+     *
+     * @param list<array<string, mixed>> $filas
+     */
+    private function normalizarPtosrnkPorUnidad(array &$filas): void
+    {
+        $grupos = [];
+        foreach ($filas as $idx => $row) {
+            $mod = (int) ($row['modalidad'] ?? 0);
+            if (! in_array($mod, [2, 3, 4], true)) {
+                continue;
+            }
+            $ce = trim((string) ($row['codigo_equipo'] ?? ''));
+            if ($ce === '') {
+                continue;
+            }
+            $tid = (int) ($row['torneo_id'] ?? 0);
+            $grupos[$tid . '|' . $ce][] = $idx;
+        }
+        foreach ($grupos as $indices) {
+            $maxPt = 0;
+            foreach ($indices as $idx) {
+                $maxPt = max($maxPt, (int) ($filas[$idx]['ptosrnk'] ?? 0));
+            }
+            foreach ($indices as $idx) {
+                $filas[$idx]['ptosrnk'] = $maxPt;
+            }
+        }
+    }
+
+    /**
      * Filas de participación + torneo para un sexo (M|F).
      *
      * @return list<array<string, mixed>>
@@ -89,6 +120,11 @@ final class RankingAtletasPublicoService
         $ie = InscritosHelper::sqlExprColumnaNumerica('i.efectividad');
         $ip = InscritosHelper::sqlExprColumnaNumerica('i.puntos');
         $ipt = InscritosHelper::sqlExprColumnaNumerica('i.ptosrnk');
+        $eg = 'COALESCE(CAST(e.ganados AS SIGNED), 0)';
+        $epe = 'COALESCE(CAST(e.perdidos AS SIGNED), 0)';
+        $ee = 'COALESCE(CAST(e.efectividad AS SIGNED), 0)';
+        $ep = 'COALESCE(CAST(e.puntos AS SIGNED), 0)';
+        $unidad = '(t.modalidad IN (2, 3, 4) AND NULLIF(TRIM(i.codigo_equipo), \'\') IS NOT NULL AND e.codigo_equipo IS NOT NULL)';
         $sql = "
             SELECT
                 u.id AS id_usuario,
@@ -96,18 +132,35 @@ final class RankingAtletasPublicoService
                 u.cedula,
                 u.sexo,
                 i.torneo_id,
+                i.codigo_equipo,
                 t.nombre AS torneo_nombre,
                 t.fechator,
                 t.modalidad,
-                COALESCE(i.posicion, 0) AS posicion,
-                $ig AS ganados,
-                COALESCE(CAST(i.perdidos AS SIGNED), 0) AS perdidos,
-                $ie AS efectividad,
-                $ip AS puntos,
-                $ipt AS ptosrnk
+                CASE WHEN {$unidad}
+                    THEN COALESCE(NULLIF(i.clasiequi, 0), NULLIF(CAST(e.posicion AS SIGNED), 0), COALESCE(i.posicion, 0))
+                    ELSE COALESCE(i.posicion, 0)
+                END AS posicion,
+                CASE WHEN {$unidad}
+                    THEN {$eg}
+                    ELSE {$ig}
+                END AS ganados,
+                CASE WHEN {$unidad}
+                    THEN {$epe}
+                    ELSE COALESCE(CAST(i.perdidos AS SIGNED), 0)
+                END AS perdidos,
+                CASE WHEN {$unidad}
+                    THEN {$ee}
+                    ELSE {$ie}
+                END AS efectividad,
+                CASE WHEN {$unidad}
+                    THEN {$ep}
+                    ELSE {$ip}
+                END AS puntos,
+                {$ipt} AS ptosrnk
             FROM inscritos i
             INNER JOIN usuarios u ON i.id_usuario = u.id
             INNER JOIN tournaments t ON i.torneo_id = t.id
+            LEFT JOIN equipos e ON e.id_torneo = i.torneo_id AND e.codigo_equipo = i.codigo_equipo AND e.estatus = 0
             WHERE u.sexo = ?
             AND $wEst
             AND t.estatus = 1
@@ -121,7 +174,10 @@ final class RankingAtletasPublicoService
         $params = array_merge([$sexo], $orgParams);
         $st->execute($params);
 
-        return $st->fetchAll(PDO::FETCH_ASSOC) ?: [];
+        $filas = $st->fetchAll(PDO::FETCH_ASSOC) ?: [];
+        $this->normalizarPtosrnkPorUnidad($filas);
+
+        return $filas;
     }
 
     /**
