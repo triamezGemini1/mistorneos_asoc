@@ -17,34 +17,45 @@ require_once __DIR__ . '/../lib/Tournament/Handlers/TournamentActionHandler.php'
 require_once __DIR__ . '/../lib/Tournament/Handlers/RoundManagerHandler.php';
 require_once __DIR__ . '/../lib/Tournament/Handlers/TournamentStatusHandler.php';
 
-$current_user = Auth::user();
-$user_role = $current_user['role'] ?? '';
-$user_id = Auth::id();
+// Carga solo funciones (p. ej. actualizarEstadisticasInscritos) sin sesión ni router: definir
+// TORNEO_GESTION_SKIP_AUTH y TORNEO_GESTION_SKIP_ROUTER antes de incluir este archivo.
+if (! defined('TORNEO_GESTION_SKIP_AUTH') || ! TORNEO_GESTION_SKIP_AUTH) {
+    $current_user = Auth::user();
+    $user_role = $current_user['role'] ?? '';
+    $user_id = Auth::id();
 
-// Jugadores (usuario) solo pueden ver resumen_individual (el propio) y posiciones
-if ($user_role === 'usuario') {
-    $action = $_GET['action'] ?? '';
-    $torneo_id = (int)($_GET['torneo_id'] ?? 0);
-    $inscrito_id = (int)($_GET['inscrito_id'] ?? 0);
-    $allowed = ($torneo_id > 0 && in_array($action, ['resumen_individual', 'posiciones']));
-    if ($allowed && $action === 'resumen_individual') {
-        $allowed = ($inscrito_id > 0 && $inscrito_id === $user_id);
+    // Jugadores (usuario) solo pueden ver resumen_individual (el propio) y posiciones
+    if ($user_role === 'usuario') {
+        $action = $_GET['action'] ?? '';
+        $torneo_id = (int)($_GET['torneo_id'] ?? 0);
+        $inscrito_id = (int)($_GET['inscrito_id'] ?? 0);
+        $allowed = ($torneo_id > 0 && in_array($action, ['resumen_individual', 'posiciones']));
+        if ($allowed && $action === 'resumen_individual') {
+            $allowed = ($inscrito_id > 0 && $inscrito_id === $user_id);
+        }
+        if (! $allowed) {
+            require_once __DIR__ . '/../lib/app_helpers.php';
+            header('Location: ' . rtrim(AppHelpers::getBaseUrl(), '/') . '/public/user_portal.php');
+            exit;
+        }
+    } else {
+        Auth::requireRole(['admin_general', 'admin_torneo', 'admin_club']);
     }
-    if (!$allowed) {
-        require_once __DIR__ . '/../lib/app_helpers.php';
-        header('Location: ' . rtrim(AppHelpers::getBaseUrl(), '/') . '/public/user_portal.php');
-        exit;
-    }
+
+    $current_user = Auth::user();
+    $user_role = $current_user['role'];
+    $user_id = Auth::id();
+    $is_admin_general = Auth::isAdminGeneral();
+    $is_admin_torneo = Auth::isAdminTorneo();
+    $is_admin_club = Auth::isAdminClub();
 } else {
-    Auth::requireRole(['admin_general', 'admin_torneo', 'admin_club']);
+    $current_user = [];
+    $user_role = '';
+    $user_id = 0;
+    $is_admin_general = false;
+    $is_admin_torneo = false;
+    $is_admin_club = false;
 }
-
-$current_user = Auth::user();
-$user_role = $current_user['role'];
-$user_id = Auth::id();
-$is_admin_general = Auth::isAdminGeneral();
-$is_admin_torneo = Auth::isAdminTorneo();
-$is_admin_club = Auth::isAdminClub();
 
 // FunciÃ³n auxiliar para determinar la URL base segÃºn el contexto
 function getBaseUrl() {
@@ -6216,8 +6227,14 @@ function actualizarEstadisticasInscritos($torneo_id) {
 }
 
 /**
- * Recalcula posiciones y ptosrnk segÃºn la modalidad del torneo.
- * En modalidad equipos (3): cadena completa (clasiequi y ptosrnk por clasificacion de equipo).
+ * Punto de entrada para recalcular estadísticas desde partiresul y puntos de ranking (ptosrnk) según modalidad.
+ *
+ * Regla general (tabla `clasiranking` + rendimiento; ver doc en lib/RankingTorneoRecalc.php):
+ * - Hasta el límite de la tabla por tipo (30 individual, 20 parejas, 10 equipos): puntos por posición de tabla
+ *   más partidas ganadas × tarifa de la fila más punto(s) de participación/asistencia.
+ * - Por encima del límite: solo tarifa de partidas ganadas (fuera de tabla) + participación.
+ * - En parejas/equipos, la componente de "posición en tabla" es la de la unidad (todos los integrantes);
+ *   el rendimiento por partidas se aplica según modalidad (ver recalcularPosiciones).
  */
 function recalcularRankingSegunModalidad($torneo_id) {
     $torneo_id = (int)$torneo_id;
@@ -6442,12 +6459,13 @@ function asignarNumeroSecuencialPorEquipo($torneo_id) {
 }
 
 /**
- * Recalcular posiciones de todos los inscritos
- */
-/**
- * Recalcular posiciones de todos los inscritos
- * Orden de clasificaciÃ³n: 1. Ganados DESC, 2. Efectividad DESC, 3. Puntos DESC
- * Las posiciones deben ser consecutivas (1, 2, 3, 4...) sin repeticiones
+ * Asigna posición consecutiva en el torneo (orden: ganados, efectividad, puntos) y calcula `ptosrnk`:
+ * puntos según fila de `clasiranking` para la clasificación aplicable + rendimiento + participación.
+ *
+ * Clasificación para la tabla: en modalidades por unidad (2,3,4) con `clasiequi` > 0 se usa la posición
+ * del equipo/pareja; si no, la posición individual en el orden anterior.
+ *
+ * @see RankingTorneoRecalc Documentación de política de negocio
  */
 function recalcularPosiciones($torneo_id) {
     try {

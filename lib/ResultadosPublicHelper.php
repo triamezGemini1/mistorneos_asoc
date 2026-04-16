@@ -4,6 +4,7 @@ declare(strict_types=1);
 require_once __DIR__ . '/PartiresulEstatusSql.php';
 require_once __DIR__ . '/ResultadosReporteData.php';
 require_once __DIR__ . '/InscritosHelper.php';
+require_once __DIR__ . '/RankingTorneoRecalc.php';
 
 /**
  * ResultadosPublicHelper - Datos para reportes públicos de torneos
@@ -59,6 +60,7 @@ class ResultadosPublicHelper
      */
     public static function getPosiciones(PDO $pdo, int $torneo_id, int $limit = 500, int $offset = 0): array
     {
+        RankingTorneoRecalc::actualizarEstadisticasYRanking($torneo_id);
         try {
             $tienePartiresul = false;
             $st = $pdo->query("SHOW TABLES LIKE 'partiresul'");
@@ -89,6 +91,7 @@ class ResultadosPublicHelper
 
     public static function getPosicionesCount(PDO $pdo, int $torneo_id): int
     {
+        RankingTorneoRecalc::actualizarEstadisticasYRanking($torneo_id);
         try {
             $stmt = $pdo->prepare("
                 SELECT COUNT(*) FROM inscritos 
@@ -107,6 +110,7 @@ class ResultadosPublicHelper
      */
     public static function getResultadosPorClub(PDO $pdo, int $torneo_id, int $topN = 8): array
     {
+        RankingTorneoRecalc::actualizarEstadisticasYRanking($torneo_id);
         try {
             $tienePartiresul = false;
             $stmt = $pdo->query("SHOW TABLES LIKE 'partiresul'");
@@ -191,6 +195,7 @@ class ResultadosPublicHelper
      */
     public static function getResultadosEquiposResumido(PDO $pdo, int $torneo_id, int $limit = 50, int $offset = 0): array
     {
+        RankingTorneoRecalc::actualizarEstadisticasYRanking($torneo_id);
         try {
             $ordG = InscritosHelper::sqlExprColumnaNumerica('e.ganados');
             $ordE = InscritosHelper::sqlExprColumnaNumerica('e.efectividad');
