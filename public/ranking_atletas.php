@@ -17,6 +17,11 @@ if ($genero !== 'M' && $genero !== 'F') {
     $genero = 'F';
 }
 
+$vista = isset($_GET['vista']) ? (string) $_GET['vista'] : 'resumen';
+if (! in_array($vista, ['resumen', 'detalle', 'matriz'], true)) {
+    $vista = 'resumen';
+}
+
 $user = Auth::user();
 $role = is_array($user) ? (string) ($user['role'] ?? '') : '';
 
@@ -60,33 +65,57 @@ try {
         $ranking_sin_org_admin_general = ($organizacion_id <= 0);
     } elseif ($role === 'admin_club') {
         if ($organizacion_id > 0) {
-            $stmtNom = $pdo->prepare(
-                $hasCodOrg
-                    ? 'SELECT nombre FROM organizaciones WHERE estatus = 1 AND (id = ? OR cod_org = ?) LIMIT 1'
-                    : 'SELECT nombre FROM organizaciones WHERE estatus = 1 AND id = ? LIMIT 1'
-            );
-            $stmtNom->execute($hasCodOrg ? [$organizacion_id, $organizacion_id] : [$organizacion_id]);
+            // Siempre por PK (id de organización); no mezclar id con cod_org en el mismo placeholder.
+            $stmtNom = $pdo->prepare('SELECT nombre FROM organizaciones WHERE estatus = 1 AND id = ? LIMIT 1');
+            $stmtNom->execute([$organizacion_id]);
             $org_nombre_sesion = (string) ($stmtNom->fetchColumn() ?: '');
         }
     } else {
-        $orgJoin = $hasCodOrg
-            ? 'LEFT JOIN organizaciones o ON (o.id = COALESCE(t.cod_org, t.club_responsable) OR o.cod_org = COALESCE(t.cod_org, t.club_responsable))'
-            : 'LEFT JOIN organizaciones o ON o.id = COALESCE(t.cod_org, t.club_responsable)';
-        $stmtOrg = $pdo->query("
-        SELECT DISTINCT
-            COALESCE(NULLIF(o.cod_org, 0), o.id, t.cod_org, t.club_responsable) AS id,
-            COALESCE(NULLIF(TRIM(o.nombre), ''), CONCAT('Organización ', COALESCE(t.cod_org, t.club_responsable))) AS nombre
-        FROM tournaments t
-        {$orgJoin}
-        WHERE t.estatus = 1
-          AND COALESCE(t.ranking, 0) = 1
-          AND COALESCE(t.cod_org, t.club_responsable, 0) > 0
-        ORDER BY nombre ASC
-    ");
+        // Listado público: valores option = id (PK) y nombre real de la tabla organizaciones.
+        if (! $hasCodOrg) {
+            $stmtOrg = $pdo->query("
+                SELECT DISTINCT o.id, o.nombre
+                FROM tournaments t
+                INNER JOIN organizaciones o ON o.id = t.club_responsable AND o.estatus = 1
+                WHERE t.estatus = 1
+                  AND COALESCE(t.ranking, 0) = 1
+                  AND DATE(t.fechator) < CURDATE()
+                ORDER BY o.nombre ASC
+            ");
+        } else {
+            $stmtOrg = $pdo->query("
+                SELECT DISTINCT o.id, o.nombre
+                FROM tournaments t
+                INNER JOIN organizaciones o ON o.estatus = 1
+                  AND (
+                    o.id = COALESCE(NULLIF(t.cod_org, 0), t.club_responsable)
+                    OR (o.cod_org > 0 AND o.cod_org = COALESCE(NULLIF(t.cod_org, 0), t.club_responsable))
+                  )
+                WHERE t.estatus = 1
+                  AND COALESCE(t.ranking, 0) = 1
+                  AND DATE(t.fechator) < CURDATE()
+                ORDER BY o.nombre ASC
+            ");
+        }
         $organizaciones = $stmtOrg->fetchAll(PDO::FETCH_ASSOC) ?: [];
     }
 } catch (Throwable $e) {
     $organizaciones = [];
+}
+
+/** Nombre para el encabezado: siempre por PK organizaciones.id (coincide con el filtro). */
+$org_nombre_encabezado = '';
+if ($organizacion_id > 0) {
+    try {
+        $stHdr = $pdo->prepare('SELECT nombre FROM organizaciones WHERE estatus = 1 AND id = ? LIMIT 1');
+        $stHdr->execute([$organizacion_id]);
+        $org_nombre_encabezado = trim((string) ($stHdr->fetchColumn() ?: ''));
+    } catch (Throwable $e) {
+        $org_nombre_encabezado = '';
+    }
+    if ($org_nombre_encabezado === '' && $role === 'admin_club' && $org_nombre_sesion !== '') {
+        $org_nombre_encabezado = $org_nombre_sesion;
+    }
 }
 
 $svc = new RankingAtletasPublicoService($pdo);
@@ -105,6 +134,52 @@ if ($role === 'admin_general' && $ranking_sin_org_admin_general) {
 }
 $atletas = $data['atletas'];
 $criterio = $data['criterio_orden'];
+
+/** Torneos presentes en el resultado (para vista matriz), ordenados por fecha descendente. */
+$torneos_matriz = [];
+if ($atletas !== []) {
+    $metaTorneos = [];
+    foreach ($atletas as $a) {
+        foreach ($a['detalle_torneos'] as $t) {
+            $tid = (int) ($t['torneo_id'] ?? 0);
+            if ($tid <= 0) {
+                continue;
+            }
+            if (! isset($metaTorneos[$tid])) {
+                $metaTorneos[$tid] = [
+                    'torneo_id' => $tid,
+                    'nombre' => (string) ($t['nombre'] ?? ''),
+                    'fechator' => (string) ($t['fechator'] ?? ''),
+                ];
+            }
+        }
+    }
+    if ($metaTorneos !== []) {
+        $torneos_matriz = array_values($metaTorneos);
+        usort($torneos_matriz, static function (array $x, array $y): int {
+            return strcmp((string) ($y['fechator'] ?? ''), (string) ($x['fechator'] ?? ''));
+        });
+    }
+}
+
+$ranking_atletas_qs = static function (array $overrides = []) use ($genero, $organizacion_id, $vista): string {
+    $p = ['genero' => $genero];
+    if ($organizacion_id > 0) {
+        $p['organizacion_id'] = $organizacion_id;
+    }
+    if ($vista !== 'resumen') {
+        $p['vista'] = $vista;
+    }
+    $p = array_merge($p, $overrides);
+    if ((int) ($p['organizacion_id'] ?? 0) <= 0) {
+        unset($p['organizacion_id']);
+    }
+    if (($p['vista'] ?? 'resumen') === 'resumen') {
+        unset($p['vista']);
+    }
+
+    return http_build_query($p);
+};
 
 $titulo_genero = $genero === 'F' ? 'Femenino' : 'Masculino';
 $page_title = 'Ranking de atletas — ' . $titulo_genero . ' — La Estación del Dominó';
@@ -130,7 +205,7 @@ function fmtfecha(?string $f): string
     <title><?= htmlspecialchars($page_title) ?></title>
     <meta name="description" content="Ranking de atletas <?= htmlspecialchars($titulo_genero) ?>: torneos con ranking activado y rendimiento acumulado (puntos de ranking, efectividad, partidas ganadas).">
     <meta name="robots" content="index, follow">
-    <link rel="canonical" href="<?= htmlspecialchars($base_public . 'ranking_atletas.php?genero=' . $genero . ($organizacion_id > 0 ? '&organizacion_id=' . (int)$organizacion_id : '')) ?>">
+    <link rel="canonical" href="<?= htmlspecialchars($base_public . 'ranking_atletas.php?' . $ranking_atletas_qs()) ?>">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <style>
@@ -169,30 +244,40 @@ function fmtfecha(?string $f): string
         }
         .btn-volver:hover { background: rgba(255,255,255,0.25); color: white; }
         .detalle-torneos { font-size: 0.85rem; background: #f8fafc; }
+        .card-rank-wide { max-width: min(1680px, 100%); }
+        .card-detalle-atleta { border: 1px solid #e2e8f0; border-radius: 12px; padding: 1rem; margin-bottom: 1rem; background: #fff; }
+        .tabla-matriz th, .tabla-matriz td { white-space: nowrap; font-size: 0.72rem; vertical-align: middle; }
+        .tabla-matriz .th-torneo { max-width: 7rem; overflow: hidden; text-overflow: ellipsis; }
     </style>
 </head>
 <body>
 <div class="container">
-    <div class="card-rank mx-auto">
+    <div class="card-rank mx-auto <?= $vista === 'matriz' ? 'card-rank-wide' : '' ?>">
         <div class="header-rank">
             <div class="d-flex flex-wrap justify-content-between align-items-start gap-3">
                 <div>
                     <?= AppHelpers::appLogo('mb-2', 'La Estación del Dominó', 40) ?>
                     <h1 class="h3 mb-1"><i class="fas fa-medal text-warning me-2"></i>Ranking de atletas</h1>
                     <p class="mb-0 opacity-90 small"><?= htmlspecialchars($titulo_genero) ?> · Solo torneos con ranking activado</p>
+                    <?php if ($organizacion_id > 0): ?>
+                        <?php if ($org_nombre_encabezado !== ''): ?>
+                            <p class="mb-0 mt-2 fw-semibold fs-5 text-white"><i class="fas fa-building me-2 opacity-75"></i><?= htmlspecialchars($org_nombre_encabezado) ?></p>
+                        <?php else: ?>
+                            <p class="mb-0 mt-2 small opacity-75">Organización #<?= (int) $organizacion_id ?></p>
+                        <?php endif; ?>
+                    <?php endif; ?>
                 </div>
                 <div>
                     <a href="landing-spa.php" class="btn btn-sm btn-volver me-1"><i class="fas fa-home me-1"></i>Inicio</a>
                     <a href="resultados.php" class="btn btn-sm btn-volver"><i class="fas fa-trophy me-1"></i>Resultados por evento</a>
                 </div>
             </div>
-            <?php $orgNavQs = $organizacion_id > 0 ? '&organizacion_id=' . (int) $organizacion_id : ''; ?>
             <ul class="nav nav-pills nav-genero gap-2 mt-3">
                 <li class="nav-item">
-                    <a class="nav-link py-2 px-3 <?= $genero === 'F' ? 'active' : '' ?>" href="ranking_atletas.php?genero=F<?= htmlspecialchars($orgNavQs) ?>"><i class="fas fa-venus me-1"></i>Femenino</a>
+                    <a class="nav-link py-2 px-3 <?= $genero === 'F' ? 'active' : '' ?>" href="ranking_atletas.php?<?= htmlspecialchars($ranking_atletas_qs(['genero' => 'F'])) ?>"><i class="fas fa-venus me-1"></i>Femenino</a>
                 </li>
                 <li class="nav-item">
-                    <a class="nav-link py-2 px-3 <?= $genero === 'M' ? 'active' : '' ?>" href="ranking_atletas.php?genero=M<?= htmlspecialchars($orgNavQs) ?>"><i class="fas fa-mars me-1"></i>Masculino</a>
+                    <a class="nav-link py-2 px-3 <?= $genero === 'M' ? 'active' : '' ?>" href="ranking_atletas.php?<?= htmlspecialchars($ranking_atletas_qs(['genero' => 'M'])) ?>"><i class="fas fa-mars me-1"></i>Masculino</a>
                 </li>
             </ul>
         </div>
@@ -201,12 +286,13 @@ function fmtfecha(?string $f): string
                 <div class="alert alert-secondary border mb-3 py-2 px-3">
                     <i class="fas fa-building me-2"></i>
                     <strong>Organización:</strong>
-                    <?= $organizacion_id > 0 ? htmlspecialchars($org_nombre_sesion !== '' ? $org_nombre_sesion : ('ID ' . $organizacion_id)) : '—' ?>
+                    <?= $organizacion_id > 0 ? htmlspecialchars($org_nombre_encabezado !== '' ? $org_nombre_encabezado : ('ID ' . $organizacion_id)) : '—' ?>
                     <span class="text-muted small ms-1">(solo el ranking de su organización)</span>
                 </div>
             <?php elseif ($role === 'admin_general'): ?>
             <form method="get" class="row g-2 align-items-end mb-3">
                 <input type="hidden" name="genero" value="<?= htmlspecialchars($genero) ?>">
+                <input type="hidden" name="vista" value="<?= htmlspecialchars($vista) ?>">
                 <div class="col-12 col-md-7">
                     <label class="form-label small text-muted mb-1">Organización <span class="text-danger">*</span></label>
                     <select name="organizacion_id" class="form-select form-select-sm">
@@ -232,6 +318,7 @@ function fmtfecha(?string $f): string
             <?php else: ?>
             <form method="get" class="row g-2 align-items-end mb-3">
                 <input type="hidden" name="genero" value="<?= htmlspecialchars($genero) ?>">
+                <input type="hidden" name="vista" value="<?= htmlspecialchars($vista) ?>">
                 <div class="col-12 col-md-7">
                     <label class="form-label small text-muted mb-1">Organización</label>
                     <select name="organizacion_id" class="form-select form-select-sm">
@@ -260,11 +347,141 @@ function fmtfecha(?string $f): string
                     <i class="fas fa-hand-pointer me-2"></i>Como administrador general, elija una organización arriba y pulse <strong>Ver ranking</strong> para cargar los datos.
                 </div>
             <?php endif; ?>
-            <p class="text-muted small mb-3"><i class="fas fa-info-circle me-1"></i><?= htmlspecialchars($criterio) ?></p>
+            <p class="text-muted small mb-2"><i class="fas fa-info-circle me-1"></i><?= htmlspecialchars($criterio) ?></p>
+            <?php if ($atletas !== []): ?>
+            <div class="d-flex flex-wrap align-items-center gap-2 mb-3">
+                <span class="small text-muted me-1">Vista del reporte:</span>
+                <div class="btn-group btn-group-sm mb-0 flex-wrap" role="group" aria-label="Vista del reporte">
+                    <a href="ranking_atletas.php?<?= htmlspecialchars($ranking_atletas_qs(['vista' => 'resumen'])) ?>" class="btn btn-<?= $vista === 'resumen' ? 'primary' : 'outline-primary' ?>">Resumen</a>
+                    <a href="ranking_atletas.php?<?= htmlspecialchars($ranking_atletas_qs(['vista' => 'detalle'])) ?>" class="btn btn-<?= $vista === 'detalle' ? 'primary' : 'outline-primary' ?>">Detalle vertical</a>
+                    <a href="ranking_atletas.php?<?= htmlspecialchars($ranking_atletas_qs(['vista' => 'matriz'])) ?>" class="btn btn-<?= $vista === 'matriz' ? 'primary' : 'outline-primary' ?>">Matriz por torneo</a>
+                </div>
+            </div>
+            <?php endif; ?>
             <?php if ($atletas === []): ?>
                 <div class="alert alert-info mb-0">
                     <i class="fas fa-info-circle me-2"></i>No hay datos de ranking para este grupo. Participa en torneos finalizados o verifica que el sexo esté registrado en tu perfil.
                 </div>
+            <?php elseif ($vista === 'detalle'): ?>
+                <?php foreach ($atletas as $a): ?>
+                    <?php
+                    $rk = (int) $a['rank'];
+                    $borderClass = $rk === 1 ? 'border-warning' : ($rk === 2 ? 'border-secondary' : ($rk === 3 ? 'border-danger' : ''));
+                    ?>
+                    <div class="card-detalle-atleta <?= $borderClass !== '' ? $borderClass : '' ?>" style="<?= $rk <= 3 ? 'border-width:2px;' : '' ?>">
+                        <div class="d-flex flex-wrap justify-content-between align-items-start gap-2 mb-2">
+                            <div>
+                                <span class="badge bg-dark me-2">#<?= $rk ?></span>
+                                <strong class="fs-6"><?= htmlspecialchars($a['nombre']) ?></strong>
+                                <?php if (! empty($a['cedula'])): ?>
+                                    <span class="text-muted small ms-1">CI <?= htmlspecialchars((string) $a['cedula']) ?></span>
+                                <?php endif; ?>
+                            </div>
+                            <div class="small text-end">
+                                <span class="text-muted">Torneos:</span> <?= (int) $a['torneos_count'] ?>
+                                · <span class="text-muted">Pts ranking Σ:</span> <strong><?= (int) $a['total_ptosrnk'] ?></strong>
+                                · <span class="text-muted">Efect. Σ:</span> <?= (int) $a['total_efectividad'] ?>
+                                · <span class="text-muted">Ganados Σ:</span> <?= (int) $a['total_ganados'] ?>
+                            </div>
+                        </div>
+                        <div class="table-responsive">
+                            <table class="table table-sm table-bordered mb-0 bg-white tabla-rank">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th>Torneo</th>
+                                        <th>Fecha</th>
+                                        <th>Modalidad</th>
+                                        <th class="text-center">Pos.</th>
+                                        <th class="text-end">G/P</th>
+                                        <th class="text-end">Efect.</th>
+                                        <th class="text-end">Pts rnk</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <?php foreach ($a['detalle_torneos'] as $t): ?>
+                                        <tr>
+                                            <td>
+                                                <a href="evento_resultados.php?torneo_id=<?= (int) $t['torneo_id'] ?>"><?= htmlspecialchars($t['nombre']) ?></a>
+                                            </td>
+                                            <td><?= fmtfecha($t['fechator'] ?? '') ?></td>
+                                            <td><?= htmlspecialchars($modalidades[(int) ($t['modalidad'] ?? 0)] ?? '—') ?></td>
+                                            <td class="text-center"><?= (int) ($t['posicion'] ?? 0) ?: '—' ?></td>
+                                            <td class="text-end"><?= (int) ($t['ganados'] ?? 0) ?> / <?= (int) ($t['perdidos'] ?? 0) ?></td>
+                                            <td class="text-end"><?= (int) ($t['efectividad'] ?? 0) ?></td>
+                                            <td class="text-end"><?= (int) ($t['ptosrnk'] ?? 0) ?></td>
+                                        </tr>
+                                    <?php endforeach; ?>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                <?php endforeach; ?>
+            <?php elseif ($vista === 'matriz'): ?>
+                <?php if ($torneos_matriz === []): ?>
+                    <div class="alert alert-warning mb-0">No hay columnas de torneos para mostrar la matriz.</div>
+                <?php else: ?>
+                <div class="table-responsive">
+                    <table class="table table-bordered table-hover tabla-matriz align-middle mb-0 bg-white">
+                        <thead class="table-light">
+                            <tr>
+                                <th class="sticky-top bg-light">#</th>
+                                <th class="sticky-top bg-light">Atleta</th>
+                                <th class="sticky-top bg-light">CI</th>
+                                <?php foreach ($torneos_matriz as $col): ?>
+                                    <?php
+                                    $nomCol = (string) ($col['nombre'] ?? '');
+                                    $nomCorto = function_exists('mb_strlen') && function_exists('mb_substr')
+                                        ? ((mb_strlen($nomCol) > 26) ? (mb_substr($nomCol, 0, 24) . '…') : $nomCol)
+                                        : ((strlen($nomCol) > 26) ? (substr($nomCol, 0, 24) . '…') : $nomCol);
+                                    ?>
+                                    <th class="text-center th-torneo" title="<?= htmlspecialchars($nomCol . ' — ' . fmtfecha($col['fechator'] ?? '')) ?>">
+                                        <small><?= htmlspecialchars($nomCorto) ?></small>
+                                    </th>
+                                <?php endforeach; ?>
+                                <th class="text-end sticky-top bg-light">Pts Σ</th>
+                                <th class="text-end sticky-top bg-light">Efect. Σ</th>
+                                <th class="text-end sticky-top bg-light">G Σ</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <?php foreach ($atletas as $a): ?>
+                                <?php
+                                $rk = (int) $a['rank'];
+                                $trClass = $rk === 1 ? 'pos-1' : ($rk === 2 ? 'pos-2' : ($rk === 3 ? 'pos-3' : ''));
+                                $porTorneo = [];
+                                foreach ($a['detalle_torneos'] as $t) {
+                                    $porTorneo[(int) ($t['torneo_id'] ?? 0)] = $t;
+                                }
+                                ?>
+                                <tr class="<?= $trClass ?>">
+                                    <td><strong><?= $rk ?></strong></td>
+                                    <td><strong><?= htmlspecialchars($a['nombre']) ?></strong></td>
+                                    <td><?= htmlspecialchars((string) ($a['cedula'] ?? '')) ?></td>
+                                    <?php foreach ($torneos_matriz as $col): ?>
+                                        <?php
+                                        $tid = (int) $col['torneo_id'];
+                                        $celda = $porTorneo[$tid] ?? null;
+                                        ?>
+                                        <td class="text-center">
+                                            <?php if ($celda !== null): ?>
+                                                <span title="Pos. <?= (int) ($celda['posicion'] ?? 0) ?> · G/P <?= (int) ($celda['ganados'] ?? 0) ?>/<?= (int) ($celda['perdidos'] ?? 0) ?>">
+                                                    <?= (int) ($celda['ptosrnk'] ?? 0) ?>
+                                                </span>
+                                            <?php else: ?>
+                                                <span class="text-muted">—</span>
+                                            <?php endif; ?>
+                                        </td>
+                                    <?php endforeach; ?>
+                                    <td class="text-end fw-semibold"><?= (int) $a['total_ptosrnk'] ?></td>
+                                    <td class="text-end"><?= (int) $a['total_efectividad'] ?></td>
+                                    <td class="text-end"><?= (int) $a['total_ganados'] ?></td>
+                                </tr>
+                            <?php endforeach; ?>
+                        </tbody>
+                    </table>
+                </div>
+                <p class="small text-muted mt-2 mb-0">Cada columna es un torneo; el número es puntos de ranking (ptosrnk) en ese evento. Desplace horizontalmente si hay muchos torneos.</p>
+                <?php endif; ?>
             <?php else: ?>
                 <div class="table-responsive">
                     <table class="table table-hover tabla-rank align-middle mb-0">
