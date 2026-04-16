@@ -193,8 +193,8 @@ function actualizarEstadisticasInscritos($torneo_id) {
 }
 
 function recalcularClasificacionEquiposYJugadores($torneo_id) {
-    recalcularPosiciones($torneo_id);
     actualizarEstadisticasEquipos($torneo_id);
+    recalcularPosiciones($torneo_id);
     asignarNumeroSecuencialPorEquipo($torneo_id);
 }
 

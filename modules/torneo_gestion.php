@@ -6154,16 +6154,14 @@ function actualizarEstadisticasInscritos($torneo_id) {
 
 /**
  * Recalcula toda la clasificaciÃ³n para torneos por equipos:
- * 1) Recalcula posiciones de inscritos (usa estadÃ­sticas vigentes en inscritos/partiresul)
- * 2) Actualiza estadÃ­sticas de equipos y su posiciÃ³n
- * 3) Sincroniza clasiequi en inscritos y numera 1..4 dentro de cada cÃ³digo de equipo
+ * 1) Actualiza estadÃ­sticas de equipos, clasificaciÃ³n de equipos y sincroniza clasiequi en inscritos
+ * 2) Recalcula posiciones y ptosrnk (modalidad 3: puntos por posiciÃ³n segÃºn clasiequi del equipo)
+ * 3) Numera 1..4 dentro de cada cÃ³digo de equipo segÃºn clasificaciÃ³n individual
  */
 function recalcularClasificacionEquiposYJugadores($torneo_id) {
-    // Paso 1: recalcular posiciones individuales
-    recalcularPosiciones($torneo_id);
-    // Paso 2: actualizar stats y posiciÃ³n de equipos (sincroniza clasiequi en inscritos)
+    // Primero clasiequi: recalcularPosiciones usa clasiequi para ptosrnk en equipos.
     actualizarEstadisticasEquipos($torneo_id);
-    // Paso 3: numerar 1..4 dentro de cada equipo segÃºn clasificaciÃ³n individual
+    recalcularPosiciones($torneo_id);
     asignarNumeroSecuencialPorEquipo($torneo_id);
 }
 
@@ -6465,20 +6463,33 @@ function recalcularPosiciones($torneo_id) {
             }
 
             if ($clasificacionRanking <= $limitePosiciones) {
-                if (!array_key_exists($clasificacionRanking, $rankingPorClasificacion)) {
-                    $stmt = $pdo->prepare("SELECT puntos_posicion, puntos_por_partida_ganada 
-                                           FROM clasiranking 
-                                           WHERE tipo_torneo = ? AND clasificacion = ? 
-                                           LIMIT 1");
-                    $stmt->execute([$tipoTorneo, $clasificacionRanking]);
-                    $rankingPorClasificacion[$clasificacionRanking] = $stmt->fetch(PDO::FETCH_ASSOC) ?: null;
-                }
-                $ranking = $rankingPorClasificacion[$clasificacionRanking];
-                if ($ranking) {
-                    $puntosPorPosicion = (int)$ranking['puntos_posicion'];
-                    $puntosPorPartidaGanada = (int)$ranking['puntos_por_partida_ganada'];
-                    // Se mantiene el resto del cÃ¡lculo: ganados del jugador + participaciÃ³n.
-                    $ptosrnk = $puntosPorPosicion + ($ganados * $puntosPorPartidaGanada) + 1;
+                try {
+                    if (!array_key_exists($clasificacionRanking, $rankingPorClasificacion)) {
+                        $stmt = $pdo->prepare("SELECT puntos_posicion, puntos_por_partida_ganada, COALESCE(puntos_asistencia, 1) AS puntos_asistencia
+                                               FROM clasiranking
+                                               WHERE tipo_torneo = ? AND clasificacion = ?
+                                               LIMIT 1");
+                        $stmt->execute([$tipoTorneo, $clasificacionRanking]);
+                        $rankingPorClasificacion[$clasificacionRanking] = $stmt->fetch(PDO::FETCH_ASSOC) ?: null;
+                    }
+                    $ranking = $rankingPorClasificacion[$clasificacionRanking];
+                    if ($ranking) {
+                        $puntosAsistencia = (int)($ranking['puntos_asistencia'] ?? 1);
+                        $ptosrnk = (int)$ranking['puntos_posicion'] + ($ganados * (int)$ranking['puntos_por_partida_ganada']) + $puntosAsistencia;
+                    }
+                } catch (Exception $e) {
+                    if (!array_key_exists($clasificacionRanking, $rankingPorClasificacion)) {
+                        $stmt = $pdo->prepare("SELECT puntos_posicion, puntos_por_partida_ganada
+                                               FROM clasiranking
+                                               WHERE tipo_torneo = ? AND clasificacion = ?
+                                               LIMIT 1");
+                        $stmt->execute([$tipoTorneo, $clasificacionRanking]);
+                        $rankingPorClasificacion[$clasificacionRanking] = $stmt->fetch(PDO::FETCH_ASSOC) ?: null;
+                    }
+                    $ranking = $rankingPorClasificacion[$clasificacionRanking];
+                    if ($ranking) {
+                        $ptosrnk = (int)$ranking['puntos_posicion'] + ($ganados * (int)$ranking['puntos_por_partida_ganada']) + 1;
+                    }
                 }
             }
             
