@@ -119,27 +119,10 @@ if ($organizacion_id && $club_id) {
 
         if ($esFvd) {
             $entidadClub = (int)($club['entidad'] ?? 0);
-            $clubIdReal = (int)$club_id;
-
-            // Preferir club_id real; fallback por entidad si la data histórica usa club_id=código de entidad.
-            // En FVD solo se consideran afiliados con numfvd > 0.
-            $stTry = $pdo->prepare("
-                SELECT COUNT(*)
-                FROM usuarios u
-                WHERE COALESCE(NULLIF(u.organizacion_id, 0), COALESCE(u.entidad, 0)) = ?
-                  AND COALESCE(u.club_id, 0) = ?
-                  AND COALESCE(u.numfvd, 0) > 0
-            ");
-            $stTry->execute([$org_scope_entidad, $clubIdReal]);
-            $conteoPorClub = (int)$stTry->fetchColumn();
-
-            if ($conteoPorClub > 0) {
-                $scopeSql = "COALESCE(NULLIF(u.organizacion_id, 0), COALESCE(u.entidad, 0)) = ? AND COALESCE(u.club_id, 0) = ? AND COALESCE(u.numfvd, 0) > 0";
-                $scopeParams = [$org_scope_entidad, $clubIdReal];
-            } else {
-                $scopeSql = "COALESCE(NULLIF(u.organizacion_id, 0), COALESCE(u.entidad, 0)) = ? AND COALESCE(u.entidad, 0) = ? AND COALESCE(u.numfvd, 0) > 0";
-                $scopeParams = [$org_scope_entidad, $entidadClub];
-            }
+            // En este dominio, el id del club no identifica la asociación.
+            // El vínculo correcto se hace por entidad (común entre club y asociación).
+            $scopeSql = "COALESCE(NULLIF(u.organizacion_id, 0), COALESCE(u.entidad, 0)) = ? AND COALESCE(u.entidad, 0) = ? AND COALESCE(u.numfvd, 0) > 0";
+            $scopeParams = [$org_scope_entidad, $entidadClub];
 
             $stResumen = $pdo->prepare("
                 SELECT
