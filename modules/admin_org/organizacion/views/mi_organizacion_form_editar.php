@@ -62,28 +62,53 @@
                 <h5 class="mb-0"><i class="fas fa-chart-bar me-2"></i>Estadísticas</h5>
             </div>
             <div class="card-body">
+                <p class="text-muted small mb-3">Resumen global según la entidad de la organización y el vínculo canónico (cod_org / club_responsable y clubes asociados).</p>
                 <div class="row g-3">
-                    <div class="col-4">
+                    <div class="col-6 col-lg-4">
                         <div class="card bg-primary text-white text-center">
                             <div class="card-body py-3">
-                                <h3 class="mb-0"><?= $stats['clubes'] ?></h3>
-                                <small>Clubes</small>
+                                <h3 class="mb-0"><?= (int)($stats['clubes'] ?? 0) ?></h3>
+                                <small>Clubes activos</small>
                             </div>
                         </div>
                     </div>
-                    <div class="col-4">
+                    <div class="col-6 col-lg-4">
                         <div class="card bg-success text-white text-center">
                             <div class="card-body py-3">
-                                <h3 class="mb-0"><?= $stats['torneos'] ?></h3>
-                                <small>Torneos</small>
+                                <h3 class="mb-0"><?= (int)($stats['torneos'] ?? 0) ?></h3>
+                                <small>Torneos (publicados)</small>
                             </div>
                         </div>
                     </div>
-                    <div class="col-4">
+                    <div class="col-6 col-lg-4">
+                        <div class="card bg-success bg-opacity-75 text-white text-center">
+                            <div class="card-body py-3">
+                                <h3 class="mb-0"><?= (int)($stats['torneos_activos'] ?? 0) ?></h3>
+                                <small>Próximos / en curso</small>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-6 col-lg-4">
                         <div class="card bg-info text-white text-center">
                             <div class="card-body py-3">
-                                <h3 class="mb-0"><?= $stats['afiliados'] ?></h3>
-                                <small>Afiliados</small>
+                                <h3 class="mb-0"><?= (int)($stats['afiliados'] ?? 0) ?></h3>
+                                <small>Afiliados (rol usuario)</small>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-6 col-lg-4">
+                        <div class="card bg-secondary text-white text-center">
+                            <div class="card-body py-3">
+                                <h3 class="mb-0"><?= (int)($stats['usuarios'] ?? 0) ?></h3>
+                                <small>Usuarios en territorio</small>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-6 col-lg-4">
+                        <div class="card bg-dark text-white text-center">
+                            <div class="card-body py-3">
+                                <h3 class="mb-0"><?= (int)($stats['inscripciones'] ?? 0) ?></h3>
+                                <small>Inscripciones confirmadas</small>
                             </div>
                         </div>
                     </div>
