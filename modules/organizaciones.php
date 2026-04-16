@@ -37,6 +37,8 @@ try {
 } catch (Throwable $ignored) {
     $has_cod_org = false;
 }
+require_once __DIR__ . '/../lib/OrganizacionDashboardStats.php';
+$usuarios_territorio_expr = OrganizacionDashboardStats::usuarioTerritorioCoalesceExpr($pdo);
 $org_where_expr = $has_cod_org ? "(o.id = ? OR o.cod_org = ?)" : "o.id = ?";
 $club_org_match_expr = $has_cod_org
     ? "(c.organizacion_id = ? OR c.organizacion_id = (SELECT id FROM organizaciones WHERE cod_org = ? LIMIT 1))"
@@ -121,7 +123,7 @@ if ($organizacion_id && $club_id) {
             $entidadClub = (int)($club['entidad'] ?? 0);
             // En este dominio, el id del club no identifica la asociación.
             // El vínculo correcto se hace por entidad (común entre club y asociación).
-            $scopeSql = "COALESCE(NULLIF(u.organizacion_id, 0), COALESCE(u.entidad, 0)) = ? AND COALESCE(u.entidad, 0) = ? AND COALESCE(u.numfvd, 0) > 0";
+            $scopeSql = "" . $usuarios_territorio_expr . " = ? AND COALESCE(u.entidad, 0) = ? AND COALESCE(u.numfvd, 0) > 0";
             $scopeParams = [$org_scope_entidad, $entidadClub];
 
             $stResumen = $pdo->prepare("
@@ -170,7 +172,7 @@ if ($organizacion_id && $club_id) {
                     SUM(CASE WHEN UPPER(COALESCE(u.sexo,'M'))='M' THEN 1 ELSE 0 END) AS hombres,
                     SUM(CASE WHEN UPPER(COALESCE(u.sexo,'M'))='F' THEN 1 ELSE 0 END) AS mujeres
                 FROM usuarios u
-                WHERE COALESCE(NULLIF(u.organizacion_id, 0), COALESCE(u.entidad, 0)) = ?
+                WHERE " . $usuarios_territorio_expr . " = ?
                   AND COALESCE(u.entidad, 0) = ?
             ");
             $stResumen->execute([$org_scope_entidad, $entidadFiltro]);
@@ -179,7 +181,7 @@ if ($organizacion_id && $club_id) {
             $stmtCount = $pdo->prepare("
                 SELECT COUNT(*)
                 FROM usuarios u
-                WHERE COALESCE(NULLIF(u.organizacion_id, 0), COALESCE(u.entidad, 0)) = ?
+                WHERE " . $usuarios_territorio_expr . " = ?
                   AND COALESCE(u.entidad, 0) = ?
                   {$sexoSql}
             ");
@@ -190,7 +192,7 @@ if ($organizacion_id && $club_id) {
             $stmt = $pdo->prepare("
                 SELECT u.id, u.cedula, u.nombre, u.email, u.celular, u.status, u.created_at
                 FROM usuarios u
-                WHERE COALESCE(NULLIF(u.organizacion_id, 0), COALESCE(u.entidad, 0)) = ?
+                WHERE " . $usuarios_territorio_expr . " = ?
                   AND COALESCE(u.entidad, 0) = ?
                   {$sexoSql}
                 ORDER BY u.nombre ASC
@@ -286,7 +288,7 @@ if ($organizacion_id) {
             FROM (
                 SELECT DISTINCT u.entidad
                 FROM usuarios u
-                WHERE COALESCE(NULLIF(u.organizacion_id, 0), COALESCE(u.entidad, 0)) = ?
+                WHERE " . $usuarios_territorio_expr . " = ?
                   AND COALESCE(u.entidad, 0) > 0
                   AND COALESCE(u.numfvd, 0) > 0
             ) ue
@@ -345,7 +347,7 @@ if ($organizacion_id) {
                     SUM(CASE WHEN UPPER(COALESCE(u.sexo, 'M')) = 'M' THEN 1 ELSE 0 END) AS hombres,
                     SUM(CASE WHEN UPPER(COALESCE(u.sexo, 'M')) = 'F' THEN 1 ELSE 0 END) AS mujeres
                 FROM usuarios u
-                WHERE COALESCE(NULLIF(u.organizacion_id, 0), COALESCE(u.entidad, 0)) = ?
+                WHERE " . $usuarios_territorio_expr . " = ?
                   AND COALESCE(u.entidad, 0) = ?
                   " . ($esFvd ? " AND COALESCE(u.numfvd, 0) > 0 " : "") . "
             ");
@@ -386,7 +388,7 @@ if ($organizacion_id) {
                 SUM(CASE WHEN UPPER(COALESCE(u.sexo, 'M')) = 'M' THEN 1 ELSE 0 END) AS hombres,
                 SUM(CASE WHEN UPPER(COALESCE(u.sexo, 'M')) = 'F' THEN 1 ELSE 0 END) AS mujeres
             FROM usuarios u
-            WHERE COALESCE(NULLIF(u.organizacion_id, 0), COALESCE(u.entidad, 0)) = ?
+            WHERE " . $usuarios_territorio_expr . " = ?
               AND COALESCE(u.numfvd, 0) > 0
         ");
         $stTotalFvd->execute([$organizacion_entidad_ref]);
@@ -514,7 +516,7 @@ if ($is_admin_general && !$organizacion_id && !$club_id && $entidad_id > 0) {
                         SUM(CASE WHEN UPPER(COALESCE(u.sexo,'M'))='M' THEN 1 ELSE 0 END) AS hombres,
                         SUM(CASE WHEN UPPER(COALESCE(u.sexo,'M'))='F' THEN 1 ELSE 0 END) AS mujeres
                     FROM usuarios u
-                    WHERE COALESCE(NULLIF(u.organizacion_id, 0), COALESCE(u.entidad, 0)) = ?
+                    WHERE " . $usuarios_territorio_expr . " = ?
                       AND COALESCE(u.entidad, 0) = ?
                       " . ($orgEsFvd ? " AND COALESCE(u.numfvd, 0) > 0 " : "") . "
                 ");

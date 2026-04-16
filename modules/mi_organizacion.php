@@ -11,7 +11,7 @@ require_once __DIR__ . '/../config/auth.php';
 require_once __DIR__ . '/../config/db.php';
 require_once __DIR__ . '/../lib/file_upload.php';
 require_once __DIR__ . '/../lib/security.php';
-require_once __DIR__ . '/../lib/InscritosHelper.php';
+require_once __DIR__ . '/../lib/OrganizacionDashboardStats.php';
 
 // Solo admin_club y admin_general pueden acceder
 Auth::requireRole(['admin_club', 'admin_general']);
@@ -390,12 +390,24 @@ $admin_sin_organizacion = [];
 $entidades_options = [];
 if ($is_admin_general) {
     if (!$organizacion_id && $action_get !== 'new') {
-        $sub_clubes_lista = "(SELECT COUNT(DISTINCT c.id) FROM clubes c WHERE "
-            . ($has_cod_org ? "(c.organizacion_id = COALESCE(NULLIF(o.cod_org, 0), o.id) OR c.organizacion_id = o.id)" : "c.organizacion_id = o.id")
-            . " AND c.estatus = 1 AND (COALESCE(o.entidad,0) = 0 OR COALESCE(c.entidad,0) = COALESCE(o.entidad,0)))";
-        $sub_torneos_lista = "(SELECT COUNT(DISTINCT t.id) FROM tournaments t WHERE "
-            . ($has_cod_org ? "(t.club_responsable = COALESCE(NULLIF(o.cod_org, 0), o.id) OR t.club_responsable = o.id)" : "t.club_responsable = o.id")
-            . " AND t.estatus = 1 AND (COALESCE(o.entidad,0) = 0 OR COALESCE(t.entidad,0) = COALESCE(o.entidad,0)))";
+        $dashColsLista = OrganizacionDashboardStats::columnFlags(DB::pdo());
+        $has_t_org_lista = $dashColsLista['has_tournament_organizacion_id'];
+        $sub_clubes_lista = "(SELECT COUNT(DISTINCT c.id) FROM clubes c WHERE c.estatus = 1 "
+            . "AND (COALESCE(o.entidad,0) = 0 OR COALESCE(c.entidad,0) = COALESCE(o.entidad,0)) "
+            . "AND (c.organizacion_id = o.id "
+            . ($has_cod_org ? "OR c.organizacion_id = COALESCE(NULLIF(o.cod_org, 0), o.id) " : "")
+            . "OR (COALESCE(o.entidad,0) > 0 AND COALESCE(c.entidad,0) = COALESCE(o.entidad,0)))";
+        if ($has_t_org_lista) {
+            $sub_torneos_lista = "(SELECT COUNT(DISTINCT t.id) FROM tournaments t WHERE t.estatus = 1 "
+                . "AND (COALESCE(o.entidad,0) = 0 OR COALESCE(t.entidad,0) = COALESCE(o.entidad,0)) "
+                . "AND ((t.organizacion_id IS NOT NULL AND t.organizacion_id > 0 AND t.organizacion_id = o.id) OR ((t.organizacion_id IS NULL OR t.organizacion_id = 0) AND "
+                . ($has_cod_org ? "(t.club_responsable = COALESCE(NULLIF(o.cod_org, 0), o.id) OR t.club_responsable = o.id)" : "t.club_responsable = o.id")
+                . ")))";
+        } else {
+            $sub_torneos_lista = "(SELECT COUNT(DISTINCT t.id) FROM tournaments t WHERE "
+                . ($has_cod_org ? "(t.club_responsable = COALESCE(NULLIF(o.cod_org, 0), o.id) OR t.club_responsable = o.id)" : "t.club_responsable = o.id")
+                . " AND t.estatus = 1 AND (COALESCE(o.entidad,0) = 0 OR COALESCE(t.entidad,0) = COALESCE(o.entidad,0)))";
+        }
         $stmt = DB::pdo()->query("
             SELECT o.*, e.nombre as entidad_nombre, u.nombre as admin_nombre,
                    {$sub_clubes_lista} as total_clubes,
@@ -433,7 +445,7 @@ if ($is_admin_general) {
     }
 }
 
-// Obtener estadísticas globales de la organización (cod_org + entidad, alineado con hub admin_org)
+// Estadísticas globales (compatibles con BD sin usuarios.organizacion_id; torneos priorizan tournaments.organizacion_id)
 $stats = [
     'clubes' => 0,
     'torneos' => 0,
@@ -443,85 +455,8 @@ $stats = [
     'inscripciones' => 0,
 ];
 if ($organizacion) {
-    $orgRef = (int)($organizacion['cod_org'] ?? 0);
-    if ($orgRef <= 0) {
-        $orgRef = (int)($organizacion['id'] ?? 0);
-    }
-    $org_entidad = (int)($organizacion['entidad'] ?? 0);
-    $pdo = DB::pdo();
-
-    $stmt = $pdo->prepare($has_cod_org
-        ? "SELECT COUNT(DISTINCT id) FROM clubes WHERE (organizacion_id = ? OR organizacion_id = (SELECT id FROM organizaciones WHERE cod_org = ? LIMIT 1)) AND estatus = 1 AND (? = 0 OR COALESCE(entidad, 0) = ?)"
-        : "SELECT COUNT(DISTINCT id) FROM clubes WHERE organizacion_id = ? AND estatus = 1 AND (? = 0 OR COALESCE(entidad, 0) = ?)");
-    $stmt->execute($has_cod_org ? [$orgRef, $orgRef, $org_entidad, $org_entidad] : [$orgRef, $org_entidad, $org_entidad]);
-    $stats['clubes'] = (int)$stmt->fetchColumn();
-
-    $stmt = $pdo->prepare($has_cod_org
-        ? "SELECT COUNT(DISTINCT id) FROM tournaments WHERE (club_responsable = ? OR club_responsable = (SELECT id FROM organizaciones WHERE cod_org = ? LIMIT 1)) AND (? = 0 OR COALESCE(entidad, 0) = ?) AND fechator >= CURDATE() AND estatus = 1"
-        : "SELECT COUNT(DISTINCT id) FROM tournaments WHERE club_responsable = ? AND (? = 0 OR COALESCE(entidad, 0) = ?) AND fechator >= CURDATE() AND estatus = 1");
-    $stmt->execute($has_cod_org ? [$orgRef, $orgRef, $org_entidad, $org_entidad] : [$orgRef, $org_entidad, $org_entidad]);
-    $stats['torneos_activos'] = (int)$stmt->fetchColumn();
-
-    $stmt = $pdo->prepare($has_cod_org
-        ? "SELECT COUNT(DISTINCT id) FROM tournaments WHERE (club_responsable = ? OR club_responsable = (SELECT id FROM organizaciones WHERE cod_org = ? LIMIT 1)) AND (? = 0 OR COALESCE(entidad, 0) = ?) AND estatus = 1"
-        : "SELECT COUNT(DISTINCT id) FROM tournaments WHERE club_responsable = ? AND (? = 0 OR COALESCE(entidad, 0) = ?) AND estatus = 1");
-    $stmt->execute($has_cod_org ? [$orgRef, $orgRef, $org_entidad, $org_entidad] : [$orgRef, $org_entidad, $org_entidad]);
-    $stats['torneos'] = (int)$stmt->fetchColumn();
-
-    $sqlAfiliados = "
-        SELECT COUNT(DISTINCT u.id) FROM usuarios u
-        WHERE u.role = 'usuario' AND u.status = 0
-        AND (
-            (? > 0 AND COALESCE(NULLIF(u.organizacion_id, 0), COALESCE(u.entidad, 0)) = ?)
-            OR EXISTS (
-                SELECT 1 FROM clubes c
-                WHERE c.id = u.club_id
-                  AND ({$org_club_match_expr})
-                  AND c.estatus = 1
-                  AND (? = 0 OR COALESCE(c.entidad, 0) = ?)
-            )
-        )";
-    $paramsAf = array_merge(
-        [$org_entidad, $org_entidad],
-        $has_cod_org ? [$orgRef, $orgRef] : [$orgRef],
-        [$org_entidad, $org_entidad]
-    );
-    $stmt = $pdo->prepare($sqlAfiliados);
-    $stmt->execute($paramsAf);
-    $stats['afiliados'] = (int)$stmt->fetchColumn();
-
-    $sqlUsuarios = "
-        SELECT COUNT(DISTINCT u.id) FROM usuarios u
-        WHERE u.status = 0
-        AND (
-            (? > 0 AND COALESCE(NULLIF(u.organizacion_id, 0), COALESCE(u.entidad, 0)) = ?)
-            OR EXISTS (
-                SELECT 1 FROM clubes c
-                WHERE c.id = u.club_id
-                  AND ({$org_club_match_expr})
-                  AND c.estatus = 1
-                  AND (? = 0 OR COALESCE(c.entidad, 0) = ?)
-            )
-        )";
-    $stmt = $pdo->prepare($sqlUsuarios);
-    $stmt->execute($paramsAf);
-    $stats['usuarios'] = (int)$stmt->fetchColumn();
-
-    $org_torneo_match_t = $has_cod_org
-        ? "(t.club_responsable = ? OR t.club_responsable = (SELECT id FROM organizaciones WHERE cod_org = ? LIMIT 1))"
-        : "t.club_responsable = ?";
-    $whereInsc = InscritosHelper::sqlWhereSoloConfirmadoConAlias('i');
-    $sqlInsc = "
-        SELECT COUNT(DISTINCT i.id) FROM inscritos i
-        INNER JOIN tournaments t ON i.torneo_id = t.id
-        WHERE {$org_torneo_match_t}
-          AND t.estatus = 1
-          AND (? = 0 OR COALESCE(t.entidad, 0) = ?)
-          AND {$whereInsc}
-    ";
-    $stmt = $pdo->prepare($sqlInsc);
-    $stmt->execute($has_cod_org ? [$orgRef, $orgRef, $org_entidad, $org_entidad] : [$orgRef, $org_entidad, $org_entidad]);
-    $stats['inscripciones'] = (int)$stmt->fetchColumn();
+    $snap = OrganizacionDashboardStats::snapshot(DB::pdo(), $organizacion, $has_cod_org);
+    $stats = $snap['stats'];
 }
 ?>
 

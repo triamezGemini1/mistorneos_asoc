@@ -4,7 +4,6 @@
  * Página pública, optimizada para dispositivos móviles.
  * Acceso: clasificacion.php?torneo_id=X
  */
-declare(strict_types=1);
 
 require_once __DIR__ . '/../config/bootstrap.php';
 require_once __DIR__ . '/../config/db_config.php';

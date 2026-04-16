@@ -78,7 +78,8 @@ class ResultadosPublicHelper
                 ORDER BY i.ptosrnk DESC, i.efectividad DESC, i.ganados DESC, i.puntos DESC
                 LIMIT " . (int)$limit . " OFFSET " . (int)$offset;
             $stmt = $pdo->prepare($sql);
-            $stmt->execute($tienePartiresul ? [$torneo_id, $torneo_id, $torneo_id] : [$torneo_id]);
+            // Solo 2 placeholders con partiresul: subconsulta bye (id_torneo) + WHERE i.torneo_id
+            $stmt->execute($tienePartiresul ? [$torneo_id, $torneo_id] : [$torneo_id]);
             return $stmt->fetchAll(PDO::FETCH_ASSOC);
         } catch (Exception $e) {
             error_log("ResultadosPublicHelper getPosiciones: " . $e->getMessage());
