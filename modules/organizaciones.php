@@ -92,6 +92,7 @@ if ($organizacion_id && $club_id) {
         if ($org_scope_ref <= 0) {
             $org_scope_ref = (int)($organizacion['id'] ?? $organizacion_id);
         }
+        $org_scope_entidad = (int)($organizacion['entidad'] ?? 0);
         $afiliados_page = max(1, (int)($_GET['afiliados_page'] ?? 1));
         $afiliados_per_page = 15;
         $sexo = strtolower(trim((string)($_GET['sexo'] ?? 'todos')));
@@ -125,19 +126,19 @@ if ($organizacion_id && $club_id) {
             $stTry = $pdo->prepare("
                 SELECT COUNT(*)
                 FROM usuarios u
-                WHERE u.organizacion_id = ?
+                WHERE COALESCE(NULLIF(u.organizacion_id, 0), COALESCE(u.entidad, 0)) = ?
                   AND COALESCE(u.club_id, 0) = ?
                   AND COALESCE(u.numfvd, 0) > 0
             ");
-            $stTry->execute([$org_scope_ref, $clubIdReal]);
+            $stTry->execute([$org_scope_entidad, $clubIdReal]);
             $conteoPorClub = (int)$stTry->fetchColumn();
 
             if ($conteoPorClub > 0) {
-                $scopeSql = "u.organizacion_id = ? AND COALESCE(u.club_id, 0) = ? AND COALESCE(u.numfvd, 0) > 0";
-                $scopeParams = [$org_scope_ref, $clubIdReal];
+                $scopeSql = "COALESCE(NULLIF(u.organizacion_id, 0), COALESCE(u.entidad, 0)) = ? AND COALESCE(u.club_id, 0) = ? AND COALESCE(u.numfvd, 0) > 0";
+                $scopeParams = [$org_scope_entidad, $clubIdReal];
             } else {
-                $scopeSql = "u.organizacion_id = ? AND COALESCE(u.entidad, 0) = ? AND COALESCE(u.numfvd, 0) > 0";
-                $scopeParams = [$org_scope_ref, $entidadClub];
+                $scopeSql = "COALESCE(NULLIF(u.organizacion_id, 0), COALESCE(u.entidad, 0)) = ? AND COALESCE(u.entidad, 0) = ? AND COALESCE(u.numfvd, 0) > 0";
+                $scopeParams = [$org_scope_entidad, $entidadClub];
             }
 
             $stResumen = $pdo->prepare("
@@ -263,6 +264,7 @@ if ($organizacion_id) {
     if ($organizacion_ref <= 0) {
         $organizacion_ref = (int)($organizacion['id'] ?? $organizacion_id);
     }
+    $organizacion_entidad_ref = (int)($organizacion['entidad'] ?? 0);
     $clubes_page = max(1, (int)($_GET['clubes_page'] ?? 1));
     $clubes_per_page = 15;
     $hasUsuariosOrganizacionId = false;
@@ -295,7 +297,7 @@ if ($organizacion_id) {
             FROM (
                 SELECT DISTINCT u.entidad
                 FROM usuarios u
-                WHERE u.organizacion_id = ?
+                WHERE COALESCE(NULLIF(u.organizacion_id, 0), COALESCE(u.entidad, 0)) = ?
                   AND COALESCE(u.entidad, 0) > 0
                   AND COALESCE(u.numfvd, 0) > 0
             ) ue
@@ -307,7 +309,7 @@ if ($organizacion_id) {
                 ON e.id = ue.entidad
             ORDER BY nombre ASC
         ");
-        $stmt->execute($has_cod_org ? [$organizacion_ref, $organizacion_ref, $organizacion_ref] : [$organizacion_ref, $organizacion_ref]);
+        $stmt->execute($has_cod_org ? [$organizacion_entidad_ref, $organizacion_ref, $organizacion_ref] : [$organizacion_entidad_ref, $organizacion_ref]);
         $clubes = $stmt->fetchAll(PDO::FETCH_ASSOC);
     } else {
         $stmt = $pdo->prepare("
@@ -338,11 +340,11 @@ if ($organizacion_id) {
                     SUM(CASE WHEN UPPER(COALESCE(u.sexo, 'M')) = 'M' THEN 1 ELSE 0 END) AS hombres,
                     SUM(CASE WHEN UPPER(COALESCE(u.sexo, 'M')) = 'F' THEN 1 ELSE 0 END) AS mujeres
                 FROM usuarios u
-                WHERE u.organizacion_id = ?
+                WHERE COALESCE(NULLIF(u.organizacion_id, 0), COALESCE(u.entidad, 0)) = ?
                   AND COALESCE(u.entidad, 0) = ?
                   " . ($esFvd ? " AND COALESCE(u.numfvd, 0) > 0 " : "") . "
             ");
-            $st->execute([$organizacion_ref, $entidadClub]);
+            $st->execute([$organizacion_entidad_ref, $entidadClub]);
         } else {
             $st = $pdo->prepare("
                 SELECT
@@ -379,10 +381,10 @@ if ($organizacion_id) {
                 SUM(CASE WHEN UPPER(COALESCE(u.sexo, 'M')) = 'M' THEN 1 ELSE 0 END) AS hombres,
                 SUM(CASE WHEN UPPER(COALESCE(u.sexo, 'M')) = 'F' THEN 1 ELSE 0 END) AS mujeres
             FROM usuarios u
-            WHERE u.organizacion_id = ?
+            WHERE COALESCE(NULLIF(u.organizacion_id, 0), COALESCE(u.entidad, 0)) = ?
               AND COALESCE(u.numfvd, 0) > 0
         ");
-        $stTotalFvd->execute([$organizacion_ref]);
+        $stTotalFvd->execute([$organizacion_entidad_ref]);
         $rowFvd = $stTotalFvd->fetch(PDO::FETCH_ASSOC) ?: [];
         $stats_afiliados_total = (int)($rowFvd['total'] ?? 0);
         $stats_hombres_total = (int)($rowFvd['hombres'] ?? 0);
@@ -507,11 +509,11 @@ if ($is_admin_general && !$organizacion_id && !$club_id && $entidad_id > 0) {
                         SUM(CASE WHEN UPPER(COALESCE(u.sexo,'M'))='M' THEN 1 ELSE 0 END) AS hombres,
                         SUM(CASE WHEN UPPER(COALESCE(u.sexo,'M'))='F' THEN 1 ELSE 0 END) AS mujeres
                     FROM usuarios u
-                    WHERE u.organizacion_id = ?
+                    WHERE COALESCE(NULLIF(u.organizacion_id, 0), COALESCE(u.entidad, 0)) = ?
                       AND COALESCE(u.entidad, 0) = ?
                       " . ($orgEsFvd ? " AND COALESCE(u.numfvd, 0) > 0 " : "") . "
                 ");
-                $stmt2->execute([$orgId, $entidad_id]);
+                $stmt2->execute([(int)$entidad_id, $entidad_id]);
                 $r2 = $stmt2->fetch(PDO::FETCH_ASSOC) ?: [];
                 $org['total_afiliados'] = (int)($r2['total_afiliados'] ?? 0);
                 $org['hombres'] = (int)($r2['hombres'] ?? 0);
