@@ -6556,6 +6556,7 @@ function recalcularPosiciones($torneo_id) {
             $existeClasiRanking = false;
         }
 
+        // Fuera del top N de la tabla: mismos criterios que la última fila definida dentro del límite; si no hay datos, 0 + asistencia mínima.
         $puntosPorPartidaGanadaFuera = null;
         $puntosAsistenciaFuera = 1;
         if ($existeClasiRanking && $limitePosiciones >= 1) {
@@ -6580,6 +6581,21 @@ function recalcularPosiciones($torneo_id) {
                 }
             }
         }
+        if ($existeClasiRanking && $puntosPorPartidaGanadaFuera === null) {
+            try {
+                $stmtF2 = $pdo->prepare("SELECT puntos_por_partida_ganada, COALESCE(puntos_asistencia, 1) AS puntos_asistencia
+                    FROM clasiranking WHERE tipo_torneo = ? ORDER BY clasificacion DESC LIMIT 1");
+                $stmtF2->execute([$tipoTorneoClasi]);
+                $rf2 = $stmtF2->fetch(PDO::FETCH_ASSOC);
+                if ($rf2) {
+                    $puntosPorPartidaGanadaFuera = (int) ($rf2['puntos_por_partida_ganada'] ?? 0);
+                    $puntosAsistenciaFuera = (int) ($rf2['puntos_asistencia'] ?? 1);
+                }
+            } catch (Exception $e) {
+            }
+        }
+        $pppFuera = (int) ($puntosPorPartidaGanadaFuera ?? 0);
+        $pasFuera = max(1, (int) ($puntosAsistenciaFuera ?? 1));
         
         // Actualizar posiciones consecutivamente (1, 2, 3, 4...) y calcular puntos de ranking
         // Cada jugador recibe una posiciÃ³n Ãºnica, incluso si hay empates en los valores
@@ -6597,16 +6613,14 @@ function recalcularPosiciones($torneo_id) {
             }
             $clasiequi = (int)($inscrito['clasiequi'] ?? 0);
             
-            // Calcular puntos de ranking segÃºn la posiciÃ³n actual
-            $ptosrnk = 1; // Por defecto, punto por participaciÃ³n
-
             // Puntos por posición (tabla clasiranking): parejas/parejas fijas y equipos usan clasificación de la unidad (clasiequi).
             $clasificacionRanking = $posicion;
             if (in_array($modalidadNum, [2, 3, 4], true) && $clasiequi > 0) {
                 $clasificacionRanking = $clasiequi;
             }
 
-            if ($existeClasiRanking && $clasificacionRanking <= $limitePosiciones) {
+            $ptosrnk = $pasFuera;
+            if ($existeClasiRanking && $clasificacionRanking >= 1 && $clasificacionRanking <= $limitePosiciones) {
                 try {
                     if (!array_key_exists($clasificacionRanking, $rankingPorClasificacion)) {
                         $stmt = $pdo->prepare("SELECT puntos_posicion, puntos_por_partida_ganada, COALESCE(puntos_asistencia, 1) AS puntos_asistencia
@@ -6618,25 +6632,18 @@ function recalcularPosiciones($torneo_id) {
                     }
                     $ranking = $rankingPorClasificacion[$clasificacionRanking];
                     if ($ranking) {
-                        $puntosAsistencia = (int)($ranking['puntos_asistencia'] ?? 1);
-                        $ptosrnk = (int)$ranking['puntos_posicion'] + ($ganados * (int)$ranking['puntos_por_partida_ganada']) + $puntosAsistencia;
+                        $puntosAsistencia = max(1, (int) ($ranking['puntos_asistencia'] ?? 1));
+                        $ptosrnk = (int) $ranking['puntos_posicion'] + ($ganados * (int) $ranking['puntos_por_partida_ganada']) + $puntosAsistencia;
+                    } else {
+                        $ptosrnk = ($ganados * $pppFuera) + $pasFuera;
                     }
                 } catch (Exception $e) {
-                    if (!array_key_exists($clasificacionRanking, $rankingPorClasificacion)) {
-                        $stmt = $pdo->prepare("SELECT puntos_posicion, puntos_por_partida_ganada
-                                               FROM clasiranking
-                                               WHERE tipo_torneo = ? AND clasificacion = ?
-                                               LIMIT 1");
-                        $stmt->execute([$tipoTorneoClasi, $clasificacionRanking]);
-                        $rankingPorClasificacion[$clasificacionRanking] = $stmt->fetch(PDO::FETCH_ASSOC) ?: null;
-                    }
-                    $ranking = $rankingPorClasificacion[$clasificacionRanking];
-                    if ($ranking) {
-                        $ptosrnk = (int)$ranking['puntos_posicion'] + ($ganados * (int)$ranking['puntos_por_partida_ganada']) + 1;
-                    }
+                    $ptosrnk = ($ganados * $pppFuera) + $pasFuera;
                 }
-            } elseif ($existeClasiRanking && $clasificacionRanking > $limitePosiciones && $puntosPorPartidaGanadaFuera !== null) {
-                $ptosrnk = ($ganados * $puntosPorPartidaGanadaFuera) + $puntosAsistenciaFuera;
+            } elseif ($existeClasiRanking && $clasificacionRanking > $limitePosiciones) {
+                $ptosrnk = ($ganados * $pppFuera) + $pasFuera;
+            } elseif ($existeClasiRanking) {
+                $ptosrnk = ($ganados * $pppFuera) + $pasFuera;
             }
             
             // Actualizar posiciÃ³n y puntos de ranking
