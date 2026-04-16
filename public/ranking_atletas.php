@@ -137,31 +137,41 @@ function fmtfecha(?string $f): string
             letter-spacing: 0.01em;
             color: #0f172a;
         }
-        /* Pos / P Gan / Pts: 60 % del ancho original (1.65rem → calc(1.65rem * 0.6)) */
-        .tabla-matriz .col-torneo-sub {
-            width: calc(1.65rem * 0.6);
-            max-width: calc(1.65rem * 0.6);
-            box-sizing: border-box;
-            text-align: center;
-            font-size: 0.57rem;
-            font-weight: 700;
-            font-variant-numeric: tabular-nums;
-            letter-spacing: -0.02em;
-            color: #1e293b;
-            line-height: 1.2;
-            padding: 0.1rem 0.03rem !important;
-        }
-        /* Pts Σ, Efect. Σ, G Σ: misma anchura que Pos / P Gan / Pts (60 % de 1.65rem) */
+        /* Pos / P Gan / Pts: ancho holgado para 4 dígitos (tabular-nums) + cabecera “P Gan” */
+        .tabla-matriz .col-torneo-sub,
         .tabla-matriz .col-stat-total {
-            width: calc(1.65rem * 0.6);
-            max-width: calc(1.65rem * 0.6);
-            font-size: 0.58rem;
-            font-weight: 800;
+            width: 2.65rem;
+            min-width: 2.65rem;
+            max-width: 2.65rem;
+            box-sizing: border-box;
             font-variant-numeric: tabular-nums;
-            letter-spacing: -0.02em;
+            font-weight: 700;
+            line-height: 1.25;
+        }
+        .tabla-matriz .col-torneo-sub {
+            text-align: center;
+            font-size: 0.65rem;
+            color: #1e293b;
+            padding: 0.22rem 0.2rem !important;
+        }
+        .tabla-matriz .col-stat-total {
+            text-align: right;
+            font-size: 0.65rem;
+            font-weight: 800;
             color: #0f172a;
-            padding: 0.1rem 0.04rem !important;
-            line-height: 1.2;
+            padding: 0.22rem 0.2rem !important;
+        }
+        .tabla-matriz thead .sub-h.col-torneo-sub {
+            white-space: normal;
+            font-size: 0.54rem;
+            line-height: 1.1;
+            padding: 0.18rem 0.12rem !important;
+        }
+        .tabla-matriz thead th.col-stat-total {
+            white-space: normal;
+            font-size: 0.52rem;
+            line-height: 1.15;
+            vertical-align: middle;
         }
         .tabla-matriz thead .torneo-nombre {
             font-size: 0.62rem;
