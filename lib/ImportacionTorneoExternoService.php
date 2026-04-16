@@ -899,6 +899,14 @@ final class ImportacionTorneoExternoService
             return $stats;
         }
 
+        /* Excel: partida y mesa suelen ir combinadas; filas vacías quedan como 0 y no entran en grupos de relleno de pareja. No rellenar secuencia (1,2,3 por jugador). */
+        if ($iPart >= 0) {
+            $rowsResultados = self::rellenarHuecosFillDownColumnaDatos($rowsResultados, $iPart);
+        }
+        if ($iMesa >= 0) {
+            $rowsResultados = self::rellenarHuecosFillDownColumnaDatos($rowsResultados, $iMesa);
+        }
+
         if ($iPareja >= 0) {
             $rowsResultados = self::rellenarHuecosColumnaPorPartidaMesa(
                 $rowsResultados,
@@ -1188,6 +1196,34 @@ final class ImportacionTorneoExternoService
         $stats['filas_hoja_homolog_raw'] = max(0, count($hom) - 1);
         $stats['filas_hoja_resultados_raw'] = max(0, count($res) - 1);
         return $stats;
+    }
+
+    /**
+     * Replica «rellenar hacia abajo» de Excel: si una celda está vacía, copia el último valor no vacío de la misma columna en filas superiores (solo filas de datos, fila 0 = cabecera).
+     *
+     * @param list<list<string>> $rows
+     * @return list<list<string>>
+     */
+    private static function rellenarHuecosFillDownColumnaDatos(array $rows, int $iCol): array
+    {
+        if ($iCol < 0 || count($rows) < 2) {
+            return $rows;
+        }
+        $out = $rows;
+        $last = '';
+        for ($r = 1; $r < count($out); $r++) {
+            self::filaAseguraIndice($out[$r], $iCol);
+            $v = trim((string) ($out[$r][$iCol] ?? ''));
+            if ($v !== '') {
+                $last = $v;
+                continue;
+            }
+            if ($last !== '') {
+                $out[$r][$iCol] = $last;
+            }
+        }
+
+        return $out;
     }
 
     /**
@@ -1487,9 +1523,15 @@ final class ImportacionTorneoExternoService
 
         $statsRelleno = [];
         $rowsProc = $rowsResultados;
+        if ($iPart >= 0) {
+            $rowsProc = self::rellenarHuecosFillDownColumnaDatos($rowsProc, $iPart);
+        }
+        if ($iMesa >= 0) {
+            $rowsProc = self::rellenarHuecosFillDownColumnaDatos($rowsProc, $iMesa);
+        }
         if ($iPart >= 0 && $iMesa >= 0 && $iSeq >= 0) {
             $rowsProc = self::rellenarHuecosColumnaPorPartidaMesa(
-                $rowsResultados,
+                $rowsProc,
                 $iPart,
                 $iMesa,
                 $iSeq,

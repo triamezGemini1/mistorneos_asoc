@@ -160,6 +160,10 @@ $clases = [1 => 'Abierto', 2 => 'Por Categorías'];
                 <?= AppHelpers::appLogo('mb-3', 'La Estación del Dominó', 48) ?>
                 <h2 class="mb-0">Resultados de Eventos</h2>
                 <p class="mb-0 mt-2 opacity-75">Consulta los resultados de todos los eventos realizados y en desarrollo</p>
+                <p class="mb-0 mt-3">
+                    <a href="ranking_atletas.php?genero=F" class="btn btn-sm btn-light text-primary fw-semibold me-1"><i class="fas fa-medal me-1"></i>Ranking atletas</a>
+                    <a href="landing-spa.php" class="btn btn-sm btn-outline-light">Inicio</a>
+                </p>
             </div>
             
             <div class="p-4">

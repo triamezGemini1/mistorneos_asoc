@@ -46,6 +46,12 @@ echo '<?xml version="1.0" encoding="UTF-8"?>';
         <priority>0.9</priority>
     </url>
     <url>
+        <loc><?= htmlspecialchars($base_url) ?>/public/ranking_atletas.php</loc>
+        <lastmod><?= date('Y-m-d') ?></lastmod>
+        <changefreq>weekly</changefreq>
+        <priority>0.85</priority>
+    </url>
+    <url>
         <loc><?= htmlspecialchars($base_url) ?>/public/login.php</loc>
         <lastmod><?= date('Y-m-d') ?></lastmod>
         <changefreq>monthly</changefreq>

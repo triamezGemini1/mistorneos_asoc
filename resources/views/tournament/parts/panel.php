@@ -292,6 +292,12 @@
             <div class="card">
                 <div class="card-body p-2">
                     <?php if (($ultima_ronda ?? 0) > 0): ?>
+                        <?php
+                        if (! class_exists('AppHelpers', false)) {
+                            require_once dirname(__DIR__, 4) . '/lib/app_helpers.php';
+                        }
+                        $url_ranking_atletas_public_panel = rtrim(AppHelpers::getPublicUrl(), '/') . '/ranking_atletas.php';
+                        ?>
                         <div class="d-grid gap-1">
                             <a href="index.php?page=torneo_gestion&action=cuadricula&torneo_id=<?php echo $torneo['id']; ?>&ronda=<?php echo $ultima_ronda; ?>" 
                                class="btn btn-sm btn-purple" style="font-size: 0.75rem;">
@@ -320,6 +326,12 @@
                             <a href="index.php?page=torneo_gestion&action=resultados_reportes&torneo_id=<?php echo $torneo['id']; ?>" 
                                class="btn btn-sm btn-secondary" style="font-size: 0.75rem;">
                                 <i class="fas fa-file-pdf mr-1"></i> Reportes PDF/Excel
+                            </a>
+                            <a href="<?php echo htmlspecialchars($url_ranking_atletas_public_panel, ENT_QUOTES, 'UTF-8'); ?>"
+                               target="_blank" rel="noopener noreferrer"
+                               class="btn btn-sm btn-info" style="font-size: 0.75rem;"
+                               title="Ranking histórico público (femenino/masculino)">
+                                <i class="fas fa-medal mr-1"></i> Ranking atletas (público)
                             </a>
                             <?php 
                             $isLocked = (int)($torneo['locked'] ?? 0) === 1;

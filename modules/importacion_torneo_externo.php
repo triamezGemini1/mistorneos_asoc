@@ -757,7 +757,7 @@ $url_import_individual = $url_panel . '#importacion-masiva';
                 <div class="col-12 col-lg-6 imp-paso-texto">
                     <div class="imp-seccion">
                         <h6>Qué comprueba</h6>
-                        <p class="small mb-0">Lee <strong>todas las filas</strong> del archivo de resultados, detecta la columna pareja igual que en la importación y busca en <code>inscritos</code> por <code>torneo_id</code> + <code>numero</code>. Muestra cuántas filas resuelven <code>id_usuario</code>, cuántas no, y lista las claves de pareja que no aparecen en inscritos (con conteo y filas de ejemplo).</p>
+                        <p class="small mb-0">Lee <strong>todas las filas</strong> del archivo, aplica el mismo relleno que la importación (partida/mesa combinadas en Excel, luego pareja por mesa) y busca en <code>inscritos.numero</code>. <strong>Pareja vacía</strong> significa que, tras leer el archivo, esa celda quedó sin texto (no es lo mismo que «no encontrado en BD»).</p>
                     </div>
                 </div>
                 <div class="col-12 col-lg-6 imp-paso-acciones">

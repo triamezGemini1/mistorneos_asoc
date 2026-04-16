@@ -657,6 +657,15 @@ tailwind.config = {
                                 <i class="fas fa-file-alt"></i> Reportes PDF/Excel
                             </a>
                         <?php endif; ?>
+                        <?php
+                        $url_ranking_atletas_public = rtrim(AppHelpers::getPublicUrl(), '/') . '/ranking_atletas.php';
+                        ?>
+                        <a href="<?php echo htmlspecialchars($url_ranking_atletas_public, ENT_QUOTES, 'UTF-8'); ?>"
+                           target="_blank" rel="noopener noreferrer"
+                           class="tw-btn bg-cyan-600 hover:bg-cyan-700 text-white w-full text-center"
+                           title="Ranking histórico público (femenino/masculino)">
+                            <i class="fas fa-medal"></i> Ranking atletas (web pública)
+                        </a>
                         
                         <!-- Podios (Común para ambos tipos - detecta modalidad automáticamente) -->
                         <?php 

@@ -277,6 +277,7 @@ try {
                                 <a href="#galeria" class="px-4 py-2 text-slate-300 hover:text-[#00f2ff] hover:bg-white/5 rounded-lg transition-all font-medium">Galería</a>
                                 <a href="#faq" class="px-4 py-2 text-slate-300 hover:text-[#00f2ff] hover:bg-white/5 rounded-lg transition-all font-medium">FAQ</a>
                                 <a href="#comentarios" class="px-4 py-2 text-slate-300 hover:text-[#00f2ff] hover:bg-white/5 rounded-lg transition-all font-medium">Comentarios</a>
+                                <a href="<?= htmlspecialchars($base_url . 'ranking_atletas.php') ?>" class="px-4 py-2 text-slate-300 hover:text-[#00f2ff] hover:bg-white/5 rounded-lg transition-all font-medium">Ranking atletas</a>
                                 <a href="<?= htmlspecialchars($base_url . 'login.php') ?>" class="ml-4 px-6 py-2.5 btn-accent rounded-lg font-semibold transition-all shadow-lg"><i class="fas fa-sign-in-alt mr-2"></i>Iniciar Sesión</a>
                             </div>
                             <span class="md:hidden text-white p-2 rounded-lg opacity-90" aria-hidden="true"><i class="fas fa-bars text-xl"></i></span>
@@ -345,6 +346,7 @@ try {
                             <a href="#galeria" @click.prevent="scrollToSection('galeria')" class="px-4 py-2 text-slate-300 hover:text-[#00f2ff] hover:bg-white/5 rounded-lg transition-all font-medium">Galería</a>
                             <a href="#faq" @click.prevent="scrollToSection('faq')" class="px-4 py-2 text-slate-300 hover:text-[#00f2ff] hover:bg-white/5 rounded-lg transition-all font-medium">FAQ</a>
                             <a href="#comentarios" @click.prevent="scrollToSection('comentarios')" class="px-4 py-2 text-slate-300 hover:text-[#00f2ff] hover:bg-white/5 rounded-lg transition-all font-medium">Comentarios</a>
+                            <a :href="baseUrl + 'ranking_atletas.php'" class="px-4 py-2 text-slate-300 hover:text-[#00f2ff] hover:bg-white/5 rounded-lg transition-all font-medium">Ranking atletas</a>
                             <a :href="baseUrl + 'login.php'" class="ml-4 px-6 py-2.5 btn-accent rounded-lg font-semibold transition-all shadow-lg"><i class="fas fa-sign-in-alt mr-2"></i>Iniciar Sesión</a>
                         </div>
                         <button @click="mobileMenuOpen = !mobileMenuOpen" class="md:hidden text-white p-2 rounded-lg hover:bg-white/10"><i class="fas fa-bars text-xl"></i></button>
@@ -361,6 +363,7 @@ try {
                             <a href="#" @click.prevent="scrollToSection('galeria')" class="px-4 py-2 text-slate-300 hover:text-[#00f2ff] hover:bg-white/5 rounded-lg">Galería</a>
                             <a href="#" @click.prevent="scrollToSection('faq')" class="px-4 py-2 text-slate-300 hover:text-[#00f2ff] hover:bg-white/5 rounded-lg">FAQ</a>
                             <a href="#" @click.prevent="scrollToSection('comentarios')" class="px-4 py-2 text-slate-300 hover:text-[#00f2ff] hover:bg-white/5 rounded-lg">Comentarios</a>
+                            <a :href="baseUrl + 'ranking_atletas.php'" class="px-4 py-2 text-slate-300 hover:text-[#00f2ff] hover:bg-white/5 rounded-lg">Ranking atletas</a>
                             <a :href="baseUrl + 'login.php'" class="mt-2 px-4 py-2.5 btn-accent rounded-lg text-center inline-block"><i class="fas fa-sign-in-alt mr-2"></i>Iniciar Sesión</a>
                         </div>
                     </div>
