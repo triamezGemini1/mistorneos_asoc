@@ -256,7 +256,7 @@ if ($current_page === 'estadisticas_torneos') {
         $admin_club_org_id = Auth::getUserOrganizacionId();
         ?>
         
-        <!-- Mi Organización: acceso directo a vista de estructura (organizaciones&id=X) -->
+        <!-- Mi Organización: acceso único y canónico -->
         <?php if ($admin_club_org_id): ?>
         <li class="mb-2">
           <a href="<?= htmlspecialchars($dashboard_href('organizaciones', ['id' => $admin_club_org_id])) ?>" class="nav-link <?= ($current_page === 'organizaciones' && (int)($_GET['id'] ?? 0) === $admin_club_org_id) ? 'active' : '' ?>">

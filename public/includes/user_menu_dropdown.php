@@ -21,7 +21,10 @@ if (class_exists('AppHelpers')) {
 $url_profile = $base ? $base . '/profile.php' : 'profile.php';
 $url_change_password = class_exists('AppHelpers') ? AppHelpers::dashboard('users/change_password') : ($base ? $base . '/index.php?page=users/change_password' : 'index.php?page=users/change_password');
 $url_logout = $base ? $base . '/logout.php' : 'logout.php';
-$url_mi_organizacion = class_exists('AppHelpers') ? AppHelpers::dashboard('mi_organizacion') : 'index.php?page=mi_organizacion';
+$orgIdMenu = class_exists('Auth') ? (Auth::getUserOrganizacionId() ?? 0) : 0;
+$url_mi_organizacion = ($orgIdMenu > 0)
+    ? (class_exists('AppHelpers') ? AppHelpers::dashboard('organizaciones', ['id' => $orgIdMenu]) : ('index.php?page=organizaciones&id=' . (int)$orgIdMenu))
+    : (class_exists('AppHelpers') ? AppHelpers::dashboard('mi_organizacion') : 'index.php?page=mi_organizacion');
 $url_switch_role = $base ? $base . '/switch_role.php' : 'switch_role.php';
 $role_original = (string)($user['role_original'] ?? $user['role'] ?? '');
 $role_mode_actual = (int)($user['role_switch_mode'] ?? (($user['role'] ?? '') === 'admin_general' ? 0 : 0));

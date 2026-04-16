@@ -283,6 +283,14 @@ $mis_clubes = [];
 $club_ids = [];
 try {
     $club_ids = ClubHelper::getClubesByAdminClubId($admin_club_user_id);
+    if (empty($club_ids) && $organizacion_id) {
+        // Fallback canónico: clubes por referencia de organización (cod_org/id)
+        $stFallback = DB::pdo()->prepare($has_cod_org
+            ? "SELECT id FROM clubes WHERE (organizacion_id = ? OR organizacion_id = (SELECT id FROM organizaciones WHERE cod_org = ? LIMIT 1)) AND estatus = 1"
+            : "SELECT id FROM clubes WHERE organizacion_id = ? AND estatus = 1");
+        $stFallback->execute($has_cod_org ? [$organizacion_id, $organizacion_id] : [$organizacion_id]);
+        $club_ids = array_map('intval', $stFallback->fetchAll(PDO::FETCH_COLUMN) ?: []);
+    }
     if (!empty($club_ids)) {
             $placeholders = implode(',', array_fill(0, count($club_ids), '?'));
             $select_cols = "c.id, c.nombre, c.delegado, c.telefono, c.direccion, c.estatus";

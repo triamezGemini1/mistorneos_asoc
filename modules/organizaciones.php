@@ -162,38 +162,44 @@ if ($organizacion_id && $club_id) {
             $stmt->execute();
             $afiliados = $stmt->fetchAll(PDO::FETCH_ASSOC);
         } else {
+            $entidadClub = (int)($club['entidad'] ?? 0);
+            $entidadFiltro = $entidadClub > 0 ? $entidadClub : $org_scope_entidad;
             $stResumen = $pdo->prepare("
                 SELECT
                     COUNT(*) AS total,
                     SUM(CASE WHEN UPPER(COALESCE(u.sexo,'M'))='M' THEN 1 ELSE 0 END) AS hombres,
                     SUM(CASE WHEN UPPER(COALESCE(u.sexo,'M'))='F' THEN 1 ELSE 0 END) AS mujeres
                 FROM usuarios u
-                WHERE u.club_id = ?
+                WHERE COALESCE(NULLIF(u.organizacion_id, 0), COALESCE(u.entidad, 0)) = ?
+                  AND COALESCE(u.entidad, 0) = ?
             ");
-            $stResumen->execute([$club_id]);
+            $stResumen->execute([$org_scope_entidad, $entidadFiltro]);
             $afiliados_resumen = $stResumen->fetch(PDO::FETCH_ASSOC) ?: ['total' => 0, 'hombres' => 0, 'mujeres' => 0];
 
             $stmtCount = $pdo->prepare("
                 SELECT COUNT(*)
                 FROM usuarios u
-                WHERE u.club_id = ?
+                WHERE COALESCE(NULLIF(u.organizacion_id, 0), COALESCE(u.entidad, 0)) = ?
+                  AND COALESCE(u.entidad, 0) = ?
                   {$sexoSql}
             ");
-            $stmtCount->execute(array_merge([$club_id], $sexoParams));
+            $stmtCount->execute(array_merge([$org_scope_entidad, $entidadFiltro], $sexoParams));
             $afiliados_total_rows = (int)$stmtCount->fetchColumn();
 
             $offset = ($afiliados_page - 1) * $afiliados_per_page;
             $stmt = $pdo->prepare("
                 SELECT u.id, u.cedula, u.nombre, u.email, u.celular, u.status, u.created_at
                 FROM usuarios u
-                WHERE u.club_id = ?
+                WHERE COALESCE(NULLIF(u.organizacion_id, 0), COALESCE(u.entidad, 0)) = ?
+                  AND COALESCE(u.entidad, 0) = ?
                   {$sexoSql}
                 ORDER BY u.nombre ASC
                 LIMIT ? OFFSET ?
             ");
-            $stmt->bindValue(1, $club_id, PDO::PARAM_INT);
-            $stmt->bindValue(2, $afiliados_per_page, PDO::PARAM_INT);
-            $stmt->bindValue(3, $offset, PDO::PARAM_INT);
+            $stmt->bindValue(1, $org_scope_entidad, PDO::PARAM_INT);
+            $stmt->bindValue(2, $entidadFiltro, PDO::PARAM_INT);
+            $stmt->bindValue(3, $afiliados_per_page, PDO::PARAM_INT);
+            $stmt->bindValue(4, $offset, PDO::PARAM_INT);
             $stmt->execute();
             $afiliados = $stmt->fetchAll(PDO::FETCH_ASSOC);
         }
