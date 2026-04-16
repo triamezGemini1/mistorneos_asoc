@@ -69,19 +69,17 @@ table.matriz-pdf tbody tr:nth-child(even) { background: #f4f6f8; }
   color: #111;
 }
 .torneo-h { font-size: 5.5pt; line-height: 1.1; background: #475569; color: #fff; }
-.stat-pdf {
-  width: 16px;
-  max-width: 16px;
+/* 60 % de 1.65rem = 0.99rem (misma anchura Pos/P Gan/Pts y totales finales) */
+.stat-pdf, .stat-total-pdf {
+  width: 0.99rem;
+  max-width: 0.99rem;
   font-size: 5pt;
   font-weight: bold;
-  text-align: center;
   padding: 1px 0 !important;
 }
+.stat-pdf { text-align: center; }
 .stat-total-pdf {
-  width: 16px;
-  max-width: 16px;
   font-size: 5.2pt;
-  font-weight: bold;
   text-align: right;
   padding: 1px 1px !important;
 }

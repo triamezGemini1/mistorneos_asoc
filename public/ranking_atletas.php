@@ -137,10 +137,10 @@ function fmtfecha(?string $f): string
             letter-spacing: 0.01em;
             color: #0f172a;
         }
-        /* Por torneo: ~mitad de ancho respecto a 1.65rem/celda, manteniendo legibilidad (cifras tabulares + tipografía compacta) */
+        /* Pos / P Gan / Pts: 60 % del ancho original (1.65rem → calc(1.65rem * 0.6)) */
         .tabla-matriz .col-torneo-sub {
-            width: 1.02rem;
-            max-width: 1.02rem;
+            width: calc(1.65rem * 0.6);
+            max-width: calc(1.65rem * 0.6);
             box-sizing: border-box;
             text-align: center;
             font-size: 0.57rem;
@@ -151,10 +151,10 @@ function fmtfecha(?string $f): string
             line-height: 1.2;
             padding: 0.1rem 0.03rem !important;
         }
-        /* Totales finales: ancho ~50 % del habitual */
+        /* Pts Σ, Efect. Σ, G Σ: misma anchura que Pos / P Gan / Pts (60 % de 1.65rem) */
         .tabla-matriz .col-stat-total {
-            width: 1.25rem;
-            max-width: 1.25rem;
+            width: calc(1.65rem * 0.6);
+            max-width: calc(1.65rem * 0.6);
             font-size: 0.58rem;
             font-weight: 800;
             font-variant-numeric: tabular-nums;
