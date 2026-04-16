@@ -445,6 +445,7 @@ if ($organizacion_id) {
         $stmt->execute($club_ids);
         $stats_admin_torneo = (int)$stmt->fetchColumn();
     }
+    $org_dashboard_snap = OrganizacionDashboardStats::snapshot($pdo, $organizacion, $has_cod_org);
     include __DIR__ . '/organizaciones/org_detail.php';
     return;
     }

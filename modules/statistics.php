@@ -422,7 +422,7 @@ try {
                             <tr>
                                 <td><?= htmlspecialchars($at['admin_nombre'] ?? 'N/A') ?></td>
                                 <td><code><?= htmlspecialchars($at['admin_username'] ?? '') ?></code></td>
-                                <td><?= htmlspecialchars($at['organizacion_nombre'] ?? 'N/A') ?></td>
+                                <td><?= htmlspecialchars($at['club_nombre'] ?? 'N/A') ?></td>
                                 <td class="text-center"><span class="badge bg-primary"><?= (int)($at['total_torneos'] ?? 0) ?></span></td>
                                 <td class="text-center"><span class="badge bg-success"><?= (int)($at['total_inscritos'] ?? 0) ?></span></td>
                             </tr>
@@ -447,7 +447,7 @@ try {
                             <tr>
                                 <td><?= htmlspecialchars($op['operador_nombre'] ?? 'N/A') ?></td>
                                 <td><code><?= htmlspecialchars($op['operador_username'] ?? '') ?></code></td>
-                                <td><?= htmlspecialchars($op['organizacion_nombre'] ?? 'N/A') ?></td>
+                                <td><?= htmlspecialchars($op['club_nombre'] ?? 'N/A') ?></td>
                             </tr>
                             <?php endforeach; ?>
                         </tbody>

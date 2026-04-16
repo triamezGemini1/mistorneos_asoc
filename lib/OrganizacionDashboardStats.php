@@ -267,4 +267,58 @@ final class OrganizacionDashboardStats
             'torneos_recientes' => $torneos_recientes,
         ];
     }
+
+    /**
+     * Desglose por sexo de afiliados (misma regla que snapshot: territorio + clubes de la organización).
+     *
+     * @param array<string, mixed> $organizacion
+     * @return array{hombres: int, mujeres: int, sin_genero: int}
+     */
+    public static function affiliateGenderCounts(PDO $pdo, array $organizacion, bool $has_cod_org): array
+    {
+        self::columnFlags($pdo);
+
+        $org_pk = (int) ($organizacion['id'] ?? 0);
+        if ($org_pk <= 0) {
+            return ['hombres' => 0, 'mujeres' => 0, 'sin_genero' => 0];
+        }
+        $org_ref = (int) ($organizacion['cod_org'] ?? 0);
+        if ($org_ref <= 0) {
+            $org_ref = $org_pk;
+        }
+        $org_entidad = (int) ($organizacion['entidad'] ?? 0);
+
+        [$clubWhere, $clubParams] = self::clubScopeSqlAndParams($org_pk, $org_ref, $org_entidad);
+        $uTerr = self::usuarioTerritorioSql($pdo);
+        $terrParams = [$org_entidad, $org_entidad];
+
+        $sql = "
+            SELECT
+                SUM(CASE WHEN UPPER(TRIM(COALESCE(u.sexo, ''))) IN ('M', '1') OR u.sexo = 1 THEN 1 ELSE 0 END) AS hombres,
+                SUM(CASE WHEN UPPER(TRIM(COALESCE(u.sexo, ''))) IN ('F', '2') OR u.sexo = 2 THEN 1 ELSE 0 END) AS mujeres,
+                SUM(CASE
+                    WHEN u.sexo IS NULL OR TRIM(COALESCE(CAST(u.sexo AS CHAR), '')) = '' THEN 1
+                    WHEN UPPER(TRIM(COALESCE(u.sexo, ''))) NOT IN ('M', 'F', '1', '2') AND u.sexo NOT IN (1, 2) THEN 1
+                    ELSE 0
+                END) AS sin_genero
+            FROM usuarios u
+            WHERE u.role = 'usuario' AND u.status = 0
+            AND (
+                {$uTerr}
+                OR EXISTS (
+                    SELECT 1 FROM clubes c
+                    WHERE c.id = u.club_id
+                      AND ({$clubWhere})
+                )
+            )";
+        $stmt = $pdo->prepare($sql);
+        $stmt->execute(array_merge($terrParams, $clubParams));
+        $row = $stmt->fetch(PDO::FETCH_ASSOC) ?: [];
+
+        return [
+            'hombres' => (int) ($row['hombres'] ?? 0),
+            'mujeres' => (int) ($row['mujeres'] ?? 0),
+            'sin_genero' => (int) ($row['sin_genero'] ?? 0),
+        ];
+    }
 }

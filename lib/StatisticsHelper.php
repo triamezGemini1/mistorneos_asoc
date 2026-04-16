@@ -185,18 +185,40 @@ class StatisticsHelper {
             $hasCodOrg = false;
         }
         
+        $organizacionRow = null;
         try {
-            $supervised_club_ids = ClubHelper::getClubesByAdminClubId($admin_user_id);
-            if (empty($supervised_club_ids)) {
-                $club_id = $pdo->prepare("SELECT club_id FROM usuarios WHERE id = ? AND role = 'admin_club'");
-                $club_id->execute([$admin_user_id]);
-                $cid = (int)$club_id->fetchColumn();
-                if ($cid > 0) {
-                    $supervised_club_ids = ClubHelper::getClubesSupervised($cid);
+            $stmtOrgRow = $pdo->prepare('SELECT o.* FROM organizaciones o WHERE o.admin_user_id = ? AND o.estatus = 1 LIMIT 1');
+            $stmtOrgRow->execute([$admin_user_id]);
+            $organizacionRow = $stmtOrgRow->fetch(PDO::FETCH_ASSOC) ?: null;
+            if (!$organizacionRow) {
+                $oid = (int) Auth::getUserOrganizacionId();
+                if ($oid > 0) {
+                    $stmtOrgRow = $pdo->prepare($hasCodOrg
+                        ? 'SELECT o.* FROM organizaciones o WHERE (o.id = ? OR o.cod_org = ?) AND o.estatus = 1 LIMIT 1'
+                        : 'SELECT o.* FROM organizaciones o WHERE o.id = ? AND o.estatus = 1 LIMIT 1');
+                    $stmtOrgRow->execute($hasCodOrg ? [$oid, $oid] : [$oid]);
+                    $organizacionRow = $stmtOrgRow->fetch(PDO::FETCH_ASSOC) ?: null;
                 }
             }
-            
-            
+
+            require_once __DIR__ . '/OrganizacionDashboardStats.php';
+
+            $supervised_club_ids = [];
+            if ($organizacionRow) {
+                $supervised_club_ids = OrganizacionDashboardStats::clubIdsForOrganizacion($pdo, $organizacionRow, $hasCodOrg);
+            }
+            if (empty($supervised_club_ids)) {
+                $supervised_club_ids = ClubHelper::getClubesByAdminClubId($admin_user_id);
+                if (empty($supervised_club_ids)) {
+                    $club_id = $pdo->prepare("SELECT club_id FROM usuarios WHERE id = ? AND role = 'admin_club'");
+                    $club_id->execute([$admin_user_id]);
+                    $cid = (int) $club_id->fetchColumn();
+                    if ($cid > 0) {
+                        $supervised_club_ids = ClubHelper::getClubesSupervised($cid);
+                    }
+                }
+            }
+
             if (empty($supervised_club_ids)) {
                 return ['error' => 'No hay clubes asignados'];
             }
@@ -350,25 +372,34 @@ class StatisticsHelper {
                 'sin_genero' => array_sum(array_column($stats['supervised_clubs'], 'sin_genero'))
             ];
             
-            // Obtener organización del admin (club_responsable = org_id)
-            $org_id = null;
-            $stmt_org = $pdo->prepare("SELECT " . ($hasCodOrg ? "COALESCE(NULLIF(cod_org,0), id)" : "id") . " FROM organizaciones WHERE admin_user_id = ? AND estatus = 1 LIMIT 1");
-            $stmt_org->execute([$admin_user_id]);
-            $org_id = $stmt_org->fetchColumn();
-            
-            // Total de torneos - Por organización (consultas optimizadas sin subqueries N+1)
-            if ($org_id) {
+            // Referencia legacy tournaments.club_responsable (id o cod_org de la organización)
+            $org_id = 0;
+            if ($organizacionRow) {
+                $org_id = (int) ($organizacionRow['cod_org'] ?? 0);
+                if ($org_id <= 0) {
+                    $org_id = (int) ($organizacionRow['id'] ?? 0);
+                }
+            }
+            if ($org_id <= 0) {
+                $stmt_org = $pdo->prepare("SELECT " . ($hasCodOrg ? "COALESCE(NULLIF(cod_org,0), id)" : "id") . " FROM organizaciones WHERE admin_user_id = ? AND estatus = 1 LIMIT 1");
+                $stmt_org->execute([$admin_user_id]);
+                $org_id = (int) $stmt_org->fetchColumn();
+            }
+
+            $orgNombreExpr = $hasCodOrg
+                ? '(SELECT o2.nombre FROM organizaciones o2 WHERE o2.id = t.club_responsable OR o2.cod_org = t.club_responsable ORDER BY (o2.id = t.club_responsable) DESC, o2.id ASC LIMIT 1)'
+                : '(SELECT o2.nombre FROM organizaciones o2 WHERE o2.id = t.club_responsable LIMIT 1)';
+
+            // Total de torneos - Por responsable legacy (el total canónico se alinea abajo con OrganizacionDashboardStats)
+            if ($org_id > 0) {
                 $stmt = $pdo->prepare("SELECT COUNT(*) FROM tournaments WHERE club_responsable = ? AND estatus = 1");
                 $stmt->execute([$org_id]);
-                $stats['total_torneos'] = (int)$stmt->fetchColumn();
-                
-                // Torneos (LIMIT 50 para rendimiento)
+                $stats['total_torneos'] = (int) $stmt->fetchColumn();
+
+                // Torneos (LIMIT 50): nombre de organización vía subconsulta escalar (evita duplicar filas por JOIN OR)
                 $stmt = $pdo->prepare("
-                    SELECT t.*, o.nombre as organizacion_nombre
+                    SELECT t.*, {$orgNombreExpr} AS organizacion_nombre
                     FROM tournaments t
-                    LEFT JOIN organizaciones o ON " . ($hasCodOrg
-                        ? "(t.club_responsable = o.id OR t.club_responsable = o.cod_org)"
-                        : "t.club_responsable = o.id") . "
                     WHERE t.club_responsable = ? AND t.estatus = 1
                     ORDER BY t.fechator DESC
                     LIMIT 50
@@ -405,6 +436,17 @@ class StatisticsHelper {
             } else {
                 $stats['total_torneos'] = 0;
                 $stats['torneos'] = [];
+            }
+
+            // Métricas alineadas con «Mi organización» / OrganizacionDashboardStats (territorio, organizacion_id en torneos, inscripciones confirmadas)
+            if ($organizacionRow) {
+                $snap = OrganizacionDashboardStats::snapshot($pdo, $organizacionRow, $hasCodOrg);
+                $stats['total_clubes'] = $snap['stats']['clubes'];
+                $stats['total_afiliados'] = $snap['stats']['afiliados'];
+                $stats['total_torneos'] = $snap['stats']['torneos'];
+                $stats['total_inscritos'] = $snap['stats']['inscripciones'];
+                $stats['torneos_activos'] = $snap['stats']['torneos_activos'];
+                $stats['afiliados_by_gender'] = OrganizacionDashboardStats::affiliateGenderCounts($pdo, $organizacionRow, $hasCodOrg);
             }
             
             // Total de inscritos

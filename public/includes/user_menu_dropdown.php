@@ -65,7 +65,7 @@ $current_uri = $_SERVER['REQUEST_URI'] ?? 'index.php?page=home';
     </li>
     <?php endif; ?>
     <?php if (($user['role'] ?? '') === 'admin_club'): ?>
-    <li><a class="dropdown-item" href="<?= htmlspecialchars($url_mi_organizacion) ?>"><i class="fas fa-building me-2"></i>Perfil de la organización</a></li>
+    <li><a class="dropdown-item" href="<?= htmlspecialchars($url_mi_organizacion) ?>"><i class="fas fa-building me-2"></i>Mi organización</a></li>
     <?php endif; ?>
     <li><a class="dropdown-item" href="<?= htmlspecialchars($url_profile) ?>"><i class="fas fa-id-card me-2"></i>Mi Perfil</a></li>
     <li><a class="dropdown-item" href="<?= htmlspecialchars($url_change_password) ?>"><i class="fas fa-key me-2"></i>Cambiar Contraseña</a></li>

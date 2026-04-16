@@ -9,7 +9,6 @@ $clubes_total_rows = isset($clubes_total_rows) ? (int)$clubes_total_rows : count
 $clubes_per_page = isset($clubes_per_page) ? (int)$clubes_per_page : 15;
 $qsBase = 'index.php?page=organizaciones&id=' . (int)$organizacion['id'];
 $stats_clubes = count($clubes);
-$stats_torneos = 0;
 $stats_afiliados = 0;
 foreach ($clubes as $c) {
     $stats_afiliados += (int)($c['total_afiliados'] ?? 0);
@@ -19,23 +18,9 @@ $stats_afiliados_total = isset($stats_afiliados_total) ? (int)$stats_afiliados_t
 $stats_hombres_total = isset($stats_hombres_total) ? (int)$stats_hombres_total : 0;
 $stats_mujeres_total = isset($stats_mujeres_total) ? (int)$stats_mujeres_total : 0;
 $stats_otros_total = isset($stats_otros_total) ? (int)$stats_otros_total : 0;
-try {
-    $org_ref = (int)($organizacion['cod_org'] ?? 0);
-    if ($org_ref <= 0) {
-        $org_ref = (int)($organizacion['id'] ?? 0);
-    }
-    $has_cod_org = false;
-    try {
-        $has_cod_org = (bool)$pdo->query("SHOW COLUMNS FROM organizaciones LIKE 'cod_org'")->fetch(PDO::FETCH_ASSOC);
-    } catch (Throwable $ignored) {
-        $has_cod_org = false;
-    }
-    $stmt = $pdo->prepare($has_cod_org
-        ? "SELECT COUNT(DISTINCT id) FROM tournaments WHERE (club_responsable = ? OR club_responsable = (SELECT id FROM organizaciones WHERE cod_org = ? LIMIT 1))"
-        : "SELECT COUNT(DISTINCT id) FROM tournaments WHERE club_responsable = ?");
-    $stmt->execute($has_cod_org ? [$org_ref, $org_ref] : [$org_ref]);
-    $stats_torneos = (int)$stmt->fetchColumn();
-} catch (Exception $e) {}
+$stats_torneos = isset($org_dashboard_snap['stats']['torneos'])
+    ? (int) $org_dashboard_snap['stats']['torneos']
+    : 0;
 $stats_operadores = isset($stats_operadores) ? (int)$stats_operadores : 0;
 $stats_admin_torneo = isset($stats_admin_torneo) ? (int)$stats_admin_torneo : 0;
 ?>

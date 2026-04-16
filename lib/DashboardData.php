@@ -160,7 +160,7 @@ class DashboardData
                         'tournaments' => (int)($admin_club_stats['total_torneos'] ?? 0),
                         'registrants' => (int)($admin_club_stats['total_inscritos'] ?? 0),
                         'payments' => 0,
-                        'active_tournaments' => 0,
+                        'active_tournaments' => (int)($admin_club_stats['torneos_activos'] ?? 0),
                         'pending_payments' => 0,
                         'total_revenue' => 0,
                     ];

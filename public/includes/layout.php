@@ -664,10 +664,16 @@ if ($current_page === 'estadisticas_torneos') {
             <?php endif; ?>
             
             <?php if ($user['role'] === 'admin_club'): ?>
-            <!-- Perfil de la organización (solo admin_club) -->
-            <a href="<?= htmlspecialchars($dashboard_href('mi_organizacion')) ?>" class="btn btn-outline-primary me-2" title="Editar datos de la organización">
+            <?php
+              $topbar_org_id = isset($admin_club_org_id) ? (int) $admin_club_org_id : (int) (Auth::getUserOrganizacionId() ?: 0);
+              $topbar_org_href = $topbar_org_id > 0
+                ? $dashboard_href('organizaciones', ['id' => $topbar_org_id])
+                : $dashboard_href('mi_organizacion');
+            ?>
+            <!-- Mismo destino que «Mi Organización» en el menú lateral -->
+            <a href="<?= htmlspecialchars($topbar_org_href) ?>" class="btn btn-outline-primary me-2" title="Mi organización: resumen, clubes y afiliados">
               <i class="fas fa-building me-1"></i>
-              <span class="d-none d-md-inline">Perfil de la organización</span>
+              <span class="d-none d-md-inline">Mi organización</span>
             </a>
             <?php endif; ?>
             

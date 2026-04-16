@@ -147,10 +147,23 @@ function organizacionesHasCodOrg(): bool {
  */
 function torneoOrgJoinExpr(string $tAlias = 't', string $oAlias = 'o', bool $leftJoin = true): string {
     $joinType = $leftJoin ? 'LEFT JOIN' : 'INNER JOIN';
-    if (organizacionesHasCodOrg()) {
-        return "{$joinType} organizaciones {$oAlias} ON ({$tAlias}.club_responsable = {$oAlias}.id OR {$tAlias}.club_responsable = {$oAlias}.cod_org)";
+    if (!preg_match('/^[a-zA-Z_][a-zA-Z0-9_]*$/', $tAlias)) {
+        $tAlias = 't';
     }
-    return "{$joinType} organizaciones {$oAlias} ON {$tAlias}.club_responsable = {$oAlias}.id";
+    if (!preg_match('/^[a-zA-Z_][a-zA-Z0-9_]*$/', $oAlias)) {
+        $oAlias = 'o';
+    }
+    // Una sola fila de organización: el OR (id | cod_org) en JOIN duplicaba torneos si coincidían varias filas.
+    if (organizacionesHasCodOrg()) {
+        return "{$joinType} organizaciones {$oAlias} ON {$oAlias}.id = (
+            SELECT o2.id FROM organizaciones o2
+            WHERE o2.id = {$tAlias}.club_responsable OR o2.cod_org = {$tAlias}.club_responsable
+            ORDER BY (o2.id = {$tAlias}.club_responsable) DESC, o2.id ASC
+            LIMIT 1
+        )";
+    }
+
+    return "{$joinType} organizaciones {$oAlias} ON {$oAlias}.id = {$tAlias}.club_responsable";
 }
 
 /**
