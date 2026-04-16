@@ -80,36 +80,41 @@ final class OrganizacionDashboardStats
         return array_values(array_map('intval', $stmt->fetchAll(PDO::FETCH_COLUMN) ?: []));
     }
 
-    /** WHERE sobre tournaments (alias t) + parámetros; $activosProximos añade fechator >= CURDATE() */
+    /** WHERE sobre tournaments + parámetros; $activosProximos añade fechator >= CURDATE() */
     private static function torneoScopeSqlAndParams(
         PDO $pdo,
         bool $has_cod_org,
         int $org_pk,
         int $org_ref,
         int $org_entidad,
-        bool $activosProximos
+        bool $activosProximos,
+        string $alias = 't'
     ): array {
+        if (! preg_match('/^[a-zA-Z_][a-zA-Z0-9_]*$/', $alias)) {
+            $alias = 't';
+        }
+        $a = $alias;
         $flags = self::columnFlags($pdo);
         $ids = self::idsRef($org_pk, $org_ref);
         $idParams = count($ids) > 0 ? $ids : [$org_pk];
         $ph = implode(',', array_fill(0, count($idParams), '?'));
 
-        $entPart = '(? = 0 OR COALESCE(t.entidad, 0) = ?)';
+        $entPart = "(? = 0 OR COALESCE({$a}.entidad, 0) = ?)";
         $entParams = [$org_entidad, $org_entidad];
 
-        $fechaPart = $activosProximos ? ' AND t.fechator >= CURDATE()' : '';
+        $fechaPart = $activosProximos ? " AND {$a}.fechator >= CURDATE()" : '';
 
         if ($flags['has_tournament_organizacion_id']) {
-            $legacyClub = "t.club_responsable IN ({$ph})";
+            $legacyClub = "{$a}.club_responsable IN ({$ph})";
             $legacyParams = $idParams;
             if ($has_cod_org) {
-                $legacyClub = "({$legacyClub} OR t.club_responsable = (SELECT id FROM organizaciones WHERE cod_org = ? LIMIT 1))";
+                $legacyClub = "({$legacyClub} OR {$a}.club_responsable = (SELECT id FROM organizaciones WHERE cod_org = ? LIMIT 1))";
                 $legacyParams = array_merge($idParams, [$org_ref]);
             }
-            $sql = "{$entPart}{$fechaPart} AND t.estatus = 1 AND (
-                (t.organizacion_id IS NOT NULL AND t.organizacion_id > 0 AND t.organizacion_id = ?)
+            $sql = "{$entPart}{$fechaPart} AND {$a}.estatus = 1 AND (
+                ({$a}.organizacion_id IS NOT NULL AND {$a}.organizacion_id > 0 AND {$a}.organizacion_id = ?)
                 OR (
-                    (t.organizacion_id IS NULL OR t.organizacion_id = 0)
+                    ({$a}.organizacion_id IS NULL OR {$a}.organizacion_id = 0)
                     AND ({$legacyClub})
                 )
             )";
@@ -119,19 +124,46 @@ final class OrganizacionDashboardStats
         }
 
         if ($has_cod_org) {
-            $sql = "{$entPart}{$fechaPart} AND t.estatus = 1 AND (
-                t.club_responsable IN ({$ph})
-                OR t.club_responsable = (SELECT id FROM organizaciones WHERE cod_org = ? LIMIT 1)
+            $sql = "{$entPart}{$fechaPart} AND {$a}.estatus = 1 AND (
+                {$a}.club_responsable IN ({$ph})
+                OR {$a}.club_responsable = (SELECT id FROM organizaciones WHERE cod_org = ? LIMIT 1)
             )";
             $params = array_merge($entParams, $idParams, [$org_ref]);
 
             return [$sql, $params];
         }
 
-        $sql = "{$entPart}{$fechaPart} AND t.estatus = 1 AND t.club_responsable IN ({$ph})";
+        $sql = "{$entPart}{$fechaPart} AND {$a}.estatus = 1 AND {$a}.club_responsable IN ({$ph})";
         $params = array_merge($entParams, $idParams);
 
         return [$sql, $params];
+    }
+
+    /**
+     * Mismo criterio de torneos que el dashboard de organización, para usar en Auth::getTournamentFilterForRole.
+     *
+     * @param array<string, mixed> $organizacion Fila de organizaciones
+     * @return array{0: string, 1: list<mixed>}
+     */
+    public static function tournamentWhereSqlAndParamsForOrganizacion(
+        PDO $pdo,
+        array $organizacion,
+        bool $has_cod_org,
+        string $tableAlias,
+        bool $activosProximos = false
+    ): array {
+        self::columnFlags($pdo);
+        $org_pk = (int) ($organizacion['id'] ?? 0);
+        if ($org_pk <= 0) {
+            return ['1=0', []];
+        }
+        $org_ref = (int) ($organizacion['cod_org'] ?? 0);
+        if ($org_ref <= 0) {
+            $org_ref = $org_pk;
+        }
+        $org_entidad = (int) ($organizacion['entidad'] ?? 0);
+
+        return self::torneoScopeSqlAndParams($pdo, $has_cod_org, $org_pk, $org_ref, $org_entidad, $activosProximos, $tableAlias);
     }
 
     private static function usuarioTerritorioSql(PDO $pdo): string

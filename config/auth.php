@@ -460,39 +460,26 @@ class Auth {
       return true;
     }
     
-    // Admin club: verifica por organización (club_responsable = ID de organización) o por club de la organización
+    // Admin club: alineado con getTournamentFilterForRole / OrganizacionDashboardStats (torneo por org)
     if (self::isAdminClub()) {
-      $org_id = self::getUserOrganizacionId();
-      
-      if (!$org_id) {
+      $orgRow = self::loadOrganizacionRowForAdminClub();
+      if (! $orgRow) {
         return false;
       }
-      
       try {
-        $stmt = DB::pdo()->prepare("SELECT club_responsable FROM tournaments WHERE id = ?");
-        $stmt->execute([$tournament_id]);
-        $tournament = $stmt->fetch();
-        
-        if (!$tournament) {
-          return false;
-        }
-        
-        $resp = (int)($tournament['club_responsable'] ?? 0);
-        if ($resp <= 0) return false;
-        // Directo: el torneo está a cargo de la organización del usuario
-        if ($resp == $org_id) return true;
-        if (self::hasCodOrg()) {
-          $stmtOrg = DB::pdo()->prepare("SELECT 1 FROM organizaciones WHERE id = ? AND cod_org = ? AND estatus = 1 LIMIT 1");
-          $stmtOrg->execute([$org_id, $resp]);
-          if ($stmtOrg->fetch()) return true;
-        }
-        // Legacy: club_responsable puede ser un club_id; verificar si ese club pertenece a la org del usuario
-        $stmt2 = DB::pdo()->prepare(self::hasCodOrg()
-          ? "SELECT 1 FROM clubes WHERE id = ? AND (organizacion_id = ? OR organizacion_id = (SELECT id FROM organizaciones WHERE cod_org = ? LIMIT 1)) AND estatus = 1 LIMIT 1"
-          : "SELECT 1 FROM clubes WHERE id = ? AND organizacion_id = ? AND estatus = 1 LIMIT 1");
-        $stmt2->execute(self::hasCodOrg() ? [$resp, $org_id, $org_id] : [$resp, $org_id]);
-        if ($stmt2->fetch()) return true;
-        return false;
+        require_once __DIR__ . '/../lib/OrganizacionDashboardStats.php';
+        $pdo = DB::pdo();
+        [$whereTorneo, $paramsTorneo] = OrganizacionDashboardStats::tournamentWhereSqlAndParamsForOrganizacion(
+          $pdo,
+          $orgRow,
+          self::hasCodOrg(),
+          't',
+          false
+        );
+        $stmt = $pdo->prepare("SELECT 1 FROM tournaments t WHERE t.id = ? AND ({$whereTorneo}) LIMIT 1");
+        $stmt->execute(array_merge([$tournament_id], $paramsTorneo));
+
+        return $stmt->fetch() !== false;
       } catch (Exception $e) {
         return false;
       }
@@ -592,6 +579,35 @@ class Auth {
   }
 
   /**
+   * Fila de organizaciones para el admin_club actual (alcance único de reportes/vistas).
+   * @return array<string, mixed>|null
+   */
+  private static function loadOrganizacionRowForAdminClub(): ?array {
+    if (! self::isAdminClub()) {
+      return null;
+    }
+    $org_id = self::getUserOrganizacionId();
+    if (! $org_id) {
+      return null;
+    }
+    try {
+      $pdo = DB::pdo();
+      if (self::hasCodOrg()) {
+        $stmt = $pdo->prepare('SELECT * FROM organizaciones WHERE (id = ? OR cod_org = ?) AND estatus = 1 LIMIT 1');
+        $stmt->execute([$org_id, $org_id]);
+      } else {
+        $stmt = $pdo->prepare('SELECT * FROM organizaciones WHERE id = ? AND estatus = 1 LIMIT 1');
+        $stmt->execute([$org_id]);
+      }
+      $row = $stmt->fetch(PDO::FETCH_ASSOC);
+
+      return $row ?: null;
+    } catch (Exception $e) {
+      return null;
+    }
+  }
+
+  /**
    * Agrega filtro WHERE para limitar torneos según el rol del usuario
    * Retorna array con ['where' => string, 'params' => array]
    * @param string $table_alias Alias de la tabla tournaments (ej: 't')
@@ -619,19 +635,22 @@ class Auth {
       ];
     }
     
-    // Admin club ve torneos de su organización (club_responsable = ID de organización)
+    // Admin club: mismo criterio que el dashboard (organizacion_id en torneo, cod_org, entidad, club_responsable)
     if (self::isAdminClub()) {
-      $org_id = self::getUserOrganizacionId();
-      
-      if (!$org_id) {
-        return ['where' => "{$table_alias}.club_responsable = ?", 'params' => [0]];
+      $orgRow = self::loadOrganizacionRowForAdminClub();
+      if (! $orgRow) {
+        return ['where' => '1=0', 'params' => []];
       }
-      
-      // Torneos de su organización
-      return [
-        'where' => "{$table_alias}.club_responsable = ?",
-        'params' => [$org_id]
-      ];
+      require_once __DIR__ . '/../lib/OrganizacionDashboardStats.php';
+      [$whereSql, $params] = OrganizacionDashboardStats::tournamentWhereSqlAndParamsForOrganizacion(
+        DB::pdo(),
+        $orgRow,
+        self::hasCodOrg(),
+        $table_alias,
+        false
+      );
+
+      return ['where' => $whereSql, 'params' => $params];
     }
     
     return ['where' => '1=0', 'params' => []]; // Denegar acceso por defecto
@@ -666,18 +685,22 @@ class Auth {
       ];
     }
     
-    // Admin club ve sus clubes supervisados
+    // Admin club: clubes vinculados a la organización activa (misma regla que OrganizacionDashboardStats)
     if (self::isAdminClub()) {
-      $clubes = self::getUserClubes();
-      
-      if (empty($clubes)) {
-        return ['where' => "{$col} = ?", 'params' => [0]]; // No verá nada
+      $orgRow = self::loadOrganizacionRowForAdminClub();
+      if (! $orgRow) {
+        return ['where' => "{$col} = ?", 'params' => [0]];
       }
-      
+      require_once __DIR__ . '/../lib/OrganizacionDashboardStats.php';
+      $clubes = OrganizacionDashboardStats::clubIdsForOrganizacion(DB::pdo(), $orgRow, self::hasCodOrg());
+      if (empty($clubes)) {
+        return ['where' => "{$col} = ?", 'params' => [0]];
+      }
       $placeholders = implode(',', array_fill(0, count($clubes), '?'));
+
       return [
         'where' => "{$col} IN ($placeholders)",
-        'params' => $clubes
+        'params' => $clubes,
       ];
     }
     
@@ -770,8 +793,23 @@ class Auth {
         return [];
       }
     }
+    if ($u['role'] === 'admin_club') {
+      $orgRow = self::loadOrganizacionRowForAdminClub();
+      if ($orgRow) {
+        require_once __DIR__ . '/../lib/OrganizacionDashboardStats.php';
+        try {
+          $ids = OrganizacionDashboardStats::clubIdsForOrganizacion(DB::pdo(), $orgRow, self::hasCodOrg());
+          if (! empty($ids)) {
+            self::$cached_user_clubes = array_values(array_map('intval', $ids));
+            return self::$cached_user_clubes;
+          }
+        } catch (Exception $e) {
+          // fallback ClubHelper
+        }
+      }
+    }
     require_once __DIR__ . '/../lib/ClubHelper.php';
-    // Admin organización: clubes de su organización (organizaciones.admin_user_id → clubes.organizacion_id)
+    // Admin organización: respaldo legacy si no hubo fila org o lista vacía
     $clubes = ClubHelper::getClubesByAdminClubId(self::id());
     if (empty($clubes) && !empty($u['club_id'])) {
       $clubes = ClubHelper::getClubesSupervised($u['club_id']);

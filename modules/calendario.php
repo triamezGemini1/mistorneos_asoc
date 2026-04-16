@@ -13,6 +13,7 @@ require_once __DIR__ . '/../config/db.php';
 Auth::requireRole(['admin_general', 'admin_club', 'admin_torneo', 'operador']);
 
 $pdo = DB::pdo();
+$role_cal = (string) (Auth::user()['role'] ?? '');
 $has_cod_org = false;
 try {
     $has_cod_org = (bool)$pdo->query("SHOW COLUMNS FROM organizaciones LIKE 'cod_org'")->fetch(PDO::FETCH_ASSOC);
@@ -23,10 +24,21 @@ $org_join = $has_cod_org
     ? "LEFT JOIN organizaciones o ON (t.club_responsable = o.id OR t.club_responsable = o.cod_org)"
     : "LEFT JOIN organizaciones o ON t.club_responsable = o.id";
 
+// Alcance por rol: admin_club / admin_torneo solo su ámbito (Auth); admin_general y operador sin recorte aquí
+$tournament_scope_sql = '';
+$tournament_scope_params = [];
+if ($role_cal === 'admin_club' || $role_cal === 'admin_torneo') {
+    $tf = Auth::getTournamentFilterForRole('t');
+    if (! empty($tf['where'])) {
+        $tournament_scope_sql = ' AND (' . $tf['where'] . ')';
+        $tournament_scope_params = $tf['params'];
+    }
+}
+
 // Misma consulta que landing: eventos para el calendario
 $eventos_calendario = [];
 try {
-    $stmt = $pdo->query("
+    $sqlCal = "
         SELECT 
             t.*,
             o.nombre as organizacion_nombre,
@@ -39,8 +51,11 @@ try {
         {$org_join}
         LEFT JOIN usuarios u ON o.admin_user_id = u.id AND u.role = 'admin_club'
         WHERE t.estatus = 1
+        {$tournament_scope_sql}
         ORDER BY t.fechator ASC
-    ");
+    ";
+    $stmt = $pdo->prepare($sqlCal);
+    $stmt->execute($tournament_scope_params);
     $eventos_calendario = $stmt->fetchAll(PDO::FETCH_ASSOC);
 } catch (Exception $e) {
     error_log("Calendario (dashboard): " . $e->getMessage());

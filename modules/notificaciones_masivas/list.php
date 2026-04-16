@@ -109,20 +109,9 @@ if ($is_admin_general) {
     $user_id = Auth::id();
     $is_admin_torneo = ($user['role'] ?? '') === 'admin_torneo';
 
-    // IDs de responsables: organización + clubes (admin_club usa org; admin_torneo usa solo club)
+    // IDs de responsables: admin_torneo por club; admin_club usa Auth::getTournamentFilterForRole (alcance org)
     $responsable_ids = [];
-    if ($is_admin_club) {
-        $org_id = Auth::getUserOrganizacionId();
-        if ($org_id) {
-            $responsable_ids[] = $org_id;
-        }
-        $club_ids_ac = ClubHelper::getClubesByAdminClubId($user_id);
-        if (empty($club_ids_ac) && $user_club_id > 0) {
-            $club_ids_ac = ClubHelper::getClubesSupervised($user_club_id);
-        }
-        $responsable_ids = array_values(array_unique(array_merge($responsable_ids, $club_ids_ac)));
-    } else {
-        // admin_torneo: solo clubes que supervisa
+    if (! $is_admin_club) {
         if ($user_club_id > 0) {
             $responsable_ids = ClubHelper::getClubesSupervised($user_club_id);
             if (empty($responsable_ids)) {
@@ -131,22 +120,40 @@ if ($is_admin_general) {
         }
     }
 
-    $placeholders = !empty($responsable_ids) ? implode(',', array_fill(0, count($responsable_ids), '?')) : null;
+    $placeholders = ! empty($responsable_ids) ? implode(',', array_fill(0, count($responsable_ids), '?')) : null;
 
-    // Obtener torneos del admin (club_responsable puede ser org.id o club.id)
     $torneos = [];
-    if ($placeholders) {
-        $has_lugar = $pdo->query("SHOW COLUMNS FROM tournaments LIKE 'lugar'")->rowCount() > 0;
-        $has_hora = $pdo->query("SHOW COLUMNS FROM tournaments LIKE 'hora_torneo'")->rowCount() > 0;
-        $sel_t = "t.id, t.nombre, t.fechator, COALESCE(o.nombre, c.nombre) as club_nombre";
-        if ($has_lugar) $sel_t .= ", t.lugar";
-        if ($has_hora) $sel_t .= ", t.hora_torneo";
+    $has_lugar = $pdo->query("SHOW COLUMNS FROM tournaments LIKE 'lugar'")->rowCount() > 0;
+    $has_hora = $pdo->query("SHOW COLUMNS FROM tournaments LIKE 'hora_torneo'")->rowCount() > 0;
+    $sel_t = "t.id, t.nombre, t.fechator, COALESCE(o.nombre, c.nombre) as club_nombre";
+    if ($has_lugar) {
+        $sel_t .= ', t.lugar';
+    }
+    if ($has_hora) {
+        $sel_t .= ', t.hora_torneo';
+    }
+
+    if ($is_admin_club) {
+        $tf = Auth::getTournamentFilterForRole('t');
+        if (! empty($tf['where'])) {
+            $stmt = $pdo->prepare("
+                SELECT {$sel_t}
+                FROM tournaments t
+                LEFT JOIN organizaciones o ON {$org_join_expr}
+                LEFT JOIN clubes c ON t.club_responsable = c.id
+                WHERE t.estatus = 1 AND ({$tf['where']})
+                ORDER BY t.fechator DESC
+            ");
+            $stmt->execute($tf['params']);
+            $torneos = $stmt->fetchAll(PDO::FETCH_ASSOC);
+        }
+    } elseif ($placeholders) {
         $stmt = $pdo->prepare("
-            SELECT $sel_t
+            SELECT {$sel_t}
             FROM tournaments t
             LEFT JOIN organizaciones o ON {$org_join_expr}
             LEFT JOIN clubes c ON t.club_responsable = c.id
-            WHERE t.club_responsable IN ($placeholders) AND t.estatus = 1
+            WHERE t.club_responsable IN ({$placeholders}) AND t.estatus = 1
             ORDER BY t.fechator DESC
         ");
         $stmt->execute($responsable_ids);
@@ -165,15 +172,15 @@ if ($is_admin_general) {
 
     // club_id opcional: filtrar a un solo club (desde listado de clubes)
     $club_id_filter = isset($_GET['club_id']) ? (int)$_GET['club_id'] : 0;
-    if ($club_id_filter > 0 && $is_admin_club && !ClubHelper::isClubManagedByAdmin($user_id, $club_id_filter)) {
+    if ($club_id_filter > 0 && $is_admin_club && ! Auth::canManageClub($club_id_filter)) {
         $club_id_filter = 0;
     }
 
     // Obtener destinatarios según tipo
     $destinatarios = [];
-    if ($tipo_destino === 'club' && $placeholders) {
-        // Usuarios: toda la organización o un solo club si viene club_id
-        $club_ids_usuarios = $is_admin_club ? ClubHelper::getClubesByAdminClubId($user_id) : $responsable_ids;
+    if ($tipo_destino === 'club' && ($placeholders || $is_admin_club)) {
+        // Usuarios: clubes de la org (Auth::getUserClubes) o alcance admin_torneo
+        $club_ids_usuarios = $is_admin_club ? Auth::getUserClubes() : $responsable_ids;
         if (empty($club_ids_usuarios) && $user_club_id > 0) {
             $club_ids_usuarios = ClubHelper::getClubesSupervised($user_club_id);
             if (empty($club_ids_usuarios)) {
@@ -195,20 +202,36 @@ if ($is_admin_general) {
             $stmt->execute($club_ids_usuarios);
             $destinatarios = $stmt->fetchAll(PDO::FETCH_ASSOC);
         }
-    } elseif ($tipo_destino === 'torneo' && $torneo_id > 0 && $placeholders) {
-        // Inscritos del torneo (verificar que el torneo pertenezca al admin)
-        $stmt = $pdo->prepare("
-            SELECT u.id, u.nombre, u.email, u.celular, u.telegram_chat_id, u.sexo, c.nombre as club_nombre,
-                   i.id as inscrito_id, u.id as identificador
-            FROM inscritos i
-            INNER JOIN usuarios u ON i.id_usuario = u.id
-            LEFT JOIN clubes c ON u.club_id = c.id
-            INNER JOIN tournaments t ON i.torneo_id = t.id
-            WHERE i.torneo_id = ? AND t.club_responsable IN ($placeholders)
-            ORDER BY u.nombre ASC
-        ");
-        $stmt->execute(array_merge([$torneo_id], $responsable_ids));
-        $destinatarios = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    } elseif ($tipo_destino === 'torneo' && $torneo_id > 0) {
+        if ($is_admin_club) {
+            // Alcance ya validado con canAccessTournament (torneos por organización)
+            if (Auth::canAccessTournament($torneo_id)) {
+                $stmt = $pdo->prepare("
+                    SELECT u.id, u.nombre, u.email, u.celular, u.telegram_chat_id, u.sexo, c.nombre as club_nombre,
+                           i.id as inscrito_id, u.id as identificador
+                    FROM inscritos i
+                    INNER JOIN usuarios u ON i.id_usuario = u.id
+                    LEFT JOIN clubes c ON u.club_id = c.id
+                    WHERE i.torneo_id = ?
+                    ORDER BY u.nombre ASC
+                ");
+                $stmt->execute([$torneo_id]);
+                $destinatarios = $stmt->fetchAll(PDO::FETCH_ASSOC);
+            }
+        } elseif ($placeholders) {
+            $stmt = $pdo->prepare("
+                SELECT u.id, u.nombre, u.email, u.celular, u.telegram_chat_id, u.sexo, c.nombre as club_nombre,
+                       i.id as inscrito_id, u.id as identificador
+                FROM inscritos i
+                INNER JOIN usuarios u ON i.id_usuario = u.id
+                LEFT JOIN clubes c ON u.club_id = c.id
+                INNER JOIN tournaments t ON i.torneo_id = t.id
+                WHERE i.torneo_id = ? AND t.club_responsable IN ($placeholders)
+                ORDER BY u.nombre ASC
+            ");
+            $stmt->execute(array_merge([$torneo_id], $responsable_ids));
+            $destinatarios = $stmt->fetchAll(PDO::FETCH_ASSOC);
+        }
     }
 // Para club: agregar identificador = id
 foreach ($destinatarios as &$d) {
