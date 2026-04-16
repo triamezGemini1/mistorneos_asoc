@@ -5180,6 +5180,19 @@ function obtenerDatosResumenIndividual($torneo_id, $inscrito_id) {
         throw new Exception('Jugador no encontrado en este torneo');
     }
     
+    $esModalidadEquipos = (int)($torneo['modalidad'] ?? 0) === 3;
+    $equipo = null;
+    if ($esModalidadEquipos && !empty($inscrito['codigo_equipo'])) {
+        $stmtEq = $pdo->prepare("
+            SELECT codigo_equipo, nombre_equipo, puntos, ganados, perdidos, efectividad, sancion
+            FROM equipos
+            WHERE id_torneo = ? AND codigo_equipo = ? AND estatus = 0
+            LIMIT 1
+        ");
+        $stmtEq->execute([$torneo_id, $inscrito['codigo_equipo']]);
+        $equipo = $stmtEq->fetch(PDO::FETCH_ASSOC) ?: null;
+    }
+    
     // Obtener la Ãºltima ronda asignada
     $stmtUltimaRonda = $pdo->prepare("SELECT MAX(partida) as ultima_ronda FROM partiresul WHERE id_torneo = ? AND mesa > 0");
     $stmtUltimaRonda->execute([$torneo_id]);
@@ -5415,7 +5428,9 @@ function obtenerDatosResumenIndividual($torneo_id, $inscrito_id) {
         'totales' => $totales,
         'vieneDePosiciones' => $vieneDePosiciones,
         'from' => $from,
-        'urlRetorno' => $urlRetorno
+        'urlRetorno' => $urlRetorno,
+        'es_modalidad_equipos' => $esModalidadEquipos,
+        'equipo' => $equipo,
     ];
 }
 
