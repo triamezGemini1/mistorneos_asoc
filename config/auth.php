@@ -324,6 +324,31 @@ class Auth {
       $stmt = DB::pdo()->prepare("SELECT id FROM organizaciones WHERE admin_user_id = ? AND estatus = 1 LIMIT 1");
       $stmt->execute([self::id()]);
       $org_id = $stmt->fetchColumn();
+      if (!$org_id) {
+        // Fallback: resolver por club del usuario cuando la org no tiene admin_user_id enlazado.
+        $club_id = (int)($u['club_id'] ?? 0);
+        if ($club_id > 0) {
+          if (self::hasCodOrg()) {
+            $stmt2 = DB::pdo()->prepare("
+              SELECT o.id
+              FROM clubes c
+              INNER JOIN organizaciones o ON (c.organizacion_id = o.id OR c.organizacion_id = o.cod_org)
+              WHERE c.id = ? AND o.estatus = 1
+              LIMIT 1
+            ");
+          } else {
+            $stmt2 = DB::pdo()->prepare("
+              SELECT o.id
+              FROM clubes c
+              INNER JOIN organizaciones o ON c.organizacion_id = o.id
+              WHERE c.id = ? AND o.estatus = 1
+              LIMIT 1
+            ");
+          }
+          $stmt2->execute([$club_id]);
+          $org_id = $stmt2->fetchColumn();
+        }
+      }
       self::$cached_organizacion_id = $org_id ? (int)$org_id : null;
       return self::$cached_organizacion_id;
     } catch (Exception $e) {
@@ -411,8 +436,10 @@ class Auth {
     $club_id = isset($u['club_id']) ? (int)$u['club_id'] : 0;
     if ($club_id <= 0) return false;
     try {
-      $stmt = DB::pdo()->prepare("SELECT 1 FROM clubes WHERE id = ? AND organizacion_id = ? AND estatus = 1 LIMIT 1");
-      $stmt->execute([$club_id, $org_id]);
+      $stmt = DB::pdo()->prepare(self::hasCodOrg()
+        ? "SELECT 1 FROM clubes WHERE id = ? AND (organizacion_id = ? OR organizacion_id = (SELECT id FROM organizaciones WHERE cod_org = ? LIMIT 1)) AND estatus = 1 LIMIT 1"
+        : "SELECT 1 FROM clubes WHERE id = ? AND organizacion_id = ? AND estatus = 1 LIMIT 1");
+      $stmt->execute(self::hasCodOrg() ? [$club_id, $org_id, $org_id] : [$club_id, $org_id]);
       return $stmt->fetch() !== false;
     } catch (Exception $e) {
       return false;
@@ -454,9 +481,16 @@ class Auth {
         if ($resp <= 0) return false;
         // Directo: el torneo está a cargo de la organización del usuario
         if ($resp == $org_id) return true;
+        if (self::hasCodOrg()) {
+          $stmtOrg = DB::pdo()->prepare("SELECT 1 FROM organizaciones WHERE id = ? AND cod_org = ? AND estatus = 1 LIMIT 1");
+          $stmtOrg->execute([$org_id, $resp]);
+          if ($stmtOrg->fetch()) return true;
+        }
         // Legacy: club_responsable puede ser un club_id; verificar si ese club pertenece a la org del usuario
-        $stmt2 = DB::pdo()->prepare("SELECT 1 FROM clubes WHERE id = ? AND organizacion_id = ? AND estatus = 1 LIMIT 1");
-        $stmt2->execute([$resp, $org_id]);
+        $stmt2 = DB::pdo()->prepare(self::hasCodOrg()
+          ? "SELECT 1 FROM clubes WHERE id = ? AND (organizacion_id = ? OR organizacion_id = (SELECT id FROM organizaciones WHERE cod_org = ? LIMIT 1)) AND estatus = 1 LIMIT 1"
+          : "SELECT 1 FROM clubes WHERE id = ? AND organizacion_id = ? AND estatus = 1 LIMIT 1");
+        $stmt2->execute(self::hasCodOrg() ? [$resp, $org_id, $org_id] : [$resp, $org_id]);
         if ($stmt2->fetch()) return true;
         return false;
       } catch (Exception $e) {

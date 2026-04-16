@@ -62,15 +62,31 @@ if ($is_admin_general) {
     }
 } else {
     // Admin club solo puede ver su organización
-    $stmt = DB::pdo()->prepare("
-        SELECT o.*, e.nombre as entidad_nombre
-        FROM organizaciones o
-        LEFT JOIN entidad e ON o.entidad = e.id
-        WHERE o.admin_user_id = ? AND o.estatus = 1
-        LIMIT 1
-    ");
-    $stmt->execute([$current_user['id']]);
-    $organizacion = $stmt->fetch(PDO::FETCH_ASSOC);
+    $org_id_user = Auth::getUserOrganizacionId();
+    if ($org_id_user) {
+        $whereOrgUser = $has_cod_org ? "WHERE (o.id = ? OR o.cod_org = ?) AND o.estatus = 1" : "WHERE o.id = ? AND o.estatus = 1";
+        $stmt = DB::pdo()->prepare("
+            SELECT o.*, e.nombre as entidad_nombre
+            FROM organizaciones o
+            LEFT JOIN entidad e ON o.entidad = e.id
+            {$whereOrgUser}
+            LIMIT 1
+        ");
+        $stmt->execute($has_cod_org ? [$org_id_user, $org_id_user] : [$org_id_user]);
+        $organizacion = $stmt->fetch(PDO::FETCH_ASSOC);
+    }
+    if (!$organizacion) {
+        // Fallback histórico por admin_user_id
+        $stmt = DB::pdo()->prepare("
+            SELECT o.*, e.nombre as entidad_nombre
+            FROM organizaciones o
+            LEFT JOIN entidad e ON o.entidad = e.id
+            WHERE o.admin_user_id = ? AND o.estatus = 1
+            LIMIT 1
+        ");
+        $stmt->execute([$current_user['id']]);
+        $organizacion = $stmt->fetch(PDO::FETCH_ASSOC);
+    }
     $organizacion_id = $organizacion['id'] ?? null;
 }
 
