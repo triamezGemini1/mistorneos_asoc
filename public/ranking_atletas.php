@@ -16,9 +16,31 @@ $genero = isset($_GET['genero']) ? strtoupper((string) $_GET['genero']) : 'F';
 if ($genero !== 'M' && $genero !== 'F') {
     $genero = 'F';
 }
+$organizacion_id = isset($_GET['organizacion_id']) ? (int) $_GET['organizacion_id'] : 0;
+if ($organizacion_id < 0) {
+    $organizacion_id = 0;
+}
+
+$organizaciones = [];
+try {
+    $stmtOrg = $pdo->query("
+        SELECT DISTINCT
+            COALESCE(o.id, t.organizacion_id, t.club_responsable) AS id,
+            COALESCE(NULLIF(TRIM(o.nombre), ''), CONCAT('Organización ', COALESCE(t.organizacion_id, t.club_responsable))) AS nombre
+        FROM tournaments t
+        LEFT JOIN organizaciones o ON o.id = COALESCE(t.organizacion_id, t.club_responsable)
+        WHERE t.estatus = 1
+          AND COALESCE(t.ranking, 0) = 1
+          AND COALESCE(t.organizacion_id, t.club_responsable, 0) > 0
+        ORDER BY nombre ASC
+    ");
+    $organizaciones = $stmtOrg->fetchAll(PDO::FETCH_ASSOC) ?: [];
+} catch (Throwable $e) {
+    $organizaciones = [];
+}
 
 $svc = new RankingAtletasPublicoService($pdo);
-$data = $svc->construirRanking($genero);
+$data = $svc->construirRanking($genero, $organizacion_id);
 $atletas = $data['atletas'];
 $criterio = $data['criterio_orden'];
 
@@ -44,7 +66,7 @@ function fmtfecha(?string $f): string
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="theme-color" content="#0f172a">
     <title><?= htmlspecialchars($page_title) ?></title>
-    <meta name="description" content="Ranking de atletas <?= htmlspecialchars($titulo_genero) ?>: torneos en los que participó y rendimiento acumulado (puntos de ranking, efectividad, partidas ganadas).">
+    <meta name="description" content="Ranking de atletas <?= htmlspecialchars($titulo_genero) ?>: torneos con ranking activado y rendimiento acumulado (puntos de ranking, efectividad, partidas ganadas).">
     <meta name="robots" content="index, follow">
     <link rel="canonical" href="<?= htmlspecialchars($base_public . 'ranking_atletas.php?genero=' . $genero) ?>">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
@@ -95,7 +117,7 @@ function fmtfecha(?string $f): string
                 <div>
                     <?= AppHelpers::appLogo('mb-2', 'La Estación del Dominó', 40) ?>
                     <h1 class="h3 mb-1"><i class="fas fa-medal text-warning me-2"></i>Ranking de atletas</h1>
-                    <p class="mb-0 opacity-90 small"><?= htmlspecialchars($titulo_genero) ?> · Torneos finalizados con publicación en web</p>
+                    <p class="mb-0 opacity-90 small"><?= htmlspecialchars($titulo_genero) ?> · Solo torneos con ranking activado</p>
                 </div>
                 <div>
                     <a href="landing-spa.php" class="btn btn-sm btn-volver me-1"><i class="fas fa-home me-1"></i>Inicio</a>
@@ -104,14 +126,38 @@ function fmtfecha(?string $f): string
             </div>
             <ul class="nav nav-pills nav-genero gap-2 mt-3">
                 <li class="nav-item">
-                    <a class="nav-link py-2 px-3 <?= $genero === 'F' ? 'active' : '' ?>" href="ranking_atletas.php?genero=F"><i class="fas fa-venus me-1"></i>Femenino</a>
+                    <a class="nav-link py-2 px-3 <?= $genero === 'F' ? 'active' : '' ?>" href="ranking_atletas.php?genero=F<?= $organizacion_id > 0 ? '&organizacion_id=' . (int)$organizacion_id : '' ?>"><i class="fas fa-venus me-1"></i>Femenino</a>
                 </li>
                 <li class="nav-item">
-                    <a class="nav-link py-2 px-3 <?= $genero === 'M' ? 'active' : '' ?>" href="ranking_atletas.php?genero=M"><i class="fas fa-mars me-1"></i>Masculino</a>
+                    <a class="nav-link py-2 px-3 <?= $genero === 'M' ? 'active' : '' ?>" href="ranking_atletas.php?genero=M<?= $organizacion_id > 0 ? '&organizacion_id=' . (int)$organizacion_id : '' ?>"><i class="fas fa-mars me-1"></i>Masculino</a>
                 </li>
             </ul>
         </div>
         <div class="p-3 p-md-4">
+            <form method="get" class="row g-2 align-items-end mb-3">
+                <input type="hidden" name="genero" value="<?= htmlspecialchars($genero) ?>">
+                <div class="col-12 col-md-7">
+                    <label class="form-label small text-muted mb-1">Organización</label>
+                    <select name="organizacion_id" class="form-select form-select-sm">
+                        <option value="0">Todas las organizaciones</option>
+                        <?php foreach ($organizaciones as $org): ?>
+                            <option value="<?= (int)($org['id'] ?? 0) ?>" <?= ((int)($org['id'] ?? 0) === $organizacion_id) ? 'selected' : '' ?>>
+                                <?= htmlspecialchars((string)($org['nombre'] ?? '')) ?>
+                            </option>
+                        <?php endforeach; ?>
+                    </select>
+                </div>
+                <div class="col-12 col-md-5 d-grid d-md-flex gap-2">
+                    <button type="submit" class="btn btn-sm btn-primary">
+                        <i class="fas fa-filter me-1"></i>Filtrar ranking
+                    </button>
+                    <?php if ($organizacion_id > 0): ?>
+                        <a href="ranking_atletas.php?genero=<?= htmlspecialchars($genero) ?>" class="btn btn-sm btn-outline-secondary">
+                            <i class="fas fa-eraser me-1"></i>Quitar filtro
+                        </a>
+                    <?php endif; ?>
+                </div>
+            </form>
             <p class="text-muted small mb-3"><i class="fas fa-info-circle me-1"></i><?= htmlspecialchars($criterio) ?></p>
             <?php if ($atletas === []): ?>
                 <div class="alert alert-info mb-0">

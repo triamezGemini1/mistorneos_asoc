@@ -32,12 +32,14 @@ final class RankingAtletasPublicoService
      *
      * @return list<array<string, mixed>>
      */
-    public function filasParticipacionPorSexo(string $sexo): array
+    public function filasParticipacionPorSexo(string $sexo, int $organizacionId = 0): array
     {
         $sexo = strtoupper($sexo) === 'F' ? 'F' : 'M';
+        $organizacionId = max(0, $organizacionId);
         $pub = $this->hasColumnPublicarLanding()
             ? ' AND (t.publicar_landing = 1 OR t.publicar_landing IS NULL)'
             : '';
+        $whereOrg = $organizacionId > 0 ? ' AND COALESCE(t.organizacion_id, t.club_responsable, 0) = :organizacion_id' : '';
         $wEst = InscritosHelper::sqlWhereActivoConAlias('i');
         $ig = InscritosHelper::sqlExprColumnaNumerica('i.ganados');
         $ie = InscritosHelper::sqlExprColumnaNumerica('i.efectividad');
@@ -65,12 +67,18 @@ final class RankingAtletasPublicoService
             WHERE u.sexo = :sexo
             AND $wEst
             AND t.estatus = 1
+            AND COALESCE(t.ranking, 0) = 1
             AND DATE(t.fechator) < CURDATE()
             {$pub}
+            {$whereOrg}
             ORDER BY u.id ASC, t.fechator DESC
         ";
         $st = $this->pdo->prepare($sql);
-        $st->execute(['sexo' => $sexo]);
+        $params = ['sexo' => $sexo];
+        if ($organizacionId > 0) {
+            $params['organizacion_id'] = $organizacionId;
+        }
+        $st->execute($params);
 
         return $st->fetchAll(PDO::FETCH_ASSOC) ?: [];
     }
@@ -93,9 +101,9 @@ final class RankingAtletasPublicoService
      *   }>
      * }
      */
-    public function construirRanking(string $sexo): array
+    public function construirRanking(string $sexo, int $organizacionId = 0): array
     {
-        $filas = $this->filasParticipacionPorSexo($sexo);
+        $filas = $this->filasParticipacionPorSexo($sexo, $organizacionId);
         /** @var array<int, array{id_usuario: int, nombre: string, cedula: string, sexo: string, torneos: list<array<string, mixed>>, sum_pt: int, sum_ef: int, sum_g: int, sum_pu: int}> $porUsuario */
         $porUsuario = [];
         foreach ($filas as $row) {
