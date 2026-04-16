@@ -203,6 +203,64 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         exit;
     }
 
+    if ($accion === 'diagnostico_pareja_resultados'
+        && isset($_FILES['archivo_resultados_diag']) && is_uploaded_file($_FILES['archivo_resultados_diag']['tmp_name'])
+    ) {
+        $torneo_id = (int) ($_POST['torneo_id'] ?? 0);
+        if ($torneo_id <= 0) {
+            $_SESSION['import_swal'] = ['icon' => 'warning', 'title' => 'Torneo', 'html' => '<p>Seleccione el torneo en el paso 1.</p>'];
+            header('Location: ' . $baseList);
+            exit;
+        }
+        $pdo = DB::pdo();
+        $rows = ImportacionTorneoExternoService::leerExcelOCsv(
+            (string) $_FILES['archivo_resultados_diag']['tmp_name'],
+            (string) ($_FILES['archivo_resultados_diag']['name'] ?? 'resultados.xlsx')
+        );
+        $res = ImportacionTorneoExternoService::diagnosticarParejaResultadosVsInscritos($pdo, $torneo_id, $rows);
+        if (! $res['ok']) {
+            $msg = implode(' ', $res['errores'] ?? []);
+            $_SESSION['import_swal'] = [
+                'icon' => 'error',
+                'title' => 'Diagnóstico pareja',
+                'html' => '<div class="text-start small"><p>' . htmlspecialchars($msg, ENT_QUOTES, 'UTF-8') . '</p></div>',
+            ];
+            header('Location: ' . $baseList . '&torneo_id=' . $torneo_id);
+            exit;
+        }
+        $noList = $res['parejas_no_encontradas'] ?? [];
+        $html = '<div class="text-start small" style="max-width:520px">';
+        $html .= '<p><strong>Filas de datos:</strong> ' . (int) $res['filas_datos'] . ' · <strong>Columna pareja:</strong> ' . htmlspecialchars((string) $res['columna_pareja_titulo'], ENT_QUOTES, 'UTF-8') . '</p>';
+        $html .= '<p><strong>Encontrados:</strong> <span class="text-success">' . (int) $res['encontrados'] . '</span> · ';
+        $html .= '<strong>No encontrados:</strong> <span class="text-danger">' . (int) $res['no_encontrados'] . '</span> · ';
+        $html .= '<strong>Pareja vacía:</strong> ' . (int) $res['pareja_vacia'] . '</p>';
+        $html .= '<p class="text-muted mb-1"><strong>inscritos.numero distintos (torneo, no retirado):</strong> ' . (int) $res['inscritos_numero_distintos'] . '</p>';
+        $muestraBd = $res['muestra_numeros_inscritos'] ?? [];
+        if ($muestraBd !== []) {
+            $html .= '<p class="text-muted small mb-2">Muestra números en BD: ' . htmlspecialchars(implode(', ', array_map('strval', array_slice($muestraBd, 0, 40))), ENT_QUOTES, 'UTF-8') . '</p>';
+        }
+        $html .= '<p class="fw-bold mb-1">Parejas del archivo sin coincidencia (hasta 40, por frecuencia):</p><ul class="small ps-3 mb-0" style="max-height:240px;overflow-y:auto">';
+        $n = 0;
+        foreach ($noList as $pk => $info) {
+            if ($n++ >= 40) {
+                break;
+            }
+            $html .= '<li><code>' . htmlspecialchars((string) $pk, ENT_QUOTES, 'UTF-8') . '</code> — ' . (int) ($info['conteo'] ?? 0) . ' filas; ej. filas Excel: '
+                . htmlspecialchars(implode(', ', array_map('strval', $info['muestra_filas_excel'] ?? [])), ENT_QUOTES, 'UTF-8') . '</li>';
+        }
+        if ($noList === []) {
+            $html .= '<li class="text-success">Ninguna pareja sin resolver.</li>';
+        }
+        $html .= '</ul></div>';
+        $_SESSION['import_swal'] = [
+            'icon' => ((int) $res['no_encontrados'] > 0) ? 'warning' : 'success',
+            'title' => 'Diagnóstico búsqueda por pareja',
+            'html' => $html,
+        ];
+        header('Location: ' . $baseList . '&torneo_id=' . $torneo_id);
+        exit;
+    }
+
     if ($accion === 'fase2_dual'
         && isset($_FILES['archivo_homologacion'], $_FILES['archivo_resultados'])
         && is_uploaded_file($_FILES['archivo_homologacion']['tmp_name'])
@@ -683,6 +741,35 @@ $url_import_individual = $url_panel . '#importacion-masiva';
                             </div>
                         </div>
                         <button type="submit" class="btn btn-success btn-lg w-100"><i class="fas fa-save me-2"></i>Ejecutar pasos 2 y 3 → guardar en partiresul</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="card mb-4 shadow imp-card-paso paso-aux border-info">
+        <div class="card-header bg-info bg-opacity-25 text-dark d-flex align-items-center gap-2 py-2">
+            <span class="imp-paso-num bg-info text-white small" style="width:1.75rem;height:1.75rem;font-size:.85rem;">T</span>
+            <span class="fw-bold">Prueba — Búsqueda pareja → inscritos.numero (sin grabar)</span>
+        </div>
+        <div class="card-body">
+            <div class="row g-3 align-items-start">
+                <div class="col-12 col-lg-6 imp-paso-texto">
+                    <div class="imp-seccion">
+                        <h6>Qué comprueba</h6>
+                        <p class="small mb-0">Lee <strong>todas las filas</strong> del archivo de resultados, detecta la columna pareja igual que en la importación y busca en <code>inscritos</code> por <code>torneo_id</code> + <code>numero</code>. Muestra cuántas filas resuelven <code>id_usuario</code>, cuántas no, y lista las claves de pareja que no aparecen en inscritos (con conteo y filas de ejemplo).</p>
+                    </div>
+                </div>
+                <div class="col-12 col-lg-6 imp-paso-acciones">
+                    <form method="post" enctype="multipart/form-data">
+                        <input type="hidden" name="csrf_token" value="<?= htmlspecialchars(CSRF::token()) ?>">
+                        <input type="hidden" name="accion" value="diagnostico_pareja_resultados">
+                        <input type="hidden" name="torneo_id" value="<?= (int)$torneo_id_sel ?>">
+                        <div class="mb-2">
+                            <label class="form-label fw-bold small">Archivo de resultados (.xlsx / .csv)</label>
+                            <input type="file" name="archivo_resultados_diag" class="form-control form-control-sm" accept=".xlsx,.csv,.txt" required>
+                        </div>
+                        <button type="submit" class="btn btn-outline-info w-100"><i class="fas fa-search me-1"></i> Ejecutar prueba de búsqueda</button>
                     </form>
                 </div>
             </div>

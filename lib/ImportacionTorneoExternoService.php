@@ -1367,6 +1367,179 @@ final class ImportacionTorneoExternoService
         return (int) ($st->fetchColumn() ?: 0);
     }
 
+    /**
+     * Prueba de búsqueda: cada fila de resultados con columna «pareja» → mismo criterio que la importación
+     * (`inscritos.numero` + torneo, no retirado). No escribe en BD.
+     *
+     * @param list<list<string>> $rowsResultados Primera fila = encabezados
+     * @return array{
+     *   ok: bool,
+     *   errores: list<string>,
+     *   torneo_id: int,
+     *   filas_datos: int,
+     *   columna_pareja_indice: int,
+     *   columna_pareja_titulo: string,
+     *   encontrados: int,
+     *   no_encontrados: int,
+     *   pareja_vacia: int,
+     *   parejas_no_encontradas: array<string, array{conteo: int, muestra_filas_excel: list<int>}>,
+     *   inscritos_numero_distintos: int,
+     *   muestra_numeros_inscritos: list<int|string>
+     * }
+     */
+    public static function diagnosticarParejaResultadosVsInscritos(PDO $pdo, int $torneoId, array $rowsResultados): array
+    {
+        $out = [
+            'ok' => false,
+            'errores' => [],
+            'torneo_id' => $torneoId,
+            'filas_datos' => 0,
+            'columna_pareja_indice' => -1,
+            'columna_pareja_titulo' => '',
+            'encontrados' => 0,
+            'no_encontrados' => 0,
+            'pareja_vacia' => 0,
+            'parejas_no_encontradas' => [],
+            'inscritos_numero_distintos' => 0,
+            'muestra_numeros_inscritos' => [],
+        ];
+        if ($torneoId <= 0) {
+            $out['errores'][] = 'torneo_id inválido.';
+
+            return $out;
+        }
+        if (count($rowsResultados) < 2) {
+            $out['errores'][] = 'Archivo de resultados sin filas de datos (falta cabecera o está vacío).';
+
+            return $out;
+        }
+        require_once __DIR__ . '/InscritosHelper.php';
+        try {
+            $stN = $pdo->prepare(
+                'SELECT COUNT(DISTINCT numero) FROM inscritos WHERE torneo_id = ? AND numero IS NOT NULL AND numero > 0 AND '
+                . InscritosHelper::SQL_WHERE_NO_RETIRADO
+            );
+            $stN->execute([$torneoId]);
+            $out['inscritos_numero_distintos'] = (int) $stN->fetchColumn();
+            $stM = $pdo->prepare(
+                'SELECT DISTINCT numero FROM inscritos WHERE torneo_id = ? AND numero IS NOT NULL AND numero > 0 AND '
+                . InscritosHelper::SQL_WHERE_NO_RETIRADO . ' ORDER BY numero ASC LIMIT 60'
+            );
+            $stM->execute([$torneoId]);
+            while ($row = $stM->fetch(PDO::FETCH_NUM)) {
+                $out['muestra_numeros_inscritos'][] = $row[0];
+            }
+        } catch (Throwable $e) {
+            $out['errores'][] = 'Consulta inscritos: ' . $e->getMessage();
+
+            return $out;
+        }
+
+        $headerRes = $rowsResultados[0];
+        $hNorm = array_map(static fn ($x) => strtolower(preg_replace('/[^a-z0-9]+/i', '_', trim((string) $x))), $headerRes);
+        $find = static function (array $h, array $names): int {
+            foreach ($names as $n) {
+                $n = strtolower($n);
+                foreach ($h as $i => $col) {
+                    if (str_contains((string) $col, $n) || $col === $n) {
+                        return $i;
+                    }
+                }
+            }
+
+            return -1;
+        };
+        $iPart = self::indiceColumnaPartida($hNorm);
+        if ($iPart < 0) {
+            $iPart = $find($hNorm, ['partida', 'ronda']);
+        }
+        $iMesa = self::indiceColumnaMesa($hNorm);
+        if ($iMesa < 0) {
+            $iMesa = $find($hNorm, ['mesa']);
+        }
+        $iSeq = self::indiceColumnaSecuencia($hNorm);
+        if ($iSeq < 0) {
+            $iSeq = $find($hNorm, ['secuencia', 'seq']);
+        }
+        $iPareja = -1;
+        foreach ($hNorm as $ri => $col) {
+            if ((string) $col === 'pareja') {
+                $iPareja = $ri;
+                break;
+            }
+        }
+        if ($iPareja < 0) {
+            $iPareja = $find($hNorm, [
+                'id_pareja', 'parejas', 'num_pareja', 'nro_pareja', 'n_pareja', 'no_pareja',
+                'nopareja', 'numero_pareja', 'eq_pareja', 'equipo_pareja',
+            ]);
+        }
+        if ($iPareja < 0) {
+            $iPareja = $find($hNorm, ['pareja']);
+        }
+        if ($iPareja < 0) {
+            $out['errores'][] = 'No se detectó columna de pareja. Encabezados (normalizados): ' . implode(', ', $hNorm);
+
+            return $out;
+        }
+        $out['columna_pareja_indice'] = $iPareja;
+        $out['columna_pareja_titulo'] = trim((string) ($headerRes[$iPareja] ?? ''));
+
+        $statsRelleno = [];
+        $rowsProc = $rowsResultados;
+        if ($iPart >= 0 && $iMesa >= 0 && $iSeq >= 0) {
+            $rowsProc = self::rellenarHuecosColumnaPorPartidaMesa(
+                $rowsResultados,
+                $iPart,
+                $iMesa,
+                $iSeq,
+                $iPareja,
+                $statsRelleno,
+                'diagnostico_pareja_relleno'
+            );
+        }
+
+        $filasDatos = max(0, count($rowsProc) - 1);
+        $out['filas_datos'] = $filasDatos;
+        /** @var array<string, array{conteo: int, muestra_filas_excel: list<int>}> $noMap */
+        $noMap = [];
+
+        for ($r = 1; $r < count($rowsProc); $r++) {
+            $row = $rowsProc[$r];
+            while (count($row) <= $iPareja) {
+                $row[] = '';
+            }
+            $pkey = trim((string) ($row[$iPareja] ?? ''));
+            $filaExcel = $r + 1;
+            if ($pkey === '') {
+                $out['pareja_vacia']++;
+
+                continue;
+            }
+            $idUsuario = self::idUsuarioPorParejaSoloInscritosNumero($pdo, $torneoId, $pkey);
+            if ($idUsuario > 0) {
+                $out['encontrados']++;
+            } else {
+                $out['no_encontrados']++;
+                if (! isset($noMap[$pkey])) {
+                    $noMap[$pkey] = ['conteo' => 0, 'muestra_filas_excel' => []];
+                }
+                $noMap[$pkey]['conteo']++;
+                if (count($noMap[$pkey]['muestra_filas_excel']) < 8) {
+                    $noMap[$pkey]['muestra_filas_excel'][] = $filaExcel;
+                }
+            }
+        }
+
+        uasort($noMap, static function (array $a, array $b): int {
+            return $b['conteo'] <=> $a['conteo'];
+        });
+        $out['parejas_no_encontradas'] = $noMap;
+        $out['ok'] = true;
+
+        return $out;
+    }
+
     private static function actualizarNumeroInscripcionTorneo(PDO $pdo, int $torneoId, int $idUsuario, int $numero): void
     {
         require_once __DIR__ . '/InscritosHelper.php';
