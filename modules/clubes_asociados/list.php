@@ -16,9 +16,15 @@ Auth::requireRole(['admin_club']);
 
 $current_user = Auth::user();
 $admin_club_user_id = Auth::id();
-$organizacion_id = Auth::getUserOrganizacionId(); // null si no tiene org aún (legacy)
+$organizacion_id = Auth::getUserOrganizacionRef() ?? Auth::getUserOrganizacionId();
 $message = $_GET['success'] ?? '';
 $error = $_GET['error'] ?? '';
+$has_cod_org = false;
+try {
+    $has_cod_org = (bool)DB::pdo()->query("SHOW COLUMNS FROM organizaciones LIKE 'cod_org'")->fetch(PDO::FETCH_ASSOC);
+} catch (Throwable $ignored) {
+    $has_cod_org = false;
+}
 
 // Procesar acciones POST con redirección PRG (Post-Redirect-Get)
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -70,8 +76,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 if (!$org_id_val) {
                     $redirect_error = 'Su organización no está definida. No se puede crear un club sin entidad.';
                 } else {
-                    $stmt_ent = $pdo->prepare("SELECT entidad FROM organizaciones WHERE id = ? AND estatus = 1");
-                    $stmt_ent->execute([$org_id_val]);
+                    $stmt_ent = $pdo->prepare($has_cod_org
+                        ? "SELECT entidad FROM organizaciones WHERE (id = ? OR cod_org = ?) AND estatus = 1"
+                        : "SELECT entidad FROM organizaciones WHERE id = ? AND estatus = 1");
+                    $stmt_ent->execute($has_cod_org ? [$org_id_val, $org_id_val] : [$org_id_val]);
                     $entidad_val = (int)$stmt_ent->fetchColumn();
                     if ($entidad_val <= 0) {
                         $redirect_error = 'La organización no tiene entidad definida. No se puede crear un club sin entidad.';
@@ -302,10 +310,14 @@ try {
                     COUNT(DISTINCT u.id) as total_afiliados,
                     SUM(CASE WHEN u.sexo = 'M' THEN 1 ELSE 0 END) as hombres,
                     SUM(CASE WHEN u.sexo = 'F' THEN 1 ELSE 0 END) as mujeres,
-                    (SELECT COUNT(*) FROM tournaments WHERE club_responsable = c.id AND estatus = 1) as torneos_count,
+                    (SELECT COUNT(*) FROM tournaments WHERE " . ($has_cod_org
+                        ? "(club_responsable = c.organizacion_id OR club_responsable = (SELECT cod_org FROM organizaciones WHERE id = c.organizacion_id LIMIT 1))"
+                        : "club_responsable = c.organizacion_id") . " AND estatus = 1) as torneos_count,
                     (SELECT COUNT(*) FROM inscritos i 
                      INNER JOIN tournaments t ON i.torneo_id = t.id 
-                     WHERE t.club_responsable = c.id) as inscritos_count
+                     WHERE " . ($has_cod_org
+                        ? "(t.club_responsable = c.organizacion_id OR t.club_responsable = (SELECT cod_org FROM organizaciones WHERE id = c.organizacion_id LIMIT 1))"
+                        : "t.club_responsable = c.organizacion_id") . ") as inscritos_count
                 FROM clubes c
                 LEFT JOIN usuarios u ON u.club_id = c.id AND u.role = 'usuario' AND (u.status = 'approved' OR u.status = 1)
                 WHERE c.id IN ($placeholders)

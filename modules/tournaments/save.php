@@ -135,10 +135,8 @@ try {
     if (!$is_admin_general) {
         // admin_club trabaja a nivel de organización
         if ($user_role === 'admin_club') {
-            // Obtener la organización del admin_club
-            $stmt_org = DB::pdo()->prepare("SELECT id FROM organizaciones WHERE admin_user_id = ? AND estatus = 1 LIMIT 1");
-            $stmt_org->execute([$current_user['id']]);
-            $organizacion_id = (int)$stmt_org->fetchColumn();
+            // Obtener la organización del admin_club (fallback robusto por Auth)
+            $organizacion_id = (int)(Auth::getUserOrganizacionRef() ?? Auth::getUserOrganizacionId() ?? 0);
             
             if (!$organizacion_id) {
                 throw new Exception('No tiene una organización asignada. Contacte al administrador.');

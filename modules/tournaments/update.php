@@ -208,6 +208,12 @@ try {
     if (!$is_admin_general) {
         // Mantener la organización original del torneo
         $club_responsable = $torneo_actual['club_responsable'];
+        if ($user_role === 'admin_club') {
+            $orgRef = (int)(Auth::getUserOrganizacionRef() ?? Auth::getUserOrganizacionId() ?? 0);
+            if ($orgRef > 0) {
+                $club_responsable = $orgRef;
+            }
+        }
     } else {
         // admin_general puede cambiar la organización
         // Si se especifica un nuevo club_responsable, verificar que sea una organización válida
