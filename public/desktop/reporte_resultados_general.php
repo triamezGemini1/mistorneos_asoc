@@ -33,7 +33,7 @@ try {
         $st->execute([$torneo_id]);
         $torneo = $st->fetch(PDO::FETCH_ASSOC);
         if ($torneo) {
-            recalcularPosiciones($torneo_id);
+            recalcularRankingSegunModalidad($torneo_id);
             $st = $pdo->prepare("
                 SELECT i.id, i.id_usuario, i.posicion, i.ganados, i.perdidos, i.efectividad, i.puntos, i.sancion, i.tarjeta,
                        u.nombre AS jugador_nombre, u.username,

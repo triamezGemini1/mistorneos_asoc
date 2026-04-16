@@ -10,7 +10,9 @@ require_once __DIR__ . '/../../lib/Tournament/Handlers/TeamPerformanceHandler.ph
 require_once __DIR__ . '/../../lib/Tournament/Services/PaginationService.php';
 
 // Asegurar que las posiciones estén actualizadas
-if (function_exists('recalcularPosiciones')) {
+if (function_exists('recalcularRankingSegunModalidad')) {
+    recalcularRankingSegunModalidad($torneo_id);
+} elseif (function_exists('recalcularPosiciones')) {
     recalcularPosiciones($torneo_id);
 }
 

@@ -1961,7 +1961,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 }
 
                 actualizarEstadisticasInscritos($tid);
-                recalcularPosiciones($tid);
+                recalcularRankingSegunModalidad($tid);
                 $pdo->commit();
 
                 $msg = "Carga aplicada en tabla {$tabla}. Registros procesados: {$ok}.";
@@ -6168,6 +6168,30 @@ function actualizarEstadisticasInscritos($torneo_id) {
 }
 
 /**
+ * Recalcula posiciones y ptosrnk segÃºn la modalidad del torneo.
+ * En modalidad equipos (3): cadena completa (clasiequi y ptosrnk por clasificacion de equipo).
+ */
+function recalcularRankingSegunModalidad($torneo_id) {
+    $torneo_id = (int)$torneo_id;
+    if ($torneo_id <= 0) {
+        return;
+    }
+    $pdo = DB::pdo();
+    $stmt = $pdo->prepare('SELECT COALESCE(modalidad, 1) AS modalidad FROM tournaments WHERE id = ?');
+    $stmt->execute([$torneo_id]);
+    $row = $stmt->fetch(PDO::FETCH_ASSOC);
+    if (!$row) {
+        return;
+    }
+    $modalidad = (int)($row['modalidad'] ?? 1);
+    if ($modalidad === 3) {
+        recalcularClasificacionEquiposYJugadores($torneo_id);
+    } else {
+        recalcularPosiciones($torneo_id);
+    }
+}
+
+/**
  * Recalcula toda la clasificaciÃ³n para torneos por equipos:
  * 1) Actualiza estadÃ­sticas de equipos, clasificaciÃ³n de equipos y sincroniza clasiequi en inscritos
  * 2) Recalcula posiciones y ptosrnk (modalidad 3: puntos por posiciÃ³n segÃºn clasiequi del equipo)
@@ -6391,39 +6415,35 @@ function recalcularPosiciones($torneo_id) {
             return;
         }
         
-        // Mapear modalidad a tipo de torneo
-        // modalidad puede ser INT (1=Individual, 2=Parejas, 3=Equipos) o texto
-        $modalidad = $torneo['modalidad'] ?? 1;
-        $tipoTorneo = 1; // Por defecto Individual
-        
-        if (is_numeric($modalidad)) {
-            // Si es numÃ©rico, usar directamente
-            $tipoTorneo = (int)$modalidad;
+        // Modalidad del torneo (1 indiv., 2 parejas, 3 equipos, 4 parejas fijas, ...)
+        $modalidadRaw = $torneo['modalidad'] ?? 1;
+        $modalidadNum = 1;
+        if (is_numeric($modalidadRaw)) {
+            $modalidadNum = (int)$modalidadRaw;
         } else {
-            // Si es texto, convertir
-            $modalidad_str = strtolower(trim((string)$modalidad));
+            $modalidad_str = strtolower(trim((string)$modalidadRaw));
             if (stripos($modalidad_str, 'pareja') !== false) {
-                $tipoTorneo = 2;
+                $modalidadNum = 2;
             } elseif (stripos($modalidad_str, 'equipo') !== false) {
-                $tipoTorneo = 3;
+                $modalidadNum = 3;
             }
         }
-        
-        // Asegurar que el tipo estÃ© en el rango vÃ¡lido (1-3)
-        if ($tipoTorneo < 1 || $tipoTorneo > 3) {
-            $tipoTorneo = 1;
+        // clasiranking solo define tipos 1=individual, 2=parejas, 3=equipos (parejas fijas = misma tabla que parejas)
+        if (in_array($modalidadNum, [2, 4], true)) {
+            $tipoTorneoClasi = 2;
+        } elseif ($modalidadNum === 3) {
+            $tipoTorneoClasi = 3;
+        } else {
+            $tipoTorneoClasi = 1;
+        }
+        $limitePosiciones = 30;
+        if ($tipoTorneoClasi === 2) {
+            $limitePosiciones = 20;
+        } elseif ($tipoTorneoClasi === 3) {
+            $limitePosiciones = 10;
         }
         
-        // Definir lÃ­mite de posiciones segÃºn tipo de torneo
-        // Individual: hasta posiciÃ³n 30, Parejas: hasta posiciÃ³n 20, Equipos: hasta posiciÃ³n 10
-        $limitePosiciones = 30; // Por defecto Individual
-        if ($tipoTorneo == 2) {
-            $limitePosiciones = 20; // Parejas
-        } elseif ($tipoTorneo == 3) {
-            $limitePosiciones = 10; // Equipos
-        }
-        
-        error_log("recalcularPosiciones: Tipo torneo = $tipoTorneo, LÃ­mite posiciones = $limitePosiciones");
+        error_log("recalcularPosiciones: modalidad=$modalidadNum tipoClasi=$tipoTorneoClasi limite=$limitePosiciones");
         
         // Primero, resetear todas las posiciones a 0 para evitar conflictos
         $stmt = $pdo->prepare("UPDATE inscritos SET posicion = 0 WHERE torneo_id = ?");
@@ -6454,6 +6474,45 @@ function recalcularPosiciones($torneo_id) {
             error_log("recalcularPosiciones: No hay inscritos para actualizar");
             return;
         }
+
+        $existeClasiRanking = false;
+        try {
+            $drv = $pdo->getAttribute(PDO::ATTR_DRIVER_NAME);
+            if ($drv === 'sqlite') {
+                $stmtCk = $pdo->query("SELECT name FROM sqlite_master WHERE type='table' AND name='clasiranking' LIMIT 1");
+                $existeClasiRanking = ($stmtCk && $stmtCk->fetch() !== false);
+            } else {
+                $stmtCk = $pdo->query("SELECT 1 FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA = DATABASE() AND LOWER(TABLE_NAME) = 'clasiranking' LIMIT 1");
+                $existeClasiRanking = ($stmtCk && $stmtCk->fetch() !== false);
+            }
+        } catch (Exception $e) {
+            $existeClasiRanking = false;
+        }
+
+        $puntosPorPartidaGanadaFuera = null;
+        $puntosAsistenciaFuera = 1;
+        if ($existeClasiRanking && $limitePosiciones >= 1) {
+            try {
+                $stmtF = $pdo->prepare("SELECT puntos_por_partida_ganada, COALESCE(puntos_asistencia, 1) AS puntos_asistencia
+                    FROM clasiranking WHERE tipo_torneo = ? AND clasificacion <= ? ORDER BY clasificacion DESC LIMIT 1");
+                $stmtF->execute([$tipoTorneoClasi, $limitePosiciones]);
+                $rf = $stmtF->fetch(PDO::FETCH_ASSOC);
+                if ($rf) {
+                    $puntosPorPartidaGanadaFuera = (int)($rf['puntos_por_partida_ganada'] ?? 0);
+                    $puntosAsistenciaFuera = (int)($rf['puntos_asistencia'] ?? 1);
+                }
+            } catch (Exception $e) {
+                try {
+                    $stmtF = $pdo->prepare("SELECT puntos_por_partida_ganada FROM clasiranking WHERE tipo_torneo = ? AND clasificacion <= ? ORDER BY clasificacion DESC LIMIT 1");
+                    $stmtF->execute([$tipoTorneoClasi, $limitePosiciones]);
+                    $rf = $stmtF->fetch(PDO::FETCH_ASSOC);
+                    if ($rf) {
+                        $puntosPorPartidaGanadaFuera = (int)($rf['puntos_por_partida_ganada'] ?? 0);
+                    }
+                } catch (Exception $e2) {
+                }
+            }
+        }
         
         // Actualizar posiciones consecutivamente (1, 2, 3, 4...) y calcular puntos de ranking
         // Cada jugador recibe una posiciÃ³n Ãºnica, incluso si hay empates en los valores
@@ -6473,18 +6532,18 @@ function recalcularPosiciones($torneo_id) {
             // En modalidad equipos, el componente "puntos por clasificaciÃ³n" debe venir de la
             // clasificaciÃ³n del equipo (clasiequi), no de la posiciÃ³n individual del integrante.
             $clasificacionRanking = $posicion;
-            if ($tipoTorneo === 3 && $clasiequi > 0) {
+            if ($modalidadNum === 3 && $clasiequi > 0) {
                 $clasificacionRanking = $clasiequi;
             }
 
-            if ($clasificacionRanking <= $limitePosiciones) {
+            if ($existeClasiRanking && $clasificacionRanking <= $limitePosiciones) {
                 try {
                     if (!array_key_exists($clasificacionRanking, $rankingPorClasificacion)) {
                         $stmt = $pdo->prepare("SELECT puntos_posicion, puntos_por_partida_ganada, COALESCE(puntos_asistencia, 1) AS puntos_asistencia
                                                FROM clasiranking
                                                WHERE tipo_torneo = ? AND clasificacion = ?
                                                LIMIT 1");
-                        $stmt->execute([$tipoTorneo, $clasificacionRanking]);
+                        $stmt->execute([$tipoTorneoClasi, $clasificacionRanking]);
                         $rankingPorClasificacion[$clasificacionRanking] = $stmt->fetch(PDO::FETCH_ASSOC) ?: null;
                     }
                     $ranking = $rankingPorClasificacion[$clasificacionRanking];
@@ -6498,7 +6557,7 @@ function recalcularPosiciones($torneo_id) {
                                                FROM clasiranking
                                                WHERE tipo_torneo = ? AND clasificacion = ?
                                                LIMIT 1");
-                        $stmt->execute([$tipoTorneo, $clasificacionRanking]);
+                        $stmt->execute([$tipoTorneoClasi, $clasificacionRanking]);
                         $rankingPorClasificacion[$clasificacionRanking] = $stmt->fetch(PDO::FETCH_ASSOC) ?: null;
                     }
                     $ranking = $rankingPorClasificacion[$clasificacionRanking];
@@ -6506,6 +6565,8 @@ function recalcularPosiciones($torneo_id) {
                         $ptosrnk = (int)$ranking['puntos_posicion'] + ($ganados * (int)$ranking['puntos_por_partida_ganada']) + 1;
                     }
                 }
+            } elseif ($existeClasiRanking && $clasificacionRanking > $limitePosiciones && $puntosPorPartidaGanadaFuera !== null) {
+                $ptosrnk = ($ganados * $puntosPorPartidaGanadaFuera) + $puntosAsistenciaFuera;
             }
             
             // Actualizar posiciÃ³n y puntos de ranking
@@ -6518,6 +6579,11 @@ function recalcularPosiciones($torneo_id) {
                 error_log("recalcularPosiciones: Error al actualizar posiciÃ³n para inscrito id=$id");
             }
             $posicion++;
+        }
+
+        try {
+            $pdo->prepare("UPDATE inscritos SET ptosrnk = 0 WHERE torneo_id = ? AND (estatus = 4 OR estatus = 'retirado')")->execute([$torneo_id]);
+        } catch (Exception $e) {
         }
         
         error_log("recalcularPosiciones: Actualizadas $actualizados posiciones y $puntosRankingActualizados puntos de ranking");

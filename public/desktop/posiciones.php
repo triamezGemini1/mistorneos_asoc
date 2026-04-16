@@ -1,7 +1,7 @@
 ﻿<?php
 /**
  * Publicación de Resultados - Tabla de clasificación (Desktop).
- * Replica la lógica de recalcularPosiciones() para mostrar la tabla con los mismos criterios de desempate que la web.
+ * Usa recalcularRankingSegunModalidad() (equipos: cadena clasiequi + ptosrnk) y muestra la tabla como la web.
  */
 declare(strict_types=1);
 require_once __DIR__ . '/desktop_auth.php';
@@ -21,7 +21,7 @@ if ($torneo_id > 0) {
         $st->execute([$torneo_id]);
         $torneo = $st->fetch(PDO::FETCH_ASSOC);
         if ($torneo) {
-            recalcularPosiciones($torneo_id);
+            recalcularRankingSegunModalidad($torneo_id);
             $ent = logica_torneo_where_entidad('i');
             $st = $pdo->prepare("
                 SELECT i.id, i.id_usuario, i.posicion, i.ganados, i.perdidos, i.efectividad, i.puntos, i.ptosrnk, i.sancion, i.tarjeta,

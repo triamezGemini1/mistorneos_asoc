@@ -192,6 +192,26 @@ function actualizarEstadisticasInscritos($torneo_id) {
     recalcularClasificacionEquiposYJugadores($torneo_id);
 }
 
+function recalcularRankingSegunModalidad($torneo_id) {
+    $torneo_id = (int)$torneo_id;
+    if ($torneo_id <= 0) {
+        return;
+    }
+    $pdo = DB::pdo();
+    $stmt = $pdo->prepare('SELECT COALESCE(modalidad, 1) AS modalidad FROM tournaments WHERE id = ?');
+    $stmt->execute([$torneo_id]);
+    $row = $stmt->fetch(PDO::FETCH_ASSOC);
+    if (!$row) {
+        return;
+    }
+    $modalidad = (int)($row['modalidad'] ?? 1);
+    if ($modalidad === 3) {
+        recalcularClasificacionEquiposYJugadores($torneo_id);
+    } else {
+        recalcularPosiciones($torneo_id);
+    }
+}
+
 function recalcularClasificacionEquiposYJugadores($torneo_id) {
     actualizarEstadisticasEquipos($torneo_id);
     recalcularPosiciones($torneo_id);
@@ -271,10 +291,16 @@ function recalcularPosiciones($torneo_id) {
     $torneo = $stmt->fetch(PDO::FETCH_ASSOC);
     if (!$torneo) return;
 
-    $modalidad = $torneo['modalidad'] ?? 1;
-    $tipoTorneo = is_numeric($modalidad) ? (int)$modalidad : 1;
-    if ($tipoTorneo < 1 || $tipoTorneo > 3) $tipoTorneo = 1;
-    $limitePosiciones = ($tipoTorneo == 2) ? 20 : (($tipoTorneo == 3) ? 10 : 30);
+    $modalidadRaw = $torneo['modalidad'] ?? 1;
+    $modalidadNum = is_numeric($modalidadRaw) ? (int)$modalidadRaw : 1;
+    if (in_array($modalidadNum, [2, 4], true)) {
+        $tipoTorneoClasi = 2;
+    } elseif ($modalidadNum === 3) {
+        $tipoTorneoClasi = 3;
+    } else {
+        $tipoTorneoClasi = 1;
+    }
+    $limitePosiciones = ($tipoTorneoClasi === 2) ? 20 : (($tipoTorneoClasi === 3) ? 10 : 30);
 
     $ent = logica_torneo_where_entidad();
     $pdo->prepare("UPDATE inscritos SET posicion = 0 WHERE torneo_id = ?" . $ent['sql'])->execute(array_merge([$torneo_id], $ent['bind']));
@@ -294,6 +320,30 @@ function recalcularPosiciones($torneo_id) {
         }
     } catch (Exception $e) {}
 
+    $puntosPorPartidaGanadaFuera = null;
+    $puntosAsistenciaFuera = 1;
+    if ($existeClasiRanking && $limitePosiciones >= 1) {
+        try {
+            $stmtF = $pdo->prepare("SELECT puntos_por_partida_ganada, COALESCE(puntos_asistencia, 1) AS puntos_asistencia FROM clasiranking WHERE tipo_torneo = ? AND clasificacion <= ? ORDER BY clasificacion DESC LIMIT 1");
+            $stmtF->execute([$tipoTorneoClasi, $limitePosiciones]);
+            $rf = $stmtF->fetch(PDO::FETCH_ASSOC);
+            if ($rf) {
+                $puntosPorPartidaGanadaFuera = (int)($rf['puntos_por_partida_ganada'] ?? 0);
+                $puntosAsistenciaFuera = (int)($rf['puntos_asistencia'] ?? 1);
+            }
+        } catch (Exception $e) {
+            try {
+                $stmtF = $pdo->prepare("SELECT puntos_por_partida_ganada FROM clasiranking WHERE tipo_torneo = ? AND clasificacion <= ? ORDER BY clasificacion DESC LIMIT 1");
+                $stmtF->execute([$tipoTorneoClasi, $limitePosiciones]);
+                $rf = $stmtF->fetch(PDO::FETCH_ASSOC);
+                if ($rf) {
+                    $puntosPorPartidaGanadaFuera = (int)($rf['puntos_por_partida_ganada'] ?? 0);
+                }
+            } catch (Exception $e2) {
+            }
+        }
+    }
+
     $posicion = 1;
     $stmtUpdate = $pdo->prepare("UPDATE inscritos SET posicion = ?, ptosrnk = ? WHERE id = ?");
     $rankingPorClasificacion = [];
@@ -303,18 +353,16 @@ function recalcularPosiciones($torneo_id) {
         $clasiequi = (int)($inscrito['clasiequi'] ?? 0);
         $ptosrnk = 1;
 
-        // En equipos, usar la clasificaciÃ³n del equipo para los puntos por posiciÃ³n.
         $clasificacionRanking = $posicion;
-        if ($tipoTorneo === 3 && $clasiequi > 0) {
+        if ($modalidadNum === 3 && $clasiequi > 0) {
             $clasificacionRanking = $clasiequi;
         }
 
         if ($existeClasiRanking && $clasificacionRanking <= $limitePosiciones) {
-            $puntosAsistencia = 1;
             try {
                 if (!array_key_exists($clasificacionRanking, $rankingPorClasificacion)) {
                     $stmt = $pdo->prepare("SELECT puntos_posicion, puntos_por_partida_ganada, COALESCE(puntos_asistencia, 1) as puntos_asistencia FROM clasiranking WHERE tipo_torneo = ? AND clasificacion = ? LIMIT 1");
-                    $stmt->execute([$tipoTorneo, $clasificacionRanking]);
+                    $stmt->execute([$tipoTorneoClasi, $clasificacionRanking]);
                     $rankingPorClasificacion[$clasificacionRanking] = $stmt->fetch(PDO::FETCH_ASSOC) ?: null;
                 }
                 $ranking = $rankingPorClasificacion[$clasificacionRanking];
@@ -326,7 +374,7 @@ function recalcularPosiciones($torneo_id) {
                 try {
                     if (!array_key_exists($clasificacionRanking, $rankingPorClasificacion)) {
                         $stmt = $pdo->prepare("SELECT puntos_posicion, puntos_por_partida_ganada FROM clasiranking WHERE tipo_torneo = ? AND clasificacion = ? LIMIT 1");
-                        $stmt->execute([$tipoTorneo, $clasificacionRanking]);
+                        $stmt->execute([$tipoTorneoClasi, $clasificacionRanking]);
                         $rankingPorClasificacion[$clasificacionRanking] = $stmt->fetch(PDO::FETCH_ASSOC) ?: null;
                     }
                     $ranking = $rankingPorClasificacion[$clasificacionRanking];
@@ -335,8 +383,15 @@ function recalcularPosiciones($torneo_id) {
                     }
                 } catch (Exception $e2) {}
             }
+        } elseif ($existeClasiRanking && $clasificacionRanking > $limitePosiciones && $puntosPorPartidaGanadaFuera !== null) {
+            $ptosrnk = ($ganados * $puntosPorPartidaGanadaFuera) + $puntosAsistenciaFuera;
         }
         $stmtUpdate->execute([$posicion, $ptosrnk, $id]);
         $posicion++;
+    }
+
+    try {
+        $pdo->prepare("UPDATE inscritos SET ptosrnk = 0 WHERE torneo_id = ? AND estatus = 4" . $ent['sql'])->execute(array_merge([$torneo_id], $ent['bind']));
+    } catch (Exception $e) {
     }
 }

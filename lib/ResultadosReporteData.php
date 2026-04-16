@@ -78,7 +78,9 @@ final class ResultadosReporteData
      */
     public static function cargar(PDO $pdo, int $torneoId, array $torneo): array
     {
-        if (function_exists('recalcularPosiciones')) {
+        if (function_exists('recalcularRankingSegunModalidad')) {
+            recalcularRankingSegunModalidad($torneoId);
+        } elseif (function_exists('recalcularPosiciones')) {
             recalcularPosiciones($torneoId);
         }
 
