@@ -43,28 +43,52 @@ $org_ref = (int)($organizacion['cod_org'] ?? 0);
 if ($org_ref <= 0) {
     $org_ref = (int)($organizacion['id'] ?? 0);
 }
+$org_entidad = (int)($organizacion['entidad'] ?? 0);
 $stmt = $pdo->prepare($has_cod_org
-    ? "SELECT COUNT(*) FROM clubes WHERE (organizacion_id = ? OR organizacion_id = (SELECT id FROM organizaciones WHERE cod_org = ? LIMIT 1)) AND estatus = 1"
-    : "SELECT COUNT(*) FROM clubes WHERE organizacion_id = ? AND estatus = 1");
-$stmt->execute($has_cod_org ? [$org_ref, $org_ref] : [$org_ref]);
+    ? "SELECT COUNT(DISTINCT id) FROM clubes WHERE (organizacion_id = ? OR organizacion_id = (SELECT id FROM organizaciones WHERE cod_org = ? LIMIT 1)) AND estatus = 1 AND (? = 0 OR COALESCE(entidad, 0) = ?)"
+    : "SELECT COUNT(DISTINCT id) FROM clubes WHERE organizacion_id = ? AND estatus = 1 AND (? = 0 OR COALESCE(entidad, 0) = ?)");
+$stmt->execute($has_cod_org ? [$org_ref, $org_ref, $org_entidad, $org_entidad] : [$org_ref, $org_entidad, $org_entidad]);
 $stats_clubes = (int)$stmt->fetchColumn();
 
 $stmt = $pdo->prepare($has_cod_org
-    ? "SELECT COUNT(*) FROM tournaments WHERE (club_responsable = ? OR club_responsable = (SELECT id FROM organizaciones WHERE cod_org = ? LIMIT 1)) AND fechator >= CURDATE() AND estatus = 1"
-    : "SELECT COUNT(*) FROM tournaments WHERE club_responsable = ? AND fechator >= CURDATE() AND estatus = 1");
-$stmt->execute($has_cod_org ? [$org_ref, $org_ref] : [$org_ref]);
+    ? "SELECT COUNT(DISTINCT id) FROM tournaments WHERE (club_responsable = ? OR club_responsable = (SELECT id FROM organizaciones WHERE cod_org = ? LIMIT 1)) AND (? = 0 OR COALESCE(entidad, 0) = ?) AND fechator >= CURDATE() AND estatus = 1"
+    : "SELECT COUNT(DISTINCT id) FROM tournaments WHERE club_responsable = ? AND (? = 0 OR COALESCE(entidad, 0) = ?) AND fechator >= CURDATE() AND estatus = 1");
+$stmt->execute($has_cod_org ? [$org_ref, $org_ref, $org_entidad, $org_entidad] : [$org_ref, $org_entidad, $org_entidad]);
 $stats_torneos_activos = (int)$stmt->fetchColumn();
+
+$stmt = $pdo->prepare($has_cod_org
+    ? "SELECT COUNT(DISTINCT id) FROM tournaments WHERE (club_responsable = ? OR club_responsable = (SELECT id FROM organizaciones WHERE cod_org = ? LIMIT 1)) AND (? = 0 OR COALESCE(entidad, 0) = ?) AND estatus = 1"
+    : "SELECT COUNT(DISTINCT id) FROM tournaments WHERE club_responsable = ? AND (? = 0 OR COALESCE(entidad, 0) = ?) AND estatus = 1");
+$stmt->execute($has_cod_org ? [$org_ref, $org_ref, $org_entidad, $org_entidad] : [$org_ref, $org_entidad, $org_entidad]);
+$stats_torneos_total = (int)$stmt->fetchColumn();
 
 $stmt = $pdo->prepare("
     SELECT COUNT(*) FROM usuarios u
     INNER JOIN clubes c ON u.club_id = c.id
-    WHERE " . ($has_cod_org ? "(c.organizacion_id = ? OR c.organizacion_id = (SELECT id FROM organizaciones WHERE cod_org = ? LIMIT 1))" : "c.organizacion_id = ?") . " AND c.estatus = 1 AND u.role = 'usuario' AND u.status = 0
+    WHERE " . ($has_cod_org ? "(c.organizacion_id = ? OR c.organizacion_id = (SELECT id FROM organizaciones WHERE cod_org = ? LIMIT 1))" : "c.organizacion_id = ?") . " AND c.estatus = 1 AND (? = 0 OR COALESCE(c.entidad, 0) = ?) AND u.role = 'usuario' AND u.status = 0
 ");
-$stmt->execute($has_cod_org ? [$org_ref, $org_ref] : [$org_ref]);
+$stmt->execute($has_cod_org ? [$org_ref, $org_ref, $org_entidad, $org_entidad] : [$org_ref, $org_entidad, $org_entidad]);
 $stats_afiliados = (int)$stmt->fetchColumn();
+
+$stmt = $pdo->prepare($has_cod_org
+    ? "SELECT DISTINCT t.id, t.nombre, t.fechator, t.estatus
+       FROM tournaments t
+       WHERE (t.club_responsable = ? OR t.club_responsable = (SELECT id FROM organizaciones WHERE cod_org = ? LIMIT 1))
+         AND (? = 0 OR COALESCE(t.entidad, 0) = ?)
+       ORDER BY t.fechator DESC, t.id DESC
+       LIMIT 12"
+    : "SELECT DISTINCT t.id, t.nombre, t.fechator, t.estatus
+       FROM tournaments t
+       WHERE t.club_responsable = ?
+         AND (? = 0 OR COALESCE(t.entidad, 0) = ?)
+       ORDER BY t.fechator DESC, t.id DESC
+       LIMIT 12");
+$stmt->execute($has_cod_org ? [$org_ref, $org_ref, $org_entidad, $org_entidad] : [$org_ref, $org_entidad, $org_entidad]);
+$torneos_org = $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
 
 $stats = [
     'clubes' => $stats_clubes,
+    'torneos_total' => $stats_torneos_total,
     'torneos_activos' => $stats_torneos_activos,
     'afiliados' => $stats_afiliados,
 ];

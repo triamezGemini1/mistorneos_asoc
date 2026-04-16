@@ -60,8 +60,9 @@ $url_ver_estructura = AppHelpers::dashboard('organizaciones', ['id' => $organiza
                 <div class="card-body d-flex align-items-center">
                     <i class="fas fa-trophy fa-3x me-3 opacity-75"></i>
                     <div>
-                        <h3 class="mb-0"><?= (int)$stats['torneos_activos'] ?></h3>
-                        <span class="small">Torneos Activos</span>
+                        <h3 class="mb-0"><?= (int)($stats['torneos_total'] ?? 0) ?></h3>
+                        <span class="small">Torneos Totales</span>
+                        <div class="small opacity-75">Activos: <?= (int)$stats['torneos_activos'] ?></div>
                     </div>
                 </div>
             </div>
@@ -99,6 +100,42 @@ $url_ver_estructura = AppHelpers::dashboard('organizaciones', ['id' => $organiza
                     </a>
                 </div>
             </div>
+        </div>
+    </div>
+
+    <div class="card shadow-sm mt-4">
+        <div class="card-header bg-light">
+            <h5 class="mb-0"><i class="fas fa-list me-2"></i>Torneos de la organización</h5>
+        </div>
+        <div class="card-body p-0">
+            <?php if (empty($torneos_org)): ?>
+                <div class="text-center py-4 text-muted">No hay torneos registrados para esta organización.</div>
+            <?php else: ?>
+                <div class="table-responsive">
+                    <table class="table table-hover mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Nombre</th>
+                                <th>Fecha</th>
+                                <th class="text-center">Estado</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <?php foreach ($torneos_org as $t): ?>
+                                <tr>
+                                    <td><?= htmlspecialchars((string)($t['nombre'] ?? 'Torneo')) ?></td>
+                                    <td><?= !empty($t['fechator']) ? htmlspecialchars(date('d/m/Y', strtotime((string)$t['fechator']))) : '-' ?></td>
+                                    <td class="text-center">
+                                        <span class="badge <?= ((int)($t['estatus'] ?? 0) === 1) ? 'bg-success' : 'bg-secondary' ?>">
+                                            <?= ((int)($t['estatus'] ?? 0) === 1) ? 'Activo' : 'Inactivo' ?>
+                                        </span>
+                                    </td>
+                                </tr>
+                            <?php endforeach; ?>
+                        </tbody>
+                    </table>
+                </div>
+            <?php endif; ?>
         </div>
     </div>
 </div>

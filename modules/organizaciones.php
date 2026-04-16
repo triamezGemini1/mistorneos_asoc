@@ -295,10 +295,11 @@ if ($organizacion_id) {
         $stmt->execute($has_cod_org ? [$organizacion_entidad_ref, $organizacion_ref, $organizacion_ref] : [$organizacion_entidad_ref, $organizacion_ref]);
         $clubes = $stmt->fetchAll(PDO::FETCH_ASSOC);
     } else {
+        $org_entidad_where = ((int)($organizacion['entidad'] ?? 0) > 0) ? " AND COALESCE(c.entidad, 0) = " . (int)$organizacion['entidad'] : "";
         $stmt = $pdo->prepare("
             SELECT c.id, c.nombre, c.delegado, c.telefono, c.direccion, c.estatus, c.entidad
             FROM clubes c
-            WHERE {$club_org_match_expr} AND c.estatus = 1
+            WHERE {$club_org_match_expr} AND c.estatus = 1 {$org_entidad_where}
             ORDER BY c.nombre ASC
         ");
         $stmt->execute($has_cod_org ? [$organizacion_ref, $organizacion_ref] : [$organizacion_ref]);
@@ -470,8 +471,8 @@ if ($is_admin_general && !$organizacion_id && !$club_id && $entidad_id > 0) {
         } else {
             $stmt = $pdo->prepare("
                 SELECT o.id, o.nombre, o.estatus,
-                       (SELECT COUNT(*) FROM clubes c WHERE " . ($has_cod_org ? "(c.organizacion_id = COALESCE(NULLIF(o.cod_org, 0), o.id) OR c.organizacion_id = o.id)" : "c.organizacion_id = o.id") . " AND c.estatus = 1) as total_clubes,
-                       (SELECT COUNT(*) FROM tournaments WHERE " . ($has_cod_org ? "(club_responsable = o.id OR club_responsable = o.cod_org)" : "club_responsable = o.id") . ") as total_torneos
+                       (SELECT COUNT(DISTINCT c.id) FROM clubes c WHERE " . ($has_cod_org ? "(c.organizacion_id = COALESCE(NULLIF(o.cod_org, 0), o.id) OR c.organizacion_id = o.id)" : "c.organizacion_id = o.id") . " AND c.estatus = 1 AND COALESCE(c.entidad, 0) = COALESCE(o.entidad, 0)) as total_clubes,
+                       (SELECT COUNT(DISTINCT t.id) FROM tournaments t WHERE " . ($has_cod_org ? "(t.club_responsable = o.id OR t.club_responsable = o.cod_org)" : "t.club_responsable = o.id") . " AND COALESCE(t.entidad, 0) = COALESCE(o.entidad, 0)) as total_torneos
                 FROM organizaciones o
                 WHERE o.entidad = ?
                 ORDER BY o.estatus DESC, o.nombre ASC
@@ -623,8 +624,8 @@ if ($is_admin_general && !$organizacion_id && !$club_id) {
 try {
     $stmt = $pdo->query("
         SELECT o.*, e.id as entidad_id, e.nombre as entidad_nombre,
-               (SELECT COUNT(*) FROM clubes c WHERE " . ($has_cod_org ? "(c.organizacion_id = COALESCE(NULLIF(o.cod_org,0), o.id) OR c.organizacion_id = o.id)" : "c.organizacion_id = o.id") . " AND c.estatus = 1) as total_clubes,
-               (SELECT COUNT(*) FROM tournaments WHERE " . ($has_cod_org ? "(club_responsable = o.id OR club_responsable = o.cod_org)" : "club_responsable = o.id") . ") as total_torneos
+               (SELECT COUNT(DISTINCT c.id) FROM clubes c WHERE " . ($has_cod_org ? "(c.organizacion_id = COALESCE(NULLIF(o.cod_org,0), o.id) OR c.organizacion_id = o.id)" : "c.organizacion_id = o.id") . " AND c.estatus = 1 AND COALESCE(c.entidad, 0) = COALESCE(o.entidad, 0)) as total_clubes,
+               (SELECT COUNT(DISTINCT t.id) FROM tournaments t WHERE " . ($has_cod_org ? "(t.club_responsable = o.id OR t.club_responsable = o.cod_org)" : "t.club_responsable = o.id") . " AND COALESCE(t.entidad, 0) = COALESCE(o.entidad, 0)) as total_torneos
         FROM organizaciones o
         LEFT JOIN entidad e ON o.entidad = e.id
         WHERE o.estatus = 1
