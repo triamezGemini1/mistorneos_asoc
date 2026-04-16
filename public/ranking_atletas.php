@@ -137,35 +137,39 @@ function fmtfecha(?string $f): string
             letter-spacing: 0.01em;
             color: #0f172a;
         }
-        /* Pos / P Gan / Pts: ancho holgado para 4 dígitos (tabular-nums) + cabecera “P Gan” */
-        .tabla-matriz .col-torneo-sub,
-        .tabla-matriz .col-stat-total {
-            width: 2.65rem;
-            min-width: 2.65rem;
-            max-width: 2.65rem;
+        /* Pos / P Gan / Pts: 50 % del ancho anterior (2.65rem) */
+        .tabla-matriz .col-torneo-sub {
+            width: calc(2.65rem * 0.5);
+            min-width: calc(2.65rem * 0.5);
+            max-width: calc(2.65rem * 0.5);
             box-sizing: border-box;
             font-variant-numeric: tabular-nums;
             font-weight: 700;
-            line-height: 1.25;
-        }
-        .tabla-matriz .col-torneo-sub {
+            line-height: 1.2;
             text-align: center;
-            font-size: 0.65rem;
+            font-size: 0.56rem;
             color: #1e293b;
-            padding: 0.22rem 0.2rem !important;
+            padding: 0.14rem 0.06rem !important;
         }
+        /* Pts Σ, Efect. Σ, G Σ: +50 % respecto a 2.65rem */
         .tabla-matriz .col-stat-total {
-            text-align: right;
-            font-size: 0.65rem;
+            width: calc(2.65rem * 1.5);
+            min-width: calc(2.65rem * 1.5);
+            max-width: calc(2.65rem * 1.5);
+            box-sizing: border-box;
+            font-variant-numeric: tabular-nums;
             font-weight: 800;
+            line-height: 1.25;
+            text-align: right;
+            font-size: 0.68rem;
             color: #0f172a;
-            padding: 0.22rem 0.2rem !important;
+            padding: 0.22rem 0.18rem !important;
         }
         .tabla-matriz thead .sub-h.col-torneo-sub {
             white-space: normal;
-            font-size: 0.54rem;
-            line-height: 1.1;
-            padding: 0.18rem 0.12rem !important;
+            font-size: 0.46rem;
+            line-height: 1.05;
+            padding: 0.1rem 0.04rem !important;
         }
         .tabla-matriz thead th.col-stat-total {
             white-space: normal;
@@ -174,13 +178,13 @@ function fmtfecha(?string $f): string
             vertical-align: middle;
         }
         .tabla-matriz thead .torneo-nombre {
-            font-size: 0.62rem;
+            font-size: 0.48rem;
             font-weight: 700;
-            line-height: 1.15;
-            padding: 0.2rem 0.08rem !important;
+            line-height: 1.08;
+            padding: 0.1rem 0.04rem !important;
             word-break: break-word;
             white-space: normal;
-            letter-spacing: 0.02em;
+            letter-spacing: 0.01em;
             color: #fff;
             background: #475569 !important;
             border-color: #334155 !important;
@@ -392,8 +396,8 @@ function fmtfecha(?string $f): string
                                     <?php
                                     $nomCol = (string) ($col['nombre'] ?? '');
                                     $nomCorto = function_exists('mb_strlen') && function_exists('mb_substr')
-                                        ? ((mb_strlen($nomCol) > 18) ? (mb_substr($nomCol, 0, 16) . '…') : $nomCol)
-                                        : ((strlen($nomCol) > 18) ? (substr($nomCol, 0, 16) . '…') : $nomCol);
+                                        ? ((mb_strlen($nomCol) > 12) ? (mb_substr($nomCol, 0, 10) . '…') : $nomCol)
+                                        : ((strlen($nomCol) > 12) ? (substr($nomCol, 0, 10) . '…') : $nomCol);
                                     ?>
                                     <th class="text-center torneo-nombre" colspan="3" title="<?= htmlspecialchars($nomCol . ' — ' . fmtfecha($col['fechator'] ?? '')) ?>">
                                         <?= htmlspecialchars($nomCorto) ?>
