@@ -107,32 +107,90 @@ function fmtfecha(?string $f): string
         .detalle-torneos { font-size: 0.85rem; background: #f8fafc; }
         .card-rank-wide { max-width: min(1680px, 100%); }
         .card-detalle-atleta { border: 1px solid #e2e8f0; border-radius: 12px; padding: 1rem; margin-bottom: 1rem; background: #fff; }
-        .tabla-matriz { table-layout: fixed; width: 100%; }
-        .tabla-matriz th, .tabla-matriz td { font-size: 0.68rem; vertical-align: middle; padding: 0.2rem 0.15rem; }
-        .tabla-matriz .col-rank-num { width: 1.75rem; }
+        .tabla-matriz {
+            table-layout: fixed;
+            width: 100%;
+            font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            -webkit-font-smoothing: antialiased;
+        }
+        .tabla-matriz th, .tabla-matriz td {
+            vertical-align: middle;
+            padding: 0.18rem 0.08rem;
+        }
+        .tabla-matriz .col-rank-num {
+            width: 1.85rem;
+            font-size: 0.72rem;
+            font-weight: 700;
+            font-variant-numeric: tabular-nums;
+            color: #0f172a;
+        }
+        /* +20 % respecto a 6.5rem ≈ 7.8rem */
         .tabla-matriz .col-atleta {
-            max-width: 6.5rem;
-            width: 6.5rem;
+            max-width: 7.8rem;
+            width: 7.8rem;
             overflow: hidden;
             text-overflow: ellipsis;
             white-space: nowrap;
-            font-size: 0.65rem;
+            font-size: 0.82rem;
+            font-weight: 600;
+            line-height: 1.35;
+            letter-spacing: 0.01em;
+            color: #0f172a;
         }
-        .tabla-matriz .col-torneo-sub { width: 1.65rem; max-width: 1.65rem; text-align: center; font-size: 0.62rem; }
-        .tabla-matriz thead .torneo-nombre {
+        /* Por torneo: ~mitad de ancho respecto a 1.65rem/celda, manteniendo legibilidad (cifras tabulares + tipografía compacta) */
+        .tabla-matriz .col-torneo-sub {
+            width: 1.02rem;
+            max-width: 1.02rem;
+            box-sizing: border-box;
+            text-align: center;
+            font-size: 0.57rem;
+            font-weight: 700;
+            font-variant-numeric: tabular-nums;
+            letter-spacing: -0.02em;
+            color: #1e293b;
+            line-height: 1.2;
+            padding: 0.1rem 0.03rem !important;
+        }
+        /* Totales finales: ancho ~50 % del habitual */
+        .tabla-matriz .col-stat-total {
+            width: 1.25rem;
+            max-width: 1.25rem;
             font-size: 0.58rem;
-            line-height: 1.1;
-            padding: 0.15rem 0.1rem !important;
+            font-weight: 800;
+            font-variant-numeric: tabular-nums;
+            letter-spacing: -0.02em;
+            color: #0f172a;
+            padding: 0.1rem 0.04rem !important;
+            line-height: 1.2;
+        }
+        .tabla-matriz thead .torneo-nombre {
+            font-size: 0.62rem;
+            font-weight: 700;
+            line-height: 1.15;
+            padding: 0.2rem 0.08rem !important;
             word-break: break-word;
             white-space: normal;
+            letter-spacing: 0.02em;
+            color: #fff;
+            background: #475569 !important;
+            border-color: #334155 !important;
         }
-        .tabla-matriz thead .sub-h { font-size: 0.58rem; padding: 0.1rem !important; }
+        .tabla-matriz thead .sub-h {
+            font-size: 0.56rem;
+            font-weight: 700;
+            padding: 0.12rem 0.04rem !important;
+            letter-spacing: 0.04em;
+            text-transform: uppercase;
+            color: #1e293b;
+            background: #e2e8f0 !important;
+        }
         @media print {
             body { background: #fff !important; color: #111 !important; padding: 0 !important; }
             .no-print, form { display: none !important; }
             .card-rank { box-shadow: none !important; max-width: 100% !important; border-radius: 0; }
             .header-rank { background: #1e293b !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
             .tabla-matriz { font-size: 8pt; }
+            .tabla-matriz .col-atleta { font-size: 9pt; max-width: 9rem; width: 9rem; }
         }
     </style>
 </head>
@@ -331,9 +389,9 @@ function fmtfecha(?string $f): string
                                         <?= htmlspecialchars($nomCorto) ?>
                                     </th>
                                 <?php endforeach; ?>
-                                <th class="text-end sticky-top bg-light" rowspan="2">Pts Σ</th>
-                                <th class="text-end sticky-top bg-light" rowspan="2">Efect. Σ</th>
-                                <th class="text-end sticky-top bg-light" rowspan="2">G Σ</th>
+                                <th class="text-end sticky-top bg-light col-stat-total" rowspan="2">Pts Σ</th>
+                                <th class="text-end sticky-top bg-light col-stat-total" rowspan="2">Efect. Σ</th>
+                                <th class="text-end sticky-top bg-light col-stat-total" rowspan="2">G Σ</th>
                             </tr>
                             <tr>
                                 <?php foreach ($torneos_matriz as $_col): ?>
@@ -372,9 +430,9 @@ function fmtfecha(?string $f): string
                                             <td class="text-center col-torneo-sub"><?= (int) ($celda['ptosrnk'] ?? 0) ?></td>
                                         <?php endif; ?>
                                     <?php endforeach; ?>
-                                    <td class="text-end fw-semibold"><?= (int) $a['total_ptosrnk'] ?></td>
-                                    <td class="text-end"><?= (int) $a['total_efectividad'] ?></td>
-                                    <td class="text-end"><?= (int) $a['total_ganados'] ?></td>
+                                    <td class="text-end fw-semibold col-stat-total"><?= (int) $a['total_ptosrnk'] ?></td>
+                                    <td class="text-end col-stat-total"><?= (int) $a['total_efectividad'] ?></td>
+                                    <td class="text-end col-stat-total"><?= (int) $a['total_ganados'] ?></td>
                                 </tr>
                             <?php endforeach; ?>
                         </tbody>

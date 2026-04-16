@@ -42,14 +42,49 @@ if ($org_nombre_encabezado !== '') {
 
 $tableStyle = '
 <style>
-table.matriz-pdf { width: 100%; border-collapse: collapse; margin-top: 12px; font-size: 6pt; }
-table.matriz-pdf th, table.matriz-pdf td { border: 1px solid #333; padding: 2px 3px; vertical-align: middle; }
-table.matriz-pdf thead th { background: #667eea; color: #fff; font-weight: bold; }
-table.matriz-pdf tbody tr:nth-child(even) { background: #f8f9fa; }
+table.matriz-pdf {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 12px;
+  font-family: DejaVu Sans, Arial, Helvetica, sans-serif;
+  font-size: 5.5pt;
+}
+table.matriz-pdf th, table.matriz-pdf td {
+  border: 1px solid #333;
+  padding: 1px 2px;
+  vertical-align: middle;
+}
+table.matriz-pdf thead th { font-weight: bold; }
+table.matriz-pdf tbody tr:nth-child(even) { background: #f4f6f8; }
 .c { text-align: center; }
 .r { text-align: right; }
-.nombre-col { max-width: 72px; overflow: hidden; font-size: 5.5pt; }
-.torneo-h { font-size: 5.5pt; line-height: 1.1; }
+/* +20 % sobre 72px ≈ 86px */
+.nombre-col {
+  max-width: 86px;
+  width: 86px;
+  overflow: hidden;
+  font-size: 6.5pt;
+  font-weight: bold;
+  line-height: 1.25;
+  color: #111;
+}
+.torneo-h { font-size: 5.5pt; line-height: 1.1; background: #475569; color: #fff; }
+.stat-pdf {
+  width: 16px;
+  max-width: 16px;
+  font-size: 5pt;
+  font-weight: bold;
+  text-align: center;
+  padding: 1px 0 !important;
+}
+.stat-total-pdf {
+  width: 16px;
+  max-width: 16px;
+  font-size: 5.2pt;
+  font-weight: bold;
+  text-align: right;
+  padding: 1px 1px !important;
+}
 </style>';
 
 $html = $tableStyle;
@@ -67,12 +102,12 @@ foreach ($torneos_matriz as $col) {
     }
     $html .= '<th colspan="3" class="torneo-h c">' . htmlspecialchars($nom) . '</th>';
 }
-$html .= '<th rowspan="2" class="r">Pts Σ</th>';
-$html .= '<th rowspan="2" class="r">Efect. Σ</th>';
-$html .= '<th rowspan="2" class="r">G Σ</th>';
+$html .= '<th rowspan="2" class="r stat-total-pdf">Pts Σ</th>';
+$html .= '<th rowspan="2" class="r stat-total-pdf">Efect. Σ</th>';
+$html .= '<th rowspan="2" class="r stat-total-pdf">G Σ</th>';
 $html .= '</tr><tr>';
 foreach ($torneos_matriz as $_) {
-    $html .= '<th class="c">Pos</th><th class="c">P Gan</th><th class="c">Pts</th>';
+    $html .= '<th class="c stat-pdf">Pos</th><th class="c stat-pdf">P Gan</th><th class="c stat-pdf">Pts</th>';
 }
 $html .= '</tr></thead><tbody>';
 
@@ -89,17 +124,17 @@ foreach ($atletas as $a) {
         $tid = (int) $col['torneo_id'];
         $celda = $porTorneo[$tid] ?? null;
         if ($celda === null) {
-            $html .= '<td class="c">—</td><td class="c">—</td><td class="c">—</td>';
+            $html .= '<td class="c stat-pdf">—</td><td class="c stat-pdf">—</td><td class="c stat-pdf">—</td>';
         } else {
             $posN = (int) ($celda['posicion'] ?? 0);
-            $html .= '<td class="c">' . ($posN > 0 ? (string) $posN : '—') . '</td>';
-            $html .= '<td class="c">' . (int) ($celda['ganados'] ?? 0) . '</td>';
-            $html .= '<td class="c">' . (int) ($celda['ptosrnk'] ?? 0) . '</td>';
+            $html .= '<td class="c stat-pdf">' . ($posN > 0 ? (string) $posN : '—') . '</td>';
+            $html .= '<td class="c stat-pdf">' . (int) ($celda['ganados'] ?? 0) . '</td>';
+            $html .= '<td class="c stat-pdf">' . (int) ($celda['ptosrnk'] ?? 0) . '</td>';
         }
     }
-    $html .= '<td class="r">' . (int) $a['total_ptosrnk'] . '</td>';
-    $html .= '<td class="r">' . (int) $a['total_efectividad'] . '</td>';
-    $html .= '<td class="r">' . (int) $a['total_ganados'] . '</td>';
+    $html .= '<td class="r stat-total-pdf">' . (int) $a['total_ptosrnk'] . '</td>';
+    $html .= '<td class="r stat-total-pdf">' . (int) $a['total_efectividad'] . '</td>';
+    $html .= '<td class="r stat-total-pdf">' . (int) $a['total_ganados'] . '</td>';
     $html .= '</tr>';
 }
 $html .= '</tbody></table>';
