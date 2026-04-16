@@ -273,7 +273,13 @@ if ($current_page === 'estadisticas_torneos') {
           </a>
         </li>
         <li class="mb-2">
-          <a href="<?= htmlspecialchars($dashboard_href('clubes_asociados')) ?>" class="nav-link <?= $current_page === 'clubes_asociados' ? 'active' : '' ?>">
+          <?php
+          $href_clubes_org = ($admin_club_org_id ?? 0) > 0
+            ? ($dashboard_href('organizaciones', ['id' => (int) $admin_club_org_id]) . '#lista-clubes-org')
+            : $dashboard_href('clubes_asociados');
+          $active_clubes_org = (($current_page === 'organizaciones' && (int)($_GET['id'] ?? 0) === (int)($admin_club_org_id ?? 0)) || $current_page === 'clubes_asociados');
+          ?>
+          <a href="<?= htmlspecialchars($href_clubes_org) ?>" class="nav-link <?= $active_clubes_org ? 'active' : '' ?>">
             <i class="fas fa-sitemap me-3"></i>
             <span class="nav-text">Clubes de la organización</span>
           </a>

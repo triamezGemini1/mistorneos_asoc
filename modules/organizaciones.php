@@ -64,29 +64,37 @@ if ($organizacion_id && $club_id) {
             $organizacion = $stmt->fetch(PDO::FETCH_ASSOC);
         }
     } else {
-        $club_ids = ClubHelper::getClubesByAdminClubId($current_user['id']);
-        if (in_array($club_id, $club_ids)) {
+        $org_id_user = (int) Auth::getUserOrganizacionId();
+        $stmtChk = $pdo->prepare("SELECT id FROM organizaciones WHERE {$org_where_expr} AND estatus = 1 LIMIT 1");
+        $stmtChk->execute($has_cod_org ? [$organizacion_id, $organizacion_id] : [$organizacion_id]);
+        $orgPkResuelto = (int) $stmtChk->fetchColumn();
+        if ($org_id_user > 0 && $orgPkResuelto > 0 && $orgPkResuelto === $org_id_user) {
+            $stmt = $pdo->prepare("
+                SELECT o.*, e.nombre as entidad_nombre
+                FROM organizaciones o
+                LEFT JOIN entidad e ON o.entidad = e.id
+                WHERE {$org_where_expr} AND o.estatus = 1
+            ");
+            $stmt->execute($has_cod_org ? [$organizacion_id, $organizacion_id] : [$organizacion_id]);
+            $organizacion = $stmt->fetch(PDO::FETCH_ASSOC);
+        } else {
+            $organizacion = null;
+        }
+        if ($organizacion) {
             $stmt = $pdo->prepare("SELECT * FROM clubes WHERE id = ? AND estatus = 1");
             $stmt->execute([$club_id]);
             $club = $stmt->fetch(PDO::FETCH_ASSOC);
-            $clubPerteneceOrg = false;
             if ($club) {
-                $orgRefCheck = (int)$organizacion_id;
-                $clubOrgId = (int)($club['organizacion_id'] ?? 0);
-                if ($clubOrgId === $orgRefCheck) {
-                    $clubPerteneceOrg = true;
-                } elseif ($has_cod_org) {
-                    $stOrgId = $pdo->prepare("SELECT id FROM organizaciones WHERE cod_org = ? LIMIT 1");
-                    $stOrgId->execute([$orgRefCheck]);
-                    $orgIdReal = (int)($stOrgId->fetchColumn() ?: 0);
-                    $clubPerteneceOrg = ($orgIdReal > 0 && $clubOrgId === $orgIdReal);
+                $idsPermitidos = OrganizacionDashboardStats::clubIdsForOrganizacion($pdo, $organizacion, $has_cod_org);
+                if (!in_array((int) $club['id'], $idsPermitidos, true)) {
+                    $club = null;
+                    $organizacion = null;
                 }
+            } else {
+                $organizacion = null;
             }
-            if ($club && $clubPerteneceOrg) {
-                $stmt = $pdo->prepare("SELECT o.*, e.nombre as entidad_nombre FROM organizaciones o LEFT JOIN entidad e ON o.entidad = e.id WHERE {$org_where_expr}");
-                $stmt->execute($has_cod_org ? [$organizacion_id, $organizacion_id] : [$organizacion_id]);
-                $organizacion = $stmt->fetch(PDO::FETCH_ASSOC);
-            }
+        } else {
+            $club = null;
         }
     }
     if ($club && $organizacion) {
@@ -107,6 +115,18 @@ if ($organizacion_id && $club_id) {
             $sexoSql = " AND UPPER(COALESCE(u.sexo,'M')) = 'M'";
         } elseif ($sexo === 'f') {
             $sexoSql = " AND UPPER(COALESCE(u.sexo,'M')) = 'F'";
+        }
+
+        $orderAfiliadosSql = "(CASE WHEN u.status = 0 OR u.status = 'approved' OR u.status = 1 OR TRIM(CAST(u.status AS CHAR)) = '1' THEN 0 ELSE 1 END) ASC, COALESCE(u.created_at, FROM_UNIXTIME(0)) DESC, u.nombre ASC";
+        try {
+            $pt = $pdo->query("SHOW TABLES LIKE 'partiresul'");
+            if ($pt && $pt->rowCount() > 0) {
+                $fc = $pdo->query("SHOW COLUMNS FROM partiresul WHERE Field = 'fecha_partida'");
+                if ($fc && $fc->fetch(PDO::FETCH_ASSOC)) {
+                    $orderAfiliadosSql = "(CASE WHEN u.status = 0 OR u.status = 'approved' OR u.status = 1 OR TRIM(CAST(u.status AS CHAR)) = '1' THEN 0 ELSE 1 END) ASC, COALESCE((SELECT MAX(pr.fecha_partida) FROM partiresul pr WHERE pr.id_usuario = u.id), '1970-01-01') DESC, COALESCE(u.created_at, FROM_UNIXTIME(0)) DESC, u.nombre ASC";
+                }
+            }
+        } catch (Throwable $ignored) {
         }
 
         $normalizar = static function (string $s): string {
@@ -152,7 +172,7 @@ if ($organizacion_id && $club_id) {
                 FROM usuarios u
                 WHERE {$scopeSql}
                   {$sexoSql}
-                ORDER BY u.nombre ASC
+                ORDER BY {$orderAfiliadosSql}
                 LIMIT ? OFFSET ?
             ");
             $bindPos = 1;
@@ -195,7 +215,7 @@ if ($organizacion_id && $club_id) {
                 WHERE " . $usuarios_territorio_expr . " = ?
                   AND COALESCE(u.entidad, 0) = ?
                   {$sexoSql}
-                ORDER BY u.nombre ASC
+                ORDER BY {$orderAfiliadosSql}
                 LIMIT ? OFFSET ?
             ");
             $stmt->bindValue(1, $org_scope_entidad, PDO::PARAM_INT);
@@ -212,7 +232,13 @@ if ($organizacion_id && $club_id) {
         }
     }
     if (!$club || !$organizacion) {
-        header('Location: index.php?page=organizaciones&id=' . $organizacion_id);
+        $rid = (int) ($_GET['id'] ?? $organizacion_id ?? 0);
+        $msg = urlencode('No se encontraron datos del club o no tiene permiso para verlos.');
+        if ($rid > 0) {
+            header('Location: index.php?page=organizaciones&id=' . $rid . '&error=' . $msg);
+        } else {
+            header('Location: index.php?page=organizaciones&error=' . $msg);
+        }
         exit;
     }
     include __DIR__ . '/organizaciones/club_detail.php';

@@ -63,7 +63,13 @@ $qsBase = 'index.php?page=organizaciones&id=' . (int)$organizacion['id'] . '&clu
             <?php if (empty($afiliados)): ?>
                 <div class="text-center py-4 text-muted">
                     <i class="fas fa-users fa-2x mb-2"></i>
-                    <p class="mb-0">Este club no tiene afiliados registrados</p>
+                    <p class="mb-0">
+                        <?php if ($sexo !== 'todos'): ?>
+                            No se encontraron afiliados con el filtro seleccionado. Pruebe con «Todo» o revise los criterios.
+                        <?php else: ?>
+                            No se encontraron afiliados para este club.
+                        <?php endif; ?>
+                    </p>
                 </div>
             <?php else: ?>
                 <div class="table-responsive">

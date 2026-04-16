@@ -48,6 +48,14 @@ $stats_admin_torneo = isset($stats_admin_torneo) ? (int)$stats_admin_torneo : 0;
         </ol>
     </nav>
 
+    <?php $error_org = isset($_GET['error']) ? trim((string) $_GET['error']) : ''; ?>
+    <?php if ($error_org !== ''): ?>
+        <div class="alert alert-warning alert-dismissible fade show" role="alert">
+            <i class="fas fa-exclamation-triangle me-2"></i><?= htmlspecialchars($error_org) ?>
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Cerrar"></button>
+        </div>
+    <?php endif; ?>
+
     <?php
     $org_estatus = (int)($organizacion['estatus'] ?? 1);
     $org_desactivada = $org_estatus === 0;
@@ -156,9 +164,14 @@ $stats_admin_torneo = isset($stats_admin_torneo) ? (int)$stats_admin_torneo : 0;
         </div>
     </div>
 
-    <div class="card shadow-sm">
-        <div class="card-header bg-light">
+    <div class="card shadow-sm" id="lista-clubes-org">
+        <div class="card-header bg-light d-flex flex-wrap justify-content-between align-items-center gap-2">
             <h5 class="mb-0"><i class="fas fa-sitemap me-2"></i>Clubes de la organización</h5>
+            <?php if (empty($is_admin_general)): ?>
+                <a href="<?= htmlspecialchars(class_exists('AppHelpers') ? AppHelpers::dashboard('clubes_asociados') : 'index.php?page=clubes_asociados') ?>" class="btn btn-sm btn-outline-primary">
+                    <i class="fas fa-cog me-1"></i>Gestionar altas de clubes
+                </a>
+            <?php endif; ?>
         </div>
         <div class="card-body p-0">
             <?php if ($stats_afiliados_sin_club > 0): ?>

@@ -33,15 +33,19 @@ class ClubHelper {
      */
     public static function getClubesByOrganizacionId(int $organizacion_id): array {
         try {
-            if (self::hasCodOrg()) {
-                $stmt = DB::pdo()->prepare("SELECT id FROM clubes WHERE (organizacion_id = ? OR organizacion_id = (SELECT id FROM organizaciones WHERE cod_org = ? LIMIT 1)) AND estatus = 1");
-                $stmt->execute([$organizacion_id, $organizacion_id]);
-            } else {
-                $stmt = DB::pdo()->prepare("SELECT id FROM clubes WHERE organizacion_id = ? AND estatus = 1");
-                $stmt->execute([$organizacion_id]);
+            $pdo = DB::pdo();
+            $hasCod = self::hasCodOrg();
+            $stmt = $pdo->prepare($hasCod
+                ? "SELECT * FROM organizaciones WHERE (id = ? OR cod_org = ?) AND estatus = 1 LIMIT 1"
+                : "SELECT * FROM organizaciones WHERE id = ? AND estatus = 1 LIMIT 1");
+            $stmt->execute($hasCod ? [$organizacion_id, $organizacion_id] : [$organizacion_id]);
+            $org = $stmt->fetch(PDO::FETCH_ASSOC);
+            if (!$org) {
+                return [];
             }
-            $ids = $stmt->fetchAll(PDO::FETCH_COLUMN);
-            return array_values(array_map('intval', $ids ?: []));
+            require_once __DIR__ . '/OrganizacionDashboardStats.php';
+
+            return OrganizacionDashboardStats::clubIdsForOrganizacion($pdo, $org, $hasCod);
         } catch (Exception $e) {
             error_log("ClubHelper::getClubesByOrganizacionId error: " . $e->getMessage());
             return [];

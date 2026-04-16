@@ -53,6 +53,30 @@ final class OrganizacionDashboardStats
         return [$sql, array_merge($ids, [$org_entidad, $org_entidad])];
     }
 
+    /**
+     * IDs de clubes activos vinculados a la organización (misma lógica que el dashboard).
+     *
+     * @param array<string, mixed> $organizacion Fila de organizaciones (id, cod_org, entidad)
+     * @return int[]
+     */
+    public static function clubIdsForOrganizacion(PDO $pdo, array $organizacion, bool $has_cod_org): array
+    {
+        $org_pk = (int) ($organizacion['id'] ?? 0);
+        if ($org_pk <= 0) {
+            return [];
+        }
+        $org_ref = (int) ($organizacion['cod_org'] ?? 0);
+        if ($org_ref <= 0) {
+            $org_ref = $org_pk;
+        }
+        $org_entidad = (int) ($organizacion['entidad'] ?? 0);
+        [$clubWhere, $clubParams] = self::clubScopeSqlAndParams($org_pk, $org_ref, $org_entidad);
+        $stmt = $pdo->prepare("SELECT DISTINCT c.id FROM clubes c WHERE {$clubWhere}");
+        $stmt->execute($clubParams);
+
+        return array_values(array_map('intval', $stmt->fetchAll(PDO::FETCH_COLUMN) ?: []));
+    }
+
     /** WHERE sobre tournaments (alias t) + parámetros; $activosProximos añade fechator >= CURDATE() */
     private static function torneoScopeSqlAndParams(
         PDO $pdo,
