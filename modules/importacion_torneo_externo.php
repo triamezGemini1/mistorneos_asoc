@@ -297,6 +297,7 @@ $url_plantilla_equipos = 'index.php?page=torneo_gestion&action=carga_masiva_equi
 $url_import_individual = $url_panel . '#importacion-masiva';
 ?>
 <style>
+    .imp-contenedor-carga { max-width: 880px; margin-left: auto; margin-right: auto; }
     .imp-paso-num { width:2.25rem; height:2.25rem; border-radius:50%; display:inline-flex; align-items:center; justify-content:center; font-weight:700; font-size:1.1rem; }
     .imp-card-paso { border-left: 4px solid var(--bs-card-border-color); }
     .imp-card-paso.paso-1 { border-left-color: #0d6efd; }
@@ -307,8 +308,14 @@ $url_import_individual = $url_panel . '#importacion-masiva';
     .imp-card-paso.paso-aux { border-left-color: #0dcaf0; }
     .imp-seccion { background: #f8f9fa; border-radius: 8px; padding: .75rem 1rem; margin-bottom: .75rem; }
     .imp-seccion h6 { font-size: .72rem; text-transform: uppercase; letter-spacing: .04em; color: #6c757d; margin-bottom: .35rem; }
+    .imp-seccion:last-child { margin-bottom: 0; }
+    .imp-paso-texto .imp-seccion:last-child { margin-bottom: 0; }
+    .imp-paso-completado { max-width: 100%; }
+    @media (min-width: 992px) {
+        .imp-paso-completado { max-width: 50%; }
+    }
 </style>
-<div class="container-fluid py-4" style="max-width:1040px">
+<div class="container-fluid py-4 imp-contenedor-carga">
     <div class="card mb-4 shadow-sm border-0 bg-light">
         <div class="card-body py-3">
             <h1 class="h4 mb-1"><i class="fas fa-file-import text-primary me-2"></i>Carga de datos desde otra plataforma</h1>
@@ -352,35 +359,41 @@ $url_import_individual = $url_panel . '#importacion-masiva';
             </div>
         </div>
         <div class="card-body pt-0">
-            <div class="row g-2 small">
-                <div class="col-md-6 col-lg-3">
-                    <div class="border rounded p-2 h-100 bg-primary bg-opacity-10">
-                        <strong class="text-primary">Paso 1</strong> — Elegir torneo destino.
+            <div class="row g-3 align-items-start">
+                <div class="col-12 col-lg-6 imp-paso-texto">
+                    <div class="row g-2 small">
+                        <div class="col-12 col-sm-6">
+                            <div class="border rounded p-2 h-100 bg-primary bg-opacity-10">
+                                <strong class="text-primary">Paso 1</strong> — Elegir torneo destino.
+                            </div>
+                        </div>
+                        <div class="col-12 col-sm-6">
+                            <div class="border rounded p-2 h-100 bg-warning bg-opacity-25">
+                                <strong class="text-dark">Paso 2</strong> — <strong>Clubes (Excel)</strong> antes de homologar: crear clubes de origen para que los atletas queden vinculados a su club.
+                            </div>
+                        </div>
+                        <div class="col-12 col-sm-6">
+                            <div class="border rounded p-2 h-100 bg-secondary bg-opacity-10">
+                                <strong class="text-secondary">(Opcional)</strong> — Inscribir jugadores/equipos si aún no están.
+                            </div>
+                        </div>
+                        <div class="col-12 col-sm-6">
+                            <div class="border rounded p-2 h-100 bg-success bg-opacity-10">
+                                <strong class="text-success">Paso 3</strong> — Excel homologación + resultados → <code>partiresul</code>.
+                            </div>
+                        </div>
                     </div>
                 </div>
-                <div class="col-md-6 col-lg-3">
-                    <div class="border rounded p-2 h-100 bg-warning bg-opacity-25">
-                        <strong class="text-dark">Paso 2</strong> — <strong>Clubes (Excel)</strong> antes de homologar: crear clubes de origen para que los atletas queden vinculados a su club.
+                <div class="col-12 col-lg-6">
+                    <div class="alert alert-info small mb-0 h-100">
+                        <strong>Cómo funciona (sin cédula en resultados)</strong>
+                        <ol class="mb-0 ps-3 mt-2">
+                            <li><strong>Tabla homologación</strong> (solo ahí va la cédula): una columna = <em>id externo</em> (37 — el mismo que en resultados), otra = <em>cédula</em> (4906763). Con la cédula se busca en <code>usuarios</code> → <code>id_usuario</code> 7009.</li>
+                            <li>Queda el mapa: <strong>id externo 37 = id Mistorneos 7009</strong>.</li>
+                            <li><strong>Tabla resultados</strong>: columna <code>usuario</code> trae <strong>37</strong> (no hace falta cédula). El sistema hace: 37 → 7009 y guarda en <code>partiresul</code> con 7009.</li>
+                        </ol>
                     </div>
                 </div>
-                <div class="col-md-6 col-lg-3">
-                    <div class="border rounded p-2 h-100 bg-secondary bg-opacity-10">
-                        <strong class="text-secondary">(Opcional)</strong> — Inscribir jugadores/equipos si aún no están.
-                    </div>
-                </div>
-                <div class="col-md-6 col-lg-3">
-                    <div class="border rounded p-2 h-100 bg-success bg-opacity-10">
-                        <strong class="text-success">Paso 3</strong> — Excel homologación + resultados → <code>partiresul</code>.
-                    </div>
-                </div>
-            </div>
-            <div class="alert alert-info small mb-0 mt-3">
-                <strong>Cómo funciona (sin cédula en resultados)</strong>
-                <ol class="mb-0 ps-3 mt-2">
-                    <li><strong>Tabla homologación</strong> (solo ahí va la cédula): una columna = <em>id externo</em> (37 — el mismo que en resultados), otra = <em>cédula</em> (4906763). Con la cédula se busca en <code>usuarios</code> → <code>id_usuario</code> 7009.</li>
-                    <li>Queda el mapa: <strong>id externo 37 = id Mistorneos 7009</strong>.</li>
-                    <li><strong>Tabla resultados</strong>: columna <code>usuario</code> trae <strong>37</strong> (no hace falta cédula). El sistema hace: 37 → 7009 y guarda en <code>partiresul</code> con 7009.</li>
-                </ol>
             </div>
         </div>
     </div>
@@ -395,42 +408,45 @@ $url_import_individual = $url_panel . '#importacion-masiva';
             </div>
         </div>
         <div class="card-body">
-            <div class="imp-seccion">
-                <h6>Qué hace este paso</h6>
-                <p class="small mb-0">Asocia toda la carga al torneo que elija. Los registros van a <code>partiresul</code> con ese <code>id_torneo</code>. La <strong>fecha de partida</strong> de cada fila será la <strong>fecha del torneo</strong> en Mistorneos.</p>
+            <div class="row g-3 align-items-start">
+                <div class="col-12 col-lg-6 imp-paso-texto">
+                    <div class="imp-seccion">
+                        <h6>Qué hace este paso</h6>
+                        <p class="small mb-0">Asocia toda la carga al torneo que elija. Los registros van a <code>partiresul</code> con ese <code>id_torneo</code>. La <strong>fecha de partida</strong> de cada fila será la <strong>fecha del torneo</strong> en Mistorneos.</p>
+                    </div>
+                    <div class="imp-seccion">
+                        <h6>Qué debe hacer usted</h6>
+                        <ol class="small mb-0 ps-3">
+                            <li>El torneo debe existir ya (creado en gestión de torneos).</li>
+                            <li>Elija el torneo en la lista y pulse <strong>Aplicar</strong>.</li>
+                            <li>Después podrá crear clubes desde Excel (paso 2) y luego cargar homologación/resultados (paso 3).</li>
+                        </ol>
+                    </div>
+                </div>
+                <div class="col-12 col-lg-6 imp-paso-acciones">
+                    <form method="get" action="index.php" class="mb-0">
+                        <input type="hidden" name="page" value="importacion_torneo_externo">
+                        <label class="form-label fw-semibold">Torneo destino</label>
+                        <select name="torneo_id" class="form-select" required>
+                            <option value="">— Seleccione un torneo —</option>
+                            <?php foreach ($torneos as $t): ?>
+                                <option value="<?= (int)$t['id'] ?>" <?= $torneo_id_sel === (int)$t['id'] ? 'selected' : '' ?>>
+                                    <?= htmlspecialchars($t['nombre'] . ' · ' . $t['fechator'] . ' · mod.' . (int)$t['modalidad']) ?>
+                                </option>
+                            <?php endforeach; ?>
+                        </select>
+                        <button type="submit" class="btn btn-primary w-100 mt-2"><i class="fas fa-check me-1"></i> Aplicar paso 1</button>
+                    </form>
+                    <?php if ($torneo_actual): ?>
+                        <div class="mt-3 p-3 border border-success rounded bg-success bg-opacity-10 imp-paso-completado">
+                            <div class="small text-success fw-bold mb-1"><i class="fas fa-check-circle me-1"></i> Paso 1 completado</div>
+                            <div><strong><?= htmlspecialchars((string)$torneo_actual['nombre']) ?></strong> <span class="badge bg-secondary"><?= htmlspecialchars($etiqueta_modalidad) ?></span></div>
+                            <a href="<?= htmlspecialchars($url_panel) ?>" class="btn btn-sm btn-outline-dark mt-2" target="_blank" rel="noopener"><i class="fas fa-external-link-alt me-1"></i> Abrir panel del torneo</a>
+                        </div>
+                    <?php endif; ?>
+                </div>
             </div>
-            <div class="imp-seccion">
-                <h6>Qué debe hacer usted</h6>
-                <ol class="small mb-0 ps-3">
-                    <li>El torneo debe existir ya (creado en gestión de torneos).</li>
-                    <li>Elija el torneo en la lista y pulse <strong>Aplicar</strong>.</li>
-                    <li>Después podrá crear clubes desde Excel (paso 2) y luego cargar homologación/resultados (paso 3).</li>
-                </ol>
-            </div>
-            <form method="get" action="index.php" class="row g-2 align-items-end mt-2">
-                <input type="hidden" name="page" value="importacion_torneo_externo">
-                <div class="col-md-9">
-                    <label class="form-label fw-semibold">Torneo destino</label>
-                    <select name="torneo_id" class="form-select" required>
-                        <option value="">— Seleccione un torneo —</option>
-                        <?php foreach ($torneos as $t): ?>
-                            <option value="<?= (int)$t['id'] ?>" <?= $torneo_id_sel === (int)$t['id'] ? 'selected' : '' ?>>
-                                <?= htmlspecialchars($t['nombre'] . ' · ' . $t['fechator'] . ' · mod.' . (int)$t['modalidad']) ?>
-                            </option>
-                        <?php endforeach; ?>
-                    </select>
-                </div>
-                <div class="col-md-3">
-                    <button type="submit" class="btn btn-primary w-100"><i class="fas fa-check me-1"></i> Aplicar paso 1</button>
-                </div>
-            </form>
-            <?php if ($torneo_actual): ?>
-                <div class="mt-3 p-3 border border-success rounded bg-success bg-opacity-10">
-                    <div class="small text-success fw-bold mb-1"><i class="fas fa-check-circle me-1"></i> Paso 1 completado</div>
-                    <div><strong><?= htmlspecialchars((string)$torneo_actual['nombre']) ?></strong> <span class="badge bg-secondary"><?= htmlspecialchars($etiqueta_modalidad) ?></span></div>
-                    <a href="<?= htmlspecialchars($url_panel) ?>" class="btn btn-sm btn-outline-dark mt-2" target="_blank" rel="noopener"><i class="fas fa-external-link-alt me-1"></i> Abrir panel del torneo</a>
-                </div>
-            <?php else: ?>
+            <?php if (! $torneo_actual): ?>
                 <p class="text-warning small mt-3 mb-0"><i class="fas fa-hand-point-up me-1"></i> Debe completar el paso 1 para desbloquear la creación de clubes y la carga de archivos (pasos 2 y 3).</p>
             <?php endif; ?>
         </div>
@@ -447,20 +463,26 @@ $url_import_individual = $url_panel . '#importacion-masiva';
             </div>
         </div>
         <div class="card-body">
-            <div class="imp-seccion">
-                <h6>Columnas del archivo</h6>
-                <p class="small mb-0"><strong>Obligatoria:</strong> <code>nombre</code> (o <code>club</code> / <code>nombre_club</code>). <strong>Opcionales:</strong> <code>direccion</code>, <code>telefono</code>, <code>email</code>, <code>delegado</code>, <code>organizacion_id</code>, <code>entidad</code>. Si no indica organización, se usa la del torneo (organización responsable). Los clubes con el mismo nombre en la misma organización no se duplican.</p>
-            </div>
-            <form method="post" enctype="multipart/form-data" class="mt-2">
-                <input type="hidden" name="csrf_token" value="<?= htmlspecialchars(CSRF::token()) ?>">
-                <input type="hidden" name="accion" value="importar_clubes_excel">
-                <input type="hidden" name="torneo_id" value="<?= (int)$torneo_id_sel ?>">
-                <div class="mb-3">
-                    <label class="form-label fw-bold">Archivo (.xlsx, .csv o .txt)</label>
-                    <input type="file" name="archivo_clubes" class="form-control" accept=".xlsx,.csv,.txt" required>
+            <div class="row g-3 align-items-start">
+                <div class="col-12 col-lg-6 imp-paso-texto">
+                    <div class="imp-seccion">
+                        <h6>Columnas del archivo</h6>
+                        <p class="small mb-0"><strong>Obligatoria:</strong> <code>nombre</code> (o <code>club</code> / <code>nombre_club</code>). <strong>Opcionales:</strong> <code>direccion</code>, <code>telefono</code>, <code>email</code>, <code>delegado</code>, <code>organizacion_id</code>, <code>entidad</code>. Si no indica organización, se usa la del torneo (organización responsable). Los clubes con el mismo nombre en la misma organización no se duplican.</p>
+                    </div>
                 </div>
-                <button type="submit" class="btn btn-warning text-dark fw-bold"><i class="fas fa-building me-2"></i>Importar clubes</button>
-            </form>
+                <div class="col-12 col-lg-6 imp-paso-acciones">
+                    <form method="post" enctype="multipart/form-data">
+                        <input type="hidden" name="csrf_token" value="<?= htmlspecialchars(CSRF::token()) ?>">
+                        <input type="hidden" name="accion" value="importar_clubes_excel">
+                        <input type="hidden" name="torneo_id" value="<?= (int)$torneo_id_sel ?>">
+                        <div class="mb-3">
+                            <label class="form-label fw-bold">Archivo (.xlsx, .csv o .txt)</label>
+                            <input type="file" name="archivo_clubes" class="form-control" accept=".xlsx,.csv,.txt" required>
+                        </div>
+                        <button type="submit" class="btn btn-warning text-dark fw-bold w-100"><i class="fas fa-building me-2"></i>Importar clubes</button>
+                    </form>
+                </div>
+            </div>
         </div>
     </div>
 
@@ -474,35 +496,41 @@ $url_import_individual = $url_panel . '#importacion-masiva';
             </div>
         </div>
         <div class="card-body">
-            <div class="imp-seccion">
-                <h6>Formato del archivo</h6>
-                <p class="small mb-2"><strong>Hoja 1 — Homologación:</strong> dos columnas: <code>usuario</code> (o id externo: 37, 81…) y <code>cédula</code>. La cédula solo sirve para buscar en Mistorneos. Mismo <strong>37</strong> debe aparecer en resultados.</p>
-                <p class="small mb-2"><strong>Hoja 2 — Resultados:</strong> <strong>sin cédula</strong>. Columnas partida, mesa, secuencia, <code>usuario</code> (= 37, igual que hoja 1), r1, r2…</p>
-                <p class="small mb-0"><strong>Una sola hoja:</strong> arriba bloque homologación (usuario + cédula por fila); debajo fila con partida/mesa/secuencia y resto de resultados.</p>
-            </div>
-            <div class="imp-seccion">
-                <h6>Qué hace el sistema</h6>
-                <ol class="small mb-0 ps-3">
-                    <li>Homologación: id externo + cédula → mapa <strong>id_externo → id_usuario</strong> (la cédula no se usa en resultados).</li>
-                    <li>Resultados: solo el id externo en <code>usuario</code>; se reemplaza por <code>id_usuario</code> del mapa.</li>
-                    <li>Inserta en <code>partiresul</code> con los mismos parámetros que el panel (mesa, secuencia, r1/r2, ff, efectividad, zapato/chancleta, fecha torneo, registrado_por).</li>
-                </ol>
-            </div>
-            <form method="post" enctype="multipart/form-data" class="mt-2">
-                <input type="hidden" name="csrf_token" value="<?= htmlspecialchars(CSRF::token()) ?>">
-                <input type="hidden" name="accion" value="fase2_unificado">
-                <input type="hidden" name="torneo_id" value="<?= (int)$torneo_id_sel ?>">
-                <div class="mb-3">
-                    <label class="form-label fw-bold">Archivo Excel (.xlsx)</label>
-                    <input type="file" name="archivo_unico" class="form-control" accept=".xlsx,.csv,.txt" required>
-                    <div class="form-text">CSV solo si en un mismo archivo puede ponerse primero el bloque cédula+usuario y luego una fila con partida/mesa/secuencia (sin líneas en blanco entre bloques).</div>
+            <div class="row g-3 align-items-start">
+                <div class="col-12 col-lg-6 imp-paso-texto">
+                    <div class="imp-seccion">
+                        <h6>Formato del archivo</h6>
+                        <p class="small mb-2"><strong>Hoja 1 — Homologación:</strong> dos columnas: <code>usuario</code> (o id externo: 37, 81…) y <code>cédula</code>. La cédula solo sirve para buscar en Mistorneos. Mismo <strong>37</strong> debe aparecer en resultados.</p>
+                        <p class="small mb-2"><strong>Hoja 2 — Resultados:</strong> <strong>sin cédula</strong>. Columnas partida, mesa, secuencia, <code>usuario</code> (= 37, igual que hoja 1), r1, r2…</p>
+                        <p class="small mb-0"><strong>Una sola hoja:</strong> arriba bloque homologación (usuario + cédula por fila); debajo fila con partida/mesa/secuencia y resto de resultados.</p>
+                    </div>
+                    <div class="imp-seccion">
+                        <h6>Qué hace el sistema</h6>
+                        <ol class="small mb-0 ps-3">
+                            <li>Homologación: id externo + cédula → mapa <strong>id_externo → id_usuario</strong> (la cédula no se usa en resultados).</li>
+                            <li>Resultados: solo el id externo en <code>usuario</code>; se reemplaza por <code>id_usuario</code> del mapa.</li>
+                            <li>Inserta en <code>partiresul</code> con los mismos parámetros que el panel (mesa, secuencia, r1/r2, ff, efectividad, zapato/chancleta, fecha torneo, registrado_por).</li>
+                        </ol>
+                    </div>
                 </div>
-                <div class="form-check mb-3">
-                    <input type="checkbox" class="form-check-input" name="reemplazar_unificado" value="1" id="repU">
-                    <label class="form-check-label small" for="repU">Vaciar <code>partiresul</code> de este torneo antes de importar</label>
+                <div class="col-12 col-lg-6 imp-paso-acciones">
+                    <form method="post" enctype="multipart/form-data">
+                        <input type="hidden" name="csrf_token" value="<?= htmlspecialchars(CSRF::token()) ?>">
+                        <input type="hidden" name="accion" value="fase2_unificado">
+                        <input type="hidden" name="torneo_id" value="<?= (int)$torneo_id_sel ?>">
+                        <div class="mb-3">
+                            <label class="form-label fw-bold">Archivo Excel (.xlsx)</label>
+                            <input type="file" name="archivo_unico" class="form-control" accept=".xlsx,.csv,.txt" required>
+                            <div class="form-text">CSV solo si en un mismo archivo puede ponerse primero el bloque cédula+usuario y luego una fila con partida/mesa/secuencia (sin líneas en blanco entre bloques).</div>
+                        </div>
+                        <div class="form-check mb-3">
+                            <input type="checkbox" class="form-check-input" name="reemplazar_unificado" value="1" id="repU">
+                            <label class="form-check-label small" for="repU">Vaciar <code>partiresul</code> de este torneo antes de importar</label>
+                        </div>
+                        <button type="submit" class="btn btn-primary btn-lg w-100"><i class="fas fa-cloud-upload-alt me-2"></i>Procesar un solo archivo → partiresul</button>
+                    </form>
                 </div>
-                <button type="submit" class="btn btn-primary btn-lg"><i class="fas fa-cloud-upload-alt me-2"></i>Procesar un solo archivo → partiresul</button>
-            </form>
+            </div>
         </div>
     </div>
 
@@ -516,20 +544,28 @@ $url_import_individual = $url_panel . '#importacion-masiva';
             </div>
         </div>
         <div class="card-body">
-            <div class="imp-seccion">
-                <h6>Qué hace este paso</h6>
-                <p class="small mb-0">Es el mismo flujo que en el <strong>panel del torneo</strong>: carga masiva de equipos o importación masiva individual. No sustituye la homologación ni el archivo de resultados.</p>
+            <div class="row g-3 align-items-start">
+                <div class="col-12 col-lg-6 imp-paso-texto">
+                    <div class="imp-seccion">
+                        <h6>Qué hace este paso</h6>
+                        <p class="small mb-0">Es el mismo flujo que en el <strong>panel del torneo</strong>: carga masiva de equipos o importación masiva individual. No sustituye la homologación ni el archivo de resultados.</p>
+                    </div>
+                    <div class="imp-seccion">
+                        <h6>Cuándo usarlo</h6>
+                        <p class="small mb-0">Si los jugadores aún no están inscritos en este torneo, hágalo antes o después del paso 1, pero <strong>antes</strong> de depender de listados del panel (posiciones, etc.).</p>
+                    </div>
+                </div>
+                <div class="col-12 col-lg-6 imp-paso-acciones">
+                    <?php if ($es_equipos): ?>
+                        <div class="d-grid gap-2">
+                            <a href="<?= htmlspecialchars($url_carga_equipos) ?>" class="btn btn-success"><i class="fas fa-file-upload me-1"></i> Carga masiva equipos</a>
+                            <a href="<?= htmlspecialchars($url_plantilla_equipos) ?>" class="btn btn-outline-secondary"><i class="fas fa-download me-1"></i> Plantilla CSV</a>
+                        </div>
+                    <?php else: ?>
+                        <a href="<?= htmlspecialchars($url_import_individual) ?>" class="btn btn-success w-100"><i class="fas fa-file-csv me-1"></i> Importación masiva (abre panel)</a>
+                    <?php endif; ?>
+                </div>
             </div>
-            <div class="imp-seccion">
-                <h6>Cuándo usarlo</h6>
-                <p class="small mb-0">Si los jugadores aún no están inscritos en este torneo, hágalo antes o después del paso 1, pero <strong>antes</strong> de depender de listados del panel (posiciones, etc.).</p>
-            </div>
-            <?php if ($es_equipos): ?>
-                <a href="<?= htmlspecialchars($url_carga_equipos) ?>" class="btn btn-success"><i class="fas fa-file-upload me-1"></i> Carga masiva equipos</a>
-                <a href="<?= htmlspecialchars($url_plantilla_equipos) ?>" class="btn btn-outline-secondary ms-1"><i class="fas fa-download me-1"></i> Plantilla CSV</a>
-            <?php else: ?>
-                <a href="<?= htmlspecialchars($url_import_individual) ?>" class="btn btn-success"><i class="fas fa-file-csv me-1"></i> Importación masiva (abre panel)</a>
-            <?php endif; ?>
         </div>
     </div>
 
@@ -543,20 +579,26 @@ $url_import_individual = $url_panel . '#importacion-masiva';
             </div>
         </div>
         <div class="card-body">
-            <div class="imp-seccion">
-                <h6>Solo en homologación va la cédula</h6>
-                <p class="small mb-0">Cada fila: <strong>id externo</strong> (37 — el mismo que en resultados) + <strong>cédula</strong> (4906763). Con la cédula se consulta <code>usuarios</code> → <code>id_usuario</code> (7009). Así el sistema sabe: <strong>37 → 7009</strong>.</p>
-            </div>
-            <div class="imp-seccion">
-                <h6>Columnas (fila 1 = títulos)</h6>
-                <ul class="small mb-0 ps-3">
-                    <li>Una columna: id del otro sistema (<code>usuario</code>, <code>id</code>…): 37, 81…</li>
-                    <li>Otra: <strong>cédula</strong> (solo aquí; en resultados no hace falta).</li>
-                </ul>
-            </div>
-            <div class="imp-seccion border border-warning">
-                <h6 class="text-warning">Atención</h6>
-                <p class="small mb-0">Cada cédula debe existir en Mistorneos; si no, ese id externo no entrará al mapa y en resultados las filas con ese <code>usuario</code> no se podrán guardar.</p>
+            <div class="row g-3 align-items-start">
+                <div class="col-12 col-lg-6 imp-paso-texto">
+                    <div class="imp-seccion">
+                        <h6>Solo en homologación va la cédula</h6>
+                        <p class="small mb-0">Cada fila: <strong>id externo</strong> (37 — el mismo que en resultados) + <strong>cédula</strong> (4906763). Con la cédula se consulta <code>usuarios</code> → <code>id_usuario</code> (7009). Así el sistema sabe: <strong>37 → 7009</strong>.</p>
+                    </div>
+                    <div class="imp-seccion">
+                        <h6>Columnas (fila 1 = títulos)</h6>
+                        <ul class="small mb-0 ps-3">
+                            <li>Una columna: id del otro sistema (<code>usuario</code>, <code>id</code>…): 37, 81…</li>
+                            <li>Otra: <strong>cédula</strong> (solo aquí; en resultados no hace falta).</li>
+                        </ul>
+                    </div>
+                </div>
+                <div class="col-12 col-lg-6">
+                    <div class="imp-seccion border border-warning h-100">
+                        <h6 class="text-warning">Atención</h6>
+                        <p class="small mb-0">Cada cédula debe existir en Mistorneos; si no, ese id externo no entrará al mapa y en resultados las filas con ese <code>usuario</code> no se podrán guardar.</p>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
@@ -571,20 +613,26 @@ $url_import_individual = $url_panel . '#importacion-masiva';
             </div>
         </div>
         <div class="card-body">
-            <div class="imp-seccion">
-                <h6>Sustitución</h6>
-                <p class="small mb-0">Aquí <strong>no</strong> se usa cédula. Solo el <strong>mismo id</strong> que en la tabla de homologación (ej. <code>usuario</code> = 37). El sistema hace: <strong>37 → id_usuario 7009</strong> (según el mapa) y graba en <code>partiresul</code>.</p>
-            </div>
-            <div class="imp-seccion">
-                <h6>Columnas</h6>
-                <ul class="small mb-0 ps-3">
-                    <li><code>partida</code>, <code>mesa</code>, <code>secuencia</code>, <code>r1</code>/<code>r2</code> (u resultado1/2)</li>
-                    <li><code>usuario</code> = id externo (37). <em>No hace falta cédula en esta tabla.</em></li>
-                </ul>
-            </div>
-            <div class="imp-seccion border border-success bg-success bg-opacity-10">
-                <h6 class="text-success">Ejemplo</h6>
-                <p class="small mb-0">Homologación: 37 + 4906763 → 7009. Resultados: <code>usuario</code> 37 → se guarda <strong>7009</strong>.</p>
+            <div class="row g-3 align-items-start">
+                <div class="col-12 col-lg-6 imp-paso-texto">
+                    <div class="imp-seccion">
+                        <h6>Sustitución</h6>
+                        <p class="small mb-0">Aquí <strong>no</strong> se usa cédula. Solo el <strong>mismo id</strong> que en la tabla de homologación (ej. <code>usuario</code> = 37). El sistema hace: <strong>37 → id_usuario 7009</strong> (según el mapa) y graba en <code>partiresul</code>.</p>
+                    </div>
+                    <div class="imp-seccion">
+                        <h6>Columnas</h6>
+                        <ul class="small mb-0 ps-3">
+                            <li><code>partida</code>, <code>mesa</code>, <code>secuencia</code>, <code>r1</code>/<code>r2</code> (u resultado1/2)</li>
+                            <li><code>usuario</code> = id externo (37). <em>No hace falta cédula en esta tabla.</em></li>
+                        </ul>
+                    </div>
+                </div>
+                <div class="col-12 col-lg-6">
+                    <div class="imp-seccion border border-success bg-success bg-opacity-10 h-100">
+                        <h6 class="text-success">Ejemplo</h6>
+                        <p class="small mb-0">Homologación: 37 + 4906763 → 7009. Resultados: <code>usuario</code> 37 → se guarda <strong>7009</strong>.</p>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
@@ -599,49 +647,57 @@ $url_import_individual = $url_panel . '#importacion-masiva';
             </div>
         </div>
         <div class="card-body">
-            <div class="imp-seccion mb-3">
-                <h6>Secuencia al pulsar el botón</h6>
-                <ol class="small mb-0 ps-3">
-                    <li>Lee el archivo de <strong>homologación</strong> y construye mapas cédula → usuario y pareja → lista de usuarios.</li>
-                    <li>Lee el archivo de <strong>resultados</strong> y para cada fila asigna el <code>id_usuario</code> correcto.</li>
-                    <li>Si marcó vaciar, borra antes los resultados previos de este torneo en <code>partiresul</code>.</li>
-                    <li>Inserta cada fila con la misma lógica que el panel (por mesa y secuencia).</li>
-                </ol>
-            </div>
-            <form method="post" enctype="multipart/form-data">
-                <input type="hidden" name="csrf_token" value="<?= htmlspecialchars(CSRF::token()) ?>">
-                <input type="hidden" name="accion" value="fase2_dual">
-                <input type="hidden" name="torneo_id" value="<?= (int)$torneo_id_sel ?>">
-                <div class="row g-3 mb-3">
-                    <div class="col-md-6">
-                        <label class="form-label fw-bold"><span class="badge bg-success me-1">H</span> Archivo homologación (pareja + cédula)</label>
-                        <input type="file" name="archivo_homologacion" class="form-control" accept=".xlsx,.csv,.txt" required>
-                        <div class="form-text">Mismo contenido descrito en la guía «H».</div>
-                    </div>
-                    <div class="col-md-6">
-                        <label class="form-label fw-bold"><span class="badge bg-info text-dark me-1">R</span> Archivo resultados (mesa, secuencia, puntos)</label>
-                        <input type="file" name="archivo_resultados" class="form-control" accept=".xlsx,.csv,.txt" required>
-                        <div class="form-text">Mismo contenido descrito en la guía «R».</div>
+            <div class="row g-3 align-items-start">
+                <div class="col-12 col-lg-6 imp-paso-texto">
+                    <div class="imp-seccion">
+                        <h6>Secuencia al pulsar el botón</h6>
+                        <ol class="small mb-0 ps-3">
+                            <li>Lee el archivo de <strong>homologación</strong> y construye mapas cédula → usuario y pareja → lista de usuarios.</li>
+                            <li>Lee el archivo de <strong>resultados</strong> y para cada fila asigna el <code>id_usuario</code> correcto.</li>
+                            <li>Si marcó vaciar, borra antes los resultados previos de este torneo en <code>partiresul</code>.</li>
+                            <li>Inserta cada fila con la misma lógica que el panel (por mesa y secuencia).</li>
+                        </ol>
                     </div>
                 </div>
-                <div class="card bg-light mb-3">
-                    <div class="card-body py-2">
-                        <div class="form-check">
-                            <input type="checkbox" class="form-check-input" name="reemplazar_partiresul_dual" value="1" id="rep2">
-                            <label class="form-check-label small" for="rep2"><strong>Vaciar partiresul</strong> de este torneo antes de importar (solo si va a recargar todo el histórico de resultados de una vez).</label>
+                <div class="col-12 col-lg-6 imp-paso-acciones">
+                    <form method="post" enctype="multipart/form-data">
+                        <input type="hidden" name="csrf_token" value="<?= htmlspecialchars(CSRF::token()) ?>">
+                        <input type="hidden" name="accion" value="fase2_dual">
+                        <input type="hidden" name="torneo_id" value="<?= (int)$torneo_id_sel ?>">
+                        <div class="mb-3">
+                            <label class="form-label fw-bold"><span class="badge bg-success me-1">H</span> Archivo homologación (pareja + cédula)</label>
+                            <input type="file" name="archivo_homologacion" class="form-control" accept=".xlsx,.csv,.txt" required>
+                            <div class="form-text">Mismo contenido descrito en la guía «H».</div>
                         </div>
-                    </div>
+                        <div class="mb-3">
+                            <label class="form-label fw-bold"><span class="badge bg-info text-dark me-1">R</span> Archivo resultados (mesa, secuencia, puntos)</label>
+                            <input type="file" name="archivo_resultados" class="form-control" accept=".xlsx,.csv,.txt" required>
+                            <div class="form-text">Mismo contenido descrito en la guía «R».</div>
+                        </div>
+                        <div class="card bg-light mb-3">
+                            <div class="card-body py-2">
+                                <div class="form-check">
+                                    <input type="checkbox" class="form-check-input" name="reemplazar_partiresul_dual" value="1" id="rep2">
+                                    <label class="form-check-label small" for="rep2"><strong>Vaciar partiresul</strong> de este torneo antes de importar (solo si va a recargar todo el histórico de resultados de una vez).</label>
+                                </div>
+                            </div>
+                        </div>
+                        <button type="submit" class="btn btn-success btn-lg w-100"><i class="fas fa-save me-2"></i>Ejecutar pasos 2 y 3 → guardar en partiresul</button>
+                    </form>
                 </div>
-                <button type="submit" class="btn btn-success btn-lg"><i class="fas fa-save me-2"></i>Ejecutar pasos 2 y 3 → guardar en partiresul</button>
-            </form>
+            </div>
         </div>
     </div>
     <?php else: ?>
     <div class="card mb-4 border-secondary imp-card-paso paso-15">
-        <div class="card-body text-center py-4 text-muted">
-            <i class="fas fa-lock fa-2x mb-2 d-block"></i>
-            <strong>Pasos 2 y 3 bloqueados</strong>
-            <p class="small mb-0">Complete primero el <strong>paso 1</strong> (seleccionar torneo y Aplicar) para ver las indicaciones y el formulario de archivos.</p>
+        <div class="card-body py-4 text-muted">
+            <div class="row justify-content-center">
+                <div class="col-12 col-lg-6 text-center">
+                    <i class="fas fa-lock fa-2x mb-2 d-block"></i>
+                    <strong>Pasos 2 y 3 bloqueados</strong>
+                    <p class="small mb-0">Complete primero el <strong>paso 1</strong> (seleccionar torneo y Aplicar) para ver las indicaciones y el formulario de archivos.</p>
+                </div>
+            </div>
         </div>
     </div>
     <?php endif; ?>
@@ -653,20 +709,22 @@ $url_import_individual = $url_panel . '#importacion-masiva';
             <span class="fw-bold">Auxiliar — Revisar homologación sin cargar resultados</span>
         </div>
         <div class="card-body">
-            <div class="imp-seccion">
-                <h6>Qué hace</h6>
-                <p class="small mb-0">Sube el mismo archivo del paso 2 y descarga un CSV con la columna <code>id_usuario</code> para revisar cédulas mal cargadas o usuarios faltantes, <strong>sin</strong> tocar <code>partiresul</code>.</p>
+            <div class="row g-3 align-items-start">
+                <div class="col-12 col-lg-6 imp-paso-texto">
+                    <div class="imp-seccion">
+                        <h6>Qué hace</h6>
+                        <p class="small mb-0">Sube el mismo archivo de <strong>homologación</strong> que usaría en el paso 3 y descarga un CSV con la columna <code>id_usuario</code> para revisar cédulas mal cargadas o usuarios faltantes, <strong>sin</strong> tocar <code>partiresul</code>.</p>
+                    </div>
+                </div>
+                <div class="col-12 col-lg-6 imp-paso-acciones">
+                    <form method="post" enctype="multipart/form-data">
+                        <input type="hidden" name="csrf_token" value="<?= htmlspecialchars(CSRF::token()) ?>">
+                        <input type="hidden" name="accion" value="fase1">
+                        <input type="file" name="archivo" class="form-control mb-2" accept=".xlsx,.csv,.txt" required>
+                        <button type="submit" class="btn btn-info text-white w-100"><i class="fas fa-download me-1"></i> Descargar CSV revisión</button>
+                    </form>
+                </div>
             </div>
-            <form method="post" enctype="multipart/form-data" class="row g-2 align-items-end">
-                <input type="hidden" name="csrf_token" value="<?= htmlspecialchars(CSRF::token()) ?>">
-                <input type="hidden" name="accion" value="fase1">
-                <div class="col-md-8">
-                    <input type="file" name="archivo" class="form-control" accept=".xlsx,.csv,.txt" required>
-                </div>
-                <div class="col-md-4">
-                    <button type="submit" class="btn btn-info text-white w-100"><i class="fas fa-download me-1"></i> Descargar CSV revisión</button>
-                </div>
-            </form>
         </div>
     </div>
 </div>
