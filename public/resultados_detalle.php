@@ -72,6 +72,15 @@ $posiciones = [];
 $estadisticas_partidas = [];
 $total_fotos = 0;
 $total_posiciones = 0;
+$has_cod_org = false;
+try {
+    $has_cod_org = (bool)$pdo->query("SHOW COLUMNS FROM organizaciones LIKE 'cod_org'")->fetch(PDO::FETCH_ASSOC);
+} catch (Throwable $ignored) {
+    $has_cod_org = false;
+}
+$org_join = $has_cod_org
+    ? "LEFT JOIN organizaciones o ON (t.club_responsable = o.id OR t.club_responsable = o.cod_org)"
+    : "LEFT JOIN organizaciones o ON t.club_responsable = o.id";
 
 try {
     // Datos del torneo
@@ -83,7 +92,7 @@ try {
             (SELECT COUNT(*) FROM inscritos WHERE torneo_id = t.id AND estatus = 'confirmado') as total_inscritos,
             (SELECT COUNT(*) FROM club_photos WHERE torneo_id = t.id) as total_fotos
         FROM tournaments t
-        LEFT JOIN organizaciones o ON t.club_responsable = o.id
+        {$org_join}
         WHERE t.id = ?
     ");
     $stmt->execute([$torneo_id]);

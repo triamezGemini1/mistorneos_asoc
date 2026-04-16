@@ -10,10 +10,29 @@ declare(strict_types=1);
 class LandingDataService
 {
     private PDO $pdo;
+    private bool $hasCodOrgColumn;
 
     public function __construct(PDO $pdo)
     {
         $this->pdo = $pdo;
+        $this->hasCodOrgColumn = $this->detectCodOrgColumn();
+    }
+
+    private function detectCodOrgColumn(): bool
+    {
+        try {
+            return (bool)$this->pdo->query("SHOW COLUMNS FROM organizaciones LIKE 'cod_org'")->fetch(PDO::FETCH_ASSOC);
+        } catch (Exception $e) {
+            return false;
+        }
+    }
+
+    private function orgJoinExpr(string $tAlias = 't', string $oAlias = 'o'): string
+    {
+        if ($this->hasCodOrgColumn) {
+            return "LEFT JOIN organizaciones {$oAlias} ON (({$tAlias}.club_responsable = {$oAlias}.id OR {$tAlias}.club_responsable = {$oAlias}.cod_org) AND {$oAlias}.estatus = 1)";
+        }
+        return "LEFT JOIN organizaciones {$oAlias} ON {$tAlias}.club_responsable = {$oAlias}.id AND {$oAlias}.estatus = 1";
     }
 
     /**
@@ -69,7 +88,7 @@ class LandingDataService
                 COALESCE(o.entidad, t.entidad, 0) as entidad_torneo,
                 (SELECT COUNT(*) FROM inscritos WHERE torneo_id = t.id AND (estatus IS NULL OR estatus != 'retirado')) as total_inscritos
             FROM tournaments t
-            LEFT JOIN organizaciones o ON t.club_responsable = o.id AND o.estatus = 1
+            " . $this->orgJoinExpr('t', 'o') . "
             LEFT JOIN usuarios u ON o.admin_user_id = u.id AND u.role = 'admin_club'
             WHERE t.estatus = 1 AND t.fechator >= CURDATE()
             {$where_publicar}
@@ -120,7 +139,7 @@ class LandingDataService
                 (SELECT COUNT(*) FROM inscritos WHERE torneo_id = t.id AND (estatus IS NULL OR estatus = 'confirmado')) as total_inscritos
                 {$subquery_fotos}
             FROM tournaments t
-            LEFT JOIN organizaciones o ON t.club_responsable = o.id AND o.estatus = 1
+            " . $this->orgJoinExpr('t', 'o') . "
             LEFT JOIN usuarios u ON o.admin_user_id = u.id AND u.role = 'admin_club'
             WHERE t.estatus = 1 AND t.fechator < CURDATE()
             {$where_publicar}{$where_anio}{$where_tipo}
@@ -175,7 +194,7 @@ class LandingDataService
                 (SELECT COUNT(*) FROM inscritos WHERE torneo_id = t.id AND (estatus IS NULL OR estatus != 'retirado')) as total_inscritos,
                 e.nombre as entidad_nombre
             FROM tournaments t
-            LEFT JOIN organizaciones o ON t.club_responsable = o.id AND o.estatus = 1
+            " . $this->orgJoinExpr('t', 'o') . "
             LEFT JOIN usuarios u ON o.admin_user_id = u.id AND u.role = 'admin_club'
             LEFT JOIN entidad e ON COALESCE(o.entidad, t.entidad) = e.id
             WHERE t.estatus = 1 AND t.fechator >= CURDATE()
@@ -230,7 +249,7 @@ class LandingDataService
                 COALESCE(o.entidad, t.entidad, 0) as entidad_torneo,
                 (SELECT COUNT(*) FROM inscritos WHERE torneo_id = t.id AND (estatus IS NULL OR estatus != 'retirado')) as total_inscritos
             FROM tournaments t
-            LEFT JOIN organizaciones o ON t.club_responsable = o.id AND o.estatus = 1
+            " . $this->orgJoinExpr('t', 'o') . "
             LEFT JOIN usuarios u ON o.admin_user_id = u.id AND u.role = 'admin_club'
             WHERE t.estatus = 1 AND t.fechator >= CURDATE()
               AND t.club_responsable IN ({$ph})
@@ -256,7 +275,11 @@ class LandingDataService
             return [];
         }
         try {
-            $stmt = $this->pdo->prepare("SELECT id FROM organizaciones WHERE entidad = ? AND estatus = 1");
+            if ($this->hasCodOrgColumn) {
+                $stmt = $this->pdo->prepare("SELECT COALESCE(NULLIF(cod_org,0), id) FROM organizaciones WHERE entidad = ? AND estatus = 1");
+            } else {
+                $stmt = $this->pdo->prepare("SELECT id FROM organizaciones WHERE entidad = ? AND estatus = 1");
+            }
             $stmt->execute([$entidad_id]);
             return array_map('intval', $stmt->fetchAll(PDO::FETCH_COLUMN));
         } catch (Exception $e) {
@@ -354,7 +377,7 @@ class LandingDataService
                     COUNT(DISTINCT c.id) AS total_clubes
                 FROM entidad e
                 LEFT JOIN organizaciones o ON o.entidad = e.{$idColSafe} AND o.estatus = 1
-                LEFT JOIN clubes c ON c.organizacion_id = o.id AND c.estatus = 1
+                LEFT JOIN clubes c ON (c.organizacion_id = o.id" . ($this->hasCodOrgColumn ? " OR c.organizacion_id = o.cod_org" : "") . ") AND c.estatus = 1
                 GROUP BY e.{$idColSafe}, e.nombre
                 ORDER BY e.nombre ASC
             ");
@@ -396,7 +419,7 @@ class LandingDataService
                     COUNT(DISTINCT c.id) as total_clubes
                 FROM entidad e
                 INNER JOIN organizaciones o ON o.entidad = e.{$idColSafe} AND o.estatus = 1
-                LEFT JOIN clubes c ON c.organizacion_id = o.id AND c.estatus = 1
+                LEFT JOIN clubes c ON (c.organizacion_id = o.id" . ($this->hasCodOrgColumn ? " OR c.organizacion_id = o.cod_org" : "") . ") AND c.estatus = 1
                 GROUP BY e.{$idColSafe}, e.nombre
                 HAVING total_organizaciones > 0
                 ORDER BY e.nombre ASC
@@ -418,7 +441,7 @@ class LandingDataService
                     COUNT(DISTINCT o.id) AS total_organizaciones,
                     COUNT(DISTINCT c.id) AS total_clubes
                 FROM organizaciones o
-                LEFT JOIN clubes c ON c.organizacion_id = o.id AND c.estatus = 1
+                LEFT JOIN clubes c ON (c.organizacion_id = o.id" . ($this->hasCodOrgColumn ? " OR c.organizacion_id = o.cod_org" : "") . ") AND c.estatus = 1
                 WHERE o.estatus = 1 AND o.entidad > 0
                 GROUP BY o.entidad
                 ORDER BY nombre ASC
@@ -450,9 +473,9 @@ class LandingDataService
                     o.responsable,
                     o.telefono,
                     o.email,
-                    (SELECT COUNT(*) FROM clubes c WHERE c.organizacion_id = o.id AND c.estatus = 1) as total_clubes,
+                    (SELECT COUNT(*) FROM clubes c WHERE (c.organizacion_id = o.id" . ($this->hasCodOrgColumn ? " OR c.organizacion_id = o.cod_org" : "") . ") AND c.estatus = 1) as total_clubes,
                     (SELECT COUNT(*) FROM tournaments t
-                     WHERE t.club_responsable = o.id AND t.estatus = 1 AND t.fechator >= CURDATE()) as torneos_activos
+                     WHERE (t.club_responsable = o.id" . ($this->hasCodOrgColumn ? " OR t.club_responsable = o.cod_org" : "") . ") AND t.estatus = 1 AND t.fechator >= CURDATE()) as torneos_activos
                 FROM organizaciones o
                 WHERE o.entidad = ? AND o.estatus = 1
                 ORDER BY o.nombre ASC
@@ -477,6 +500,15 @@ class LandingDataService
             return [];
         }
         try {
+            $orgRealId = $org_id;
+            if ($this->hasCodOrgColumn) {
+                $stOrg = $this->pdo->prepare("SELECT id FROM organizaciones WHERE id = ? OR cod_org = ? LIMIT 1");
+                $stOrg->execute([$org_id, $org_id]);
+                $orgRealId = (int)$stOrg->fetchColumn();
+                if ($orgRealId <= 0) {
+                    return [];
+                }
+            }
             $stmt = $this->pdo->prepare("
                 SELECT
                     c.id,
@@ -490,7 +522,7 @@ class LandingDataService
                 WHERE c.organizacion_id = ? AND c.estatus = 1
                 ORDER BY c.nombre ASC
             ");
-            $stmt->execute([$org_id, $org_id]);
+            $stmt->execute([$org_id, $orgRealId]);
             return $stmt->fetchAll(PDO::FETCH_ASSOC);
         } catch (Exception $e) {
             error_log('LandingDataService getClubesPorOrganizacion: ' . $e->getMessage());

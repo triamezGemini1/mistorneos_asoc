@@ -31,6 +31,12 @@ if (!$is_admin_general && !$organizacion_id) {
 }
 
 $pdo = DB::pdo();
+$has_cod_org = false;
+try {
+    $has_cod_org = (bool)$pdo->query("SHOW COLUMNS FROM organizaciones LIKE 'cod_org'")->fetch(PDO::FETCH_ASSOC);
+} catch (Throwable $ignored) {
+    $has_cod_org = false;
+}
 
 // ---------- Vista: Detalle de club (con afiliados) ----------
 if ($organizacion_id && $club_id) {
@@ -436,7 +442,7 @@ if ($is_admin_general && !$organizacion_id && !$club_id && $entidad_id > 0) {
             $stmt = $pdo->prepare("
                 SELECT o.id, o.nombre, o.estatus,
                        (SELECT COUNT(*) FROM clubes WHERE organizacion_id = o.id AND estatus = 1) as total_clubes,
-                       (SELECT COUNT(*) FROM tournaments WHERE club_responsable = o.id) as total_torneos
+                       (SELECT COUNT(*) FROM tournaments WHERE " . ($has_cod_org ? "(club_responsable = o.id OR club_responsable = o.cod_org)" : "club_responsable = o.id") . ") as total_torneos
                 FROM organizaciones o
                 WHERE o.entidad = ?
                 ORDER BY o.estatus DESC, o.nombre ASC
@@ -575,7 +581,7 @@ try {
     $stmt = $pdo->query("
         SELECT o.*, e.id as entidad_id, e.nombre as entidad_nombre,
                (SELECT COUNT(*) FROM clubes WHERE organizacion_id = o.id AND estatus = 1) as total_clubes,
-               (SELECT COUNT(*) FROM tournaments WHERE club_responsable = o.id) as total_torneos
+               (SELECT COUNT(*) FROM tournaments WHERE " . ($has_cod_org ? "(club_responsable = o.id OR club_responsable = o.cod_org)" : "club_responsable = o.id") . ") as total_torneos
         FROM organizaciones o
         LEFT JOIN entidad e ON o.entidad = e.id
         WHERE o.estatus = 1

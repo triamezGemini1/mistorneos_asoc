@@ -40,6 +40,17 @@ $user_role = $current_user['role'];
 $user_club_id = $current_user['club_id'] ?? null;
 $is_admin_general = Auth::isAdminGeneral();
 $is_admin_torneo = Auth::isAdminTorneo();
+$has_cod_org = false;
+try {
+    $has_cod_org = (bool)DB::pdo()->query("SHOW COLUMNS FROM organizaciones LIKE 'cod_org'")->fetch(PDO::FETCH_ASSOC);
+} catch (Throwable $ignored) {
+    $has_cod_org = false;
+}
+$org_ref_expr = $has_cod_org ? "COALESCE(NULLIF(cod_org, 0), id)" : "id";
+$org_ref_expr_o = $has_cod_org ? "COALESCE(NULLIF(o.cod_org, 0), o.id, t.club_responsable)" : "COALESCE(o.id, t.club_responsable)";
+$org_join_expr = $has_cod_org
+    ? "LEFT JOIN organizaciones o ON (t.club_responsable = o.id OR t.club_responsable = o.cod_org)"
+    : "LEFT JOIN organizaciones o ON t.club_responsable = o.id";
 
 // Obtener datos para la vista
 $action = $_GET['action'] ?? 'list';
@@ -121,15 +132,18 @@ $default_organizacion_nombre = null;
 if (in_array($action, ['new', 'edit'])) {
     try {
         if ($is_admin_general) {
-            $stmt = DB::pdo()->query("SELECT id, nombre FROM organizaciones WHERE estatus = 1 ORDER BY nombre ASC");
+            $stmt = DB::pdo()->query("SELECT {$org_ref_expr} AS id, nombre FROM organizaciones WHERE estatus = 1 ORDER BY nombre ASC");
             $organizaciones_list = $stmt->fetchAll(PDO::FETCH_ASSOC);
         } else {
             // admin_club / admin_torneo: el torneo se asigna a la organización que lo genera
             if ($user_role === 'admin_club') {
                 $default_organizacion_id = Auth::getUserOrganizacionId();
                 if ($default_organizacion_id) {
-                    $stmt = DB::pdo()->prepare("SELECT nombre FROM organizaciones WHERE id = ? AND estatus = 1");
-                    $stmt->execute([$default_organizacion_id]);
+                    $sql_org_nombre = $has_cod_org
+                        ? "SELECT nombre FROM organizaciones WHERE (id = ? OR cod_org = ?) AND estatus = 1"
+                        : "SELECT nombre FROM organizaciones WHERE id = ? AND estatus = 1";
+                    $stmt = DB::pdo()->prepare($sql_org_nombre);
+                    $stmt->execute($has_cod_org ? [$default_organizacion_id, $default_organizacion_id] : [$default_organizacion_id]);
                     $default_organizacion_nombre = $stmt->fetchColumn();
                 }
             } elseif ($user_role === 'admin_torneo' && $user_club_id) {
@@ -138,8 +152,11 @@ if (in_array($action, ['new', 'edit'])) {
                 $default_organizacion_id = $stmt->fetchColumn();
                 $default_organizacion_id = $default_organizacion_id ? (int)$default_organizacion_id : null;
                 if ($default_organizacion_id) {
-                    $stmt = DB::pdo()->prepare("SELECT nombre FROM organizaciones WHERE id = ? AND estatus = 1");
-                    $stmt->execute([$default_organizacion_id]);
+                    $sql_org_nombre = $has_cod_org
+                        ? "SELECT nombre FROM organizaciones WHERE (id = ? OR cod_org = ?) AND estatus = 1"
+                        : "SELECT nombre FROM organizaciones WHERE id = ? AND estatus = 1";
+                    $stmt = DB::pdo()->prepare($sql_org_nombre);
+                    $stmt->execute($has_cod_org ? [$default_organizacion_id, $default_organizacion_id] : [$default_organizacion_id]);
                     $default_organizacion_nombre = $stmt->fetchColumn();
                 }
             }
@@ -160,9 +177,10 @@ $tournament = null;
 if (($action === 'edit' || $action === 'view') && $id) {
     try {
         $stmt = DB::pdo()->prepare("
-            SELECT t.*, o.nombre as organizacion_nombre, o.logo as organizacion_logo
+            SELECT t.*, o.nombre as organizacion_nombre, o.logo as organizacion_logo,
+                   {$org_ref_expr_o} as organizacion_ref
             FROM tournaments t
-            LEFT JOIN organizaciones o ON t.club_responsable = o.id
+            {$org_join_expr}
             WHERE t.id = ?
         ");
         $stmt->execute([(int)$id]);
@@ -235,10 +253,22 @@ if ($action === 'list') {
                     }
                 }
                 if ($organizacion_id_param > 0) {
-                    $where_parts[] = 't.club_responsable = ?';
-                    $params[] = $organizacion_id_param;
-                    $stmt_o = DB::pdo()->prepare("SELECT nombre FROM organizaciones WHERE id = ?");
-                    $stmt_o->execute([$organizacion_id_param]);
+                    if ($has_cod_org) {
+                        $where_parts[] = "EXISTS (
+                            SELECT 1 FROM organizaciones oflt
+                            WHERE (oflt.id = t.club_responsable OR oflt.cod_org = t.club_responsable)
+                              AND (oflt.id = ? OR oflt.cod_org = ?)
+                        )";
+                        $params[] = $organizacion_id_param;
+                        $params[] = $organizacion_id_param;
+                    } else {
+                        $where_parts[] = 't.club_responsable = ?';
+                        $params[] = $organizacion_id_param;
+                    }
+                    $stmt_o = DB::pdo()->prepare($has_cod_org
+                        ? "SELECT nombre FROM organizaciones WHERE (id = ? OR cod_org = ?)"
+                        : "SELECT nombre FROM organizaciones WHERE id = ?");
+                    $stmt_o->execute($has_cod_org ? [$organizacion_id_param, $organizacion_id_param] : [$organizacion_id_param]);
                     $organizacion_nombre_titulo = $stmt_o->fetchColumn();
                 }
             }
@@ -272,9 +302,10 @@ if ($action === 'list') {
             
             // Obtener registros de la p�gina actual
             $stmt = DB::pdo()->prepare("
-                SELECT t.*, o.nombre as organizacion_nombre
+                SELECT t.*, o.nombre as organizacion_nombre,
+                       {$org_ref_expr_o} as organizacion_ref
                 FROM tournaments t
-                LEFT JOIN organizaciones o ON t.club_responsable = o.id
+                {$org_join_expr}
                 $where_clause
                 " . ($organizacion_id_param > 0 ? "ORDER BY t.fechator DESC, t.id DESC" : "ORDER BY COALESCE(o.nombre, '') ASC, t.fechator DESC, t.id DESC") . "
                 LIMIT {$pagination->getLimit()} OFFSET {$pagination->getOffset()}
@@ -283,7 +314,7 @@ if ($action === 'list') {
                 $tournaments_list = $stmt->fetchAll(PDO::FETCH_ASSOC);
                 if ($organizacion_id_param <= 0 && empty($estado_param)) {
                     foreach ($tournaments_list as $item) {
-                        $oid = (int)($item['club_responsable'] ?? 0);
+                        $oid = (int)($item['organizacion_ref'] ?? $item['club_responsable'] ?? 0);
                         $oname = $item['organizacion_nombre'] ?? 'Sin organización';
                         if (!isset($tournaments_by_org[$oid])) {
                             $tournaments_by_org[$oid] = ['nombre' => $oname, 'items' => []];
@@ -1200,14 +1231,16 @@ function getModalidadLabel($modalidad) {
                 <?php if ($action === 'edit'): ?>
                     <input type="hidden" name="id" value="<?= (int)$tournament['id'] ?>">
                 <?php endif;
-                $form_org_id = ($action === 'edit' && isset($tournament['club_responsable'])) ? (int)$tournament['club_responsable'] : (int)($default_organizacion_id ?? 0);
+                $form_org_id = ($action === 'edit' && isset($tournament['organizacion_ref'])) ? (int)$tournament['organizacion_ref'] : (int)($default_organizacion_id ?? 0);
                 if ($action === 'new' && $organizacion_id_cuentas_new !== null && $organizacion_id_cuentas_new > 0) {
                     $form_org_id = (int)$organizacion_id_cuentas_new;
                 }
                 $form_org_logo = null;
                 if ($form_org_id > 0) {
-                    $stmt_logo = DB::pdo()->prepare("SELECT logo, nombre FROM organizaciones WHERE id = ?");
-                    $stmt_logo->execute([$form_org_id]);
+                    $stmt_logo = DB::pdo()->prepare($has_cod_org
+                        ? "SELECT logo, nombre FROM organizaciones WHERE (id = ? OR cod_org = ?)"
+                        : "SELECT logo, nombre FROM organizaciones WHERE id = ?");
+                    $stmt_logo->execute($has_cod_org ? [$form_org_id, $form_org_id] : [$form_org_id]);
                     $row_org = $stmt_logo->fetch(PDO::FETCH_ASSOC);
                     $form_org_logo = $row_org['logo'] ?? null;
                     $form_org_nombre_display = $row_org['nombre'] ?? ($action === 'edit' ? ($tournament['organizacion_nombre'] ?? '') : ($default_organizacion_nombre ?? ''));
@@ -1227,14 +1260,14 @@ function getModalidadLabel($modalidad) {
                                 <option value="">Seleccionar organización...</option>
                                 <?php foreach ($organizaciones_list as $org): ?>
                                 <option value="<?= (int)$org['id'] ?>"
-                                    <?= ($action === 'edit' && ($tournament['club_responsable'] ?? 0) == $org['id']) || ($action === 'new' && $organizacion_id_cuentas_new !== null && $organizacion_id_cuentas_new == $org['id']) ? 'selected' : '' ?>>
+                                    <?= ($action === 'edit' && ((int)($tournament['organizacion_ref'] ?? 0)) == (int)$org['id']) || ($action === 'new' && $organizacion_id_cuentas_new !== null && $organizacion_id_cuentas_new == $org['id']) ? 'selected' : '' ?>>
                                     <?= htmlspecialchars($org['nombre']) ?>
                                 </option>
                                 <?php endforeach; ?>
                             </select>
                         </div>
                         <?php else: ?>
-                        <?php $org_id = ($action === 'edit' && isset($tournament['club_responsable'])) ? (int)$tournament['club_responsable'] : (int)($default_organizacion_id ?? 0); ?>
+                        <?php $org_id = ($action === 'edit' && isset($tournament['organizacion_ref'])) ? (int)$tournament['organizacion_ref'] : (int)($default_organizacion_id ?? 0); ?>
                         <input type="hidden" name="club_responsable" value="<?= $org_id ?>">
                         <div class="flex-grow-1">
                             <label class="form-label mb-1 text-muted">Organización</label>
@@ -1431,8 +1464,8 @@ function getModalidadLabel($modalidad) {
                                 try {
                                     $pdo_cuentas = DB::pdo();
                                     $org_id_para_cuentas = 0;
-                                    if ($action === 'edit' && isset($tournament['club_responsable']) && (int)$tournament['club_responsable'] > 0) {
-                                        $org_id_para_cuentas = (int)$tournament['club_responsable'];
+                                    if ($action === 'edit' && isset($tournament['organizacion_ref']) && (int)$tournament['organizacion_ref'] > 0) {
+                                        $org_id_para_cuentas = (int)$tournament['organizacion_ref'];
                                     } elseif ($action === 'new' && $organizacion_id_cuentas_new !== null && $organizacion_id_cuentas_new > 0) {
                                         $org_id_para_cuentas = $organizacion_id_cuentas_new;
                                     } else {
@@ -1440,8 +1473,10 @@ function getModalidadLabel($modalidad) {
                                     }
                                     $admin_org_user_id = null;
                                     if ($org_id_para_cuentas > 0) {
-                                        $stmt_admin = $pdo_cuentas->prepare("SELECT admin_user_id FROM organizaciones WHERE id = ? AND estatus = 1");
-                                        $stmt_admin->execute([$org_id_para_cuentas]);
+                                        $stmt_admin = $pdo_cuentas->prepare($has_cod_org
+                                            ? "SELECT admin_user_id FROM organizaciones WHERE (id = ? OR cod_org = ?) AND estatus = 1"
+                                            : "SELECT admin_user_id FROM organizaciones WHERE id = ? AND estatus = 1");
+                                        $stmt_admin->execute($has_cod_org ? [$org_id_para_cuentas, $org_id_para_cuentas] : [$org_id_para_cuentas]);
                                         $admin_org_user_id = $stmt_admin->fetchColumn();
                                     }
                                     if ($admin_org_user_id !== false && $admin_org_user_id !== null) {

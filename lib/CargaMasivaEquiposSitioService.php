@@ -7,6 +7,20 @@ declare(strict_types=1);
 final class CargaMasivaEquiposSitioService
 {
     public const JUGADORES_REQUERIDOS = 4;
+    private static ?bool $hasCodOrgColumn = null;
+
+    private static function hasCodOrg(PDO $pdo): bool
+    {
+        if (self::$hasCodOrgColumn !== null) {
+            return self::$hasCodOrgColumn;
+        }
+        try {
+            self::$hasCodOrgColumn = (bool)$pdo->query("SHOW COLUMNS FROM organizaciones LIKE 'cod_org'")->fetch(PDO::FETCH_ASSOC);
+        } catch (Throwable $e) {
+            self::$hasCodOrgColumn = false;
+        }
+        return self::$hasCodOrgColumn;
+    }
 
     /** Frase exacta que el operador debe enviar para ejecutar el reemplazo total. */
     public const CONFIRMACION_REEMPLAZO = 'SI_REEMPLAZAR_INSCRITOS_Y_EQUIPOS';
@@ -616,9 +630,12 @@ final class CargaMasivaEquiposSitioService
     private static function resolverClubId(PDO $pdo, string $clubNombre, string $orgNombre, int $orgTorneo): int
     {
         if ($orgNombre !== '') {
+            $orgJoin = self::hasCodOrg($pdo)
+                ? 'INNER JOIN organizaciones o ON (o.id = c.organizacion_id OR o.cod_org = c.organizacion_id)'
+                : 'INNER JOIN organizaciones o ON o.id = c.organizacion_id';
             $stmt = $pdo->prepare(
                 'SELECT c.id FROM clubes c
-                 INNER JOIN organizaciones o ON o.id = c.organizacion_id
+                 ' . $orgJoin . '
                  WHERE c.estatus = 1 AND UPPER(TRIM(c.nombre)) = UPPER(TRIM(?))
                  AND UPPER(TRIM(o.nombre)) = UPPER(TRIM(?)) LIMIT 1'
             );
@@ -629,11 +646,19 @@ final class CargaMasivaEquiposSitioService
             }
         }
         if ($orgTorneo > 0) {
-            $stmt = $pdo->prepare(
-                'SELECT c.id FROM clubes c
-                 WHERE c.estatus = 1 AND c.organizacion_id = ? AND UPPER(TRIM(c.nombre)) = UPPER(TRIM(?)) LIMIT 1'
-            );
-            $stmt->execute([$orgTorneo, $clubNombre]);
+            if (self::hasCodOrg($pdo)) {
+                $stmt = $pdo->prepare(
+                    'SELECT c.id FROM clubes c
+                     WHERE c.estatus = 1 AND (c.organizacion_id = ? OR c.organizacion_id = (SELECT id FROM organizaciones WHERE cod_org = ? LIMIT 1)) AND UPPER(TRIM(c.nombre)) = UPPER(TRIM(?)) LIMIT 1'
+                );
+                $stmt->execute([$orgTorneo, $orgTorneo, $clubNombre]);
+            } else {
+                $stmt = $pdo->prepare(
+                    'SELECT c.id FROM clubes c
+                     WHERE c.estatus = 1 AND c.organizacion_id = ? AND UPPER(TRIM(c.nombre)) = UPPER(TRIM(?)) LIMIT 1'
+                );
+                $stmt->execute([$orgTorneo, $clubNombre]);
+            }
             $id = $stmt->fetchColumn();
             if ($id) {
                 return (int)$id;
@@ -649,10 +674,17 @@ final class CargaMasivaEquiposSitioService
             return 0;
         }
         $codigo = self::codigoOrganizacion($pdo, $orgTorneo);
-        $stmt = $pdo->prepare(
-            'SELECT id FROM clubes WHERE organizacion_id = ? AND UPPER(TRIM(nombre)) = UPPER(TRIM(?)) LIMIT 1'
-        );
-        $stmt->execute([$orgTorneo, $codigo]);
+        if (self::hasCodOrg($pdo)) {
+            $stmt = $pdo->prepare(
+                'SELECT id FROM clubes WHERE (organizacion_id = ? OR organizacion_id = (SELECT id FROM organizaciones WHERE cod_org = ? LIMIT 1)) AND UPPER(TRIM(nombre)) = UPPER(TRIM(?)) LIMIT 1'
+            );
+            $stmt->execute([$orgTorneo, $orgTorneo, $codigo]);
+        } else {
+            $stmt = $pdo->prepare(
+                'SELECT id FROM clubes WHERE organizacion_id = ? AND UPPER(TRIM(nombre)) = UPPER(TRIM(?)) LIMIT 1'
+            );
+            $stmt->execute([$orgTorneo, $codigo]);
+        }
         $id = $stmt->fetchColumn();
         if ($id) {
             return (int)$id;
@@ -670,8 +702,13 @@ final class CargaMasivaEquiposSitioService
             $stmt->execute([$nombreClub, $orgId]);
             return (int)$pdo->lastInsertId();
         } catch (Throwable $e) {
-            $stmt = $pdo->prepare('SELECT id FROM clubes WHERE organizacion_id = ? ORDER BY id DESC LIMIT 1');
-            $stmt->execute([$orgId]);
+            if (self::hasCodOrg($pdo)) {
+                $stmt = $pdo->prepare('SELECT id FROM clubes WHERE (organizacion_id = ? OR organizacion_id = (SELECT id FROM organizaciones WHERE cod_org = ? LIMIT 1)) ORDER BY id DESC LIMIT 1');
+                $stmt->execute([$orgId, $orgId]);
+            } else {
+                $stmt = $pdo->prepare('SELECT id FROM clubes WHERE organizacion_id = ? ORDER BY id DESC LIMIT 1');
+                $stmt->execute([$orgId]);
+            }
             $id = $stmt->fetchColumn();
             return $id ? (int)$id : 0;
         }

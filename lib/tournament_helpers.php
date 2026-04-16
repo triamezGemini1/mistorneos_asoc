@@ -310,11 +310,21 @@ class TournamentHelpers {
     public static function getOrganizacionTorneo(int $torneo_id): ?array {
         try {
             require_once __DIR__ . '/../config/db.php';
+            $pdo = DB::pdo();
+            $hasCodOrg = false;
+            try {
+                $hasCodOrg = (bool)$pdo->query("SHOW COLUMNS FROM organizaciones LIKE 'cod_org'")->fetch(PDO::FETCH_ASSOC);
+            } catch (Throwable $ignored) {
+                $hasCodOrg = false;
+            }
+            $orgJoin = $hasCodOrg
+                ? "INNER JOIN organizaciones o ON (t.club_responsable = o.id OR t.club_responsable = o.cod_org)"
+                : "INNER JOIN organizaciones o ON t.club_responsable = o.id";
             $stmt = DB::pdo()->prepare("
                 SELECT o.id, o.nombre, o.responsable, o.telefono, o.email, o.entidad, o.admin_user_id,
                        e.nombre as entidad_nombre
                 FROM tournaments t
-                INNER JOIN organizaciones o ON t.club_responsable = o.id
+                {$orgJoin}
                 LEFT JOIN entidad e ON o.entidad = e.id
                 WHERE t.id = ?
             ");

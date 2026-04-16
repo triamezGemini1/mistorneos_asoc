@@ -167,11 +167,21 @@ class InvitationPDFGenerator {
      * Obtiene datos del torneo
      */
     private static function getTournamentData(int $tournament_id): ?array {
+        $pdo = DB::pdo();
+        $hasCodOrg = false;
+        try {
+            $hasCodOrg = (bool)$pdo->query("SHOW COLUMNS FROM organizaciones LIKE 'cod_org'")->fetch(PDO::FETCH_ASSOC);
+        } catch (Throwable $ignored) {
+            $hasCodOrg = false;
+        }
+        $orgJoin = $hasCodOrg
+            ? "LEFT JOIN organizaciones o ON (t.club_responsable = o.id OR t.club_responsable = o.cod_org)"
+            : "LEFT JOIN organizaciones o ON t.club_responsable = o.id";
         $stmt = DB::pdo()->prepare("
             SELECT t.*, 
                    o.nombre as organizacion_nombre, o.responsable as organizacion_responsable, o.telefono as organizacion_telefono, o.direccion as organizacion_direccion
             FROM tournaments t
-            LEFT JOIN organizaciones o ON t.club_responsable = o.id
+            {$orgJoin}
             WHERE t.id = ? AND t.estatus = 1
         ");
         $stmt->execute([$tournament_id]);

@@ -13,6 +13,15 @@ require_once __DIR__ . '/../config/db.php';
 Auth::requireRole(['admin_general', 'admin_club', 'admin_torneo', 'operador']);
 
 $pdo = DB::pdo();
+$has_cod_org = false;
+try {
+    $has_cod_org = (bool)$pdo->query("SHOW COLUMNS FROM organizaciones LIKE 'cod_org'")->fetch(PDO::FETCH_ASSOC);
+} catch (Throwable $ignored) {
+    $has_cod_org = false;
+}
+$org_join = $has_cod_org
+    ? "LEFT JOIN organizaciones o ON (t.club_responsable = o.id OR t.club_responsable = o.cod_org)"
+    : "LEFT JOIN organizaciones o ON t.club_responsable = o.id";
 
 // Misma consulta que landing: eventos para el calendario
 $eventos_calendario = [];
@@ -27,7 +36,7 @@ try {
             u.celular as admin_celular,
             (SELECT COUNT(*) FROM inscritos WHERE torneo_id = t.id AND (estatus IS NULL OR estatus != 'retirado')) as total_inscritos
         FROM tournaments t
-        LEFT JOIN organizaciones o ON t.club_responsable = o.id
+        {$org_join}
         LEFT JOIN usuarios u ON o.admin_user_id = u.id AND u.role = 'admin_club'
         WHERE t.estatus = 1
         ORDER BY t.fechator ASC

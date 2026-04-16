@@ -20,6 +20,31 @@ $user_role = $current_user['role'];
 $user_club_id = $current_user['club_id'] ?? null;
 $is_admin_general = Auth::isAdminGeneral();
 
+$resolveOrgRef = static function (PDO $pdo, int $orgRawId): array {
+    if ($orgRawId <= 0) {
+        return ['id' => 0, 'ref' => 0, 'entidad' => 0];
+    }
+    $hasCodOrg = false;
+    try {
+        $hasCodOrg = (bool)$pdo->query("SHOW COLUMNS FROM organizaciones LIKE 'cod_org'")->fetch(PDO::FETCH_ASSOC);
+    } catch (Throwable $ignored) {
+        $hasCodOrg = false;
+    }
+    if ($hasCodOrg) {
+        $st = $pdo->prepare("SELECT id, entidad, COALESCE(NULLIF(cod_org,0), id) AS ref FROM organizaciones WHERE id = ? OR cod_org = ? LIMIT 1");
+        $st->execute([$orgRawId, $orgRawId]);
+    } else {
+        $st = $pdo->prepare("SELECT id, entidad, id AS ref FROM organizaciones WHERE id = ? LIMIT 1");
+        $st->execute([$orgRawId]);
+    }
+    $row = $st->fetch(PDO::FETCH_ASSOC) ?: [];
+    return [
+        'id' => (int)($row['id'] ?? 0),
+        'ref' => (int)($row['ref'] ?? 0),
+        'entidad' => (int)($row['entidad'] ?? 0),
+    ];
+};
+
 try {
     // Validar ID
     if (empty($_POST['id'])) {
@@ -98,10 +123,11 @@ try {
         $org_id = null;
         if ($is_admin_general && !empty($_POST['club_responsable'])) {
             $org_id = (int)$_POST['club_responsable'];
-            $stmt_org_check = DB::pdo()->prepare("SELECT id FROM organizaciones WHERE id = ?");
-            $stmt_org_check->execute([$org_id]);
-            if (!$stmt_org_check->fetch()) {
+            $orgResolved = $resolveOrgRef(DB::pdo(), $org_id);
+            if ((int)$orgResolved['id'] <= 0) {
                 $org_id = (int)($torneo_actual['club_responsable'] ?? 0) ?: null;
+            } else {
+                $org_id = (int)$orgResolved['ref'];
             }
         }
         if ($org_id <= 0) {
@@ -110,9 +136,8 @@ try {
         if (!$org_id) {
             throw new Exception('El torneo no tiene organización asignada. No se puede actualizar la entidad.');
         }
-        $stmt_ent = DB::pdo()->prepare("SELECT entidad FROM organizaciones WHERE id = ?");
-        $stmt_ent->execute([$org_id]);
-        $entidad = (int)$stmt_ent->fetchColumn();
+        $orgResolved = $resolveOrgRef(DB::pdo(), (int)$org_id);
+        $entidad = (int)$orgResolved['entidad'];
         if ($entidad <= 0) {
             throw new Exception('La organización del torneo no tiene entidad definida. Asigne la entidad a la organización para poder actualizar el torneo.');
         }
@@ -187,11 +212,11 @@ try {
         // admin_general puede cambiar la organización
         // Si se especifica un nuevo club_responsable, verificar que sea una organización válida
         if ($club_responsable) {
-            $stmt_org = DB::pdo()->prepare("SELECT id FROM organizaciones WHERE id = ? AND estatus = 1");
-            $stmt_org->execute([$club_responsable]);
-            if (!$stmt_org->fetch()) {
+            $orgResolved = $resolveOrgRef(DB::pdo(), (int)$club_responsable);
+            if ((int)$orgResolved['id'] <= 0) {
                 throw new Exception('La organización seleccionada no es válida');
             }
+            $club_responsable = (int)$orgResolved['ref'];
         } else {
             // Si no se especifica, mantener la original
             $club_responsable = $torneo_actual['club_responsable'];

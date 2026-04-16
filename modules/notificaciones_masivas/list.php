@@ -20,6 +20,15 @@ $user = Auth::user();
 $user_club_id = (int)($user['club_id'] ?? 0);
 $is_admin_general = ($user['role'] ?? '') === 'admin_general';
 $is_admin_club = ($user['role'] ?? '') === 'admin_club';
+$has_cod_org = false;
+try {
+    $has_cod_org = (bool)$pdo->query("SHOW COLUMNS FROM organizaciones LIKE 'cod_org'")->fetch(PDO::FETCH_ASSOC);
+} catch (Throwable $ignored) {
+    $has_cod_org = false;
+}
+$org_join_expr = $has_cod_org
+    ? "(t.club_responsable = o.id OR t.club_responsable = o.cod_org)"
+    : "t.club_responsable = o.id";
 
 // ========== ADMIN GENERAL: formulario por filtro (admins club, usuarios de admins, inscritos torneo) ==========
 if ($is_admin_general) {
@@ -42,7 +51,7 @@ if ($is_admin_general) {
     $stmt = $pdo->query("
         SELECT $sel_t
         FROM tournaments t
-        LEFT JOIN organizaciones o ON t.club_responsable = o.id
+        LEFT JOIN organizaciones o ON {$org_join_expr}
         LEFT JOIN clubes c ON t.club_responsable = c.id
         WHERE t.estatus = 1
         ORDER BY t.fechator DESC
@@ -135,7 +144,7 @@ if ($is_admin_general) {
         $stmt = $pdo->prepare("
             SELECT $sel_t
             FROM tournaments t
-            LEFT JOIN organizaciones o ON t.club_responsable = o.id
+            LEFT JOIN organizaciones o ON {$org_join_expr}
             LEFT JOIN clubes c ON t.club_responsable = c.id
             WHERE t.club_responsable IN ($placeholders) AND t.estatus = 1
             ORDER BY t.fechator DESC

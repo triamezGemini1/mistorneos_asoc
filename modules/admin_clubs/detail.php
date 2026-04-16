@@ -248,6 +248,15 @@ try {
     // Obtener torneos de la organización del admin (club_responsable = org_id)
     $torneos = [];
     if ($org_id) {
+        $has_cod_org = false;
+        try {
+            $has_cod_org = (bool)DB::pdo()->query("SHOW COLUMNS FROM organizaciones LIKE 'cod_org'")->fetch(PDO::FETCH_ASSOC);
+        } catch (Throwable $ignored) {
+            $has_cod_org = false;
+        }
+        $org_join = $has_cod_org
+            ? "LEFT JOIN organizaciones o ON (t.club_responsable = o.id OR t.club_responsable = o.cod_org)"
+            : "LEFT JOIN organizaciones o ON t.club_responsable = o.id";
         $sql_torneos = "
             SELECT 
                 t.id,
@@ -260,12 +269,12 @@ try {
                 o.nombre as organizacion_nombre,
                 (SELECT COUNT(*) FROM inscritos i WHERE i.torneo_id = t.id) as total_inscritos
             FROM tournaments t
-            LEFT JOIN organizaciones o ON t.club_responsable = o.id
-            WHERE t.club_responsable = ?
+            {$org_join}
+            WHERE " . ($has_cod_org ? "(t.club_responsable = ? OR t.club_responsable = (SELECT id FROM organizaciones WHERE cod_org = ? LIMIT 1))" : "t.club_responsable = ?") . "
             ORDER BY t.fechator DESC, t.nombre ASC
         ";
         $stmt = DB::pdo()->prepare($sql_torneos);
-        $stmt->execute([$org_id]);
+        $stmt->execute($has_cod_org ? [$org_id, $org_id] : [$org_id]);
         $torneos = $stmt->fetchAll(PDO::FETCH_ASSOC);
     }
     ?>

@@ -8,6 +8,21 @@ require_once __DIR__ . '/../config/php_polyfills.php';
 
 final class ImportacionTorneoExternoService
 {
+    private static ?bool $hasCodOrgColumn = null;
+
+    private static function hasCodOrg(PDO $pdo): bool
+    {
+        if (self::$hasCodOrgColumn !== null) {
+            return self::$hasCodOrgColumn;
+        }
+        try {
+            self::$hasCodOrgColumn = (bool)$pdo->query("SHOW COLUMNS FROM organizaciones LIKE 'cod_org'")->fetch(PDO::FETCH_ASSOC);
+        } catch (Throwable $e) {
+            self::$hasCodOrgColumn = false;
+        }
+        return self::$hasCodOrgColumn;
+    }
+
     /**
      * @return list<list<string>>
      */
@@ -2076,8 +2091,13 @@ final class ImportacionTorneoExternoService
             return 0;
         }
         if ($orgId > 0) {
-            $st = $pdo->prepare('SELECT id FROM clubes WHERE organizacion_id = ? AND UPPER(TRIM(nombre)) = UPPER(?) LIMIT 1');
-            $st->execute([$orgId, $nombre]);
+            if (self::hasCodOrg($pdo)) {
+                $st = $pdo->prepare('SELECT id FROM clubes WHERE (organizacion_id = ? OR organizacion_id = (SELECT id FROM organizaciones WHERE cod_org = ? LIMIT 1)) AND UPPER(TRIM(nombre)) = UPPER(?) LIMIT 1');
+                $st->execute([$orgId, $orgId, $nombre]);
+            } else {
+                $st = $pdo->prepare('SELECT id FROM clubes WHERE organizacion_id = ? AND UPPER(TRIM(nombre)) = UPPER(?) LIMIT 1');
+                $st->execute([$orgId, $nombre]);
+            }
         } else {
             $st = $pdo->prepare('SELECT id FROM clubes WHERE (organizacion_id IS NULL OR organizacion_id = 0) AND UPPER(TRIM(nombre)) = UPPER(?) LIMIT 1');
             $st->execute([$nombre]);

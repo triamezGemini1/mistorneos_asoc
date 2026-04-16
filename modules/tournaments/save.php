@@ -21,6 +21,31 @@ $user_role = $current_user['role'];
 $user_club_id = $current_user['club_id'] ?? null;
 $is_admin_general = Auth::isAdminGeneral();
 
+$resolveOrgRef = static function (PDO $pdo, int $orgRawId): array {
+    if ($orgRawId <= 0) {
+        return ['id' => 0, 'ref' => 0, 'entidad' => 0];
+    }
+    $hasCodOrg = false;
+    try {
+        $hasCodOrg = (bool)$pdo->query("SHOW COLUMNS FROM organizaciones LIKE 'cod_org'")->fetch(PDO::FETCH_ASSOC);
+    } catch (Throwable $ignored) {
+        $hasCodOrg = false;
+    }
+    if ($hasCodOrg) {
+        $st = $pdo->prepare("SELECT id, entidad, COALESCE(NULLIF(cod_org,0), id) AS ref FROM organizaciones WHERE id = ? OR cod_org = ? LIMIT 1");
+        $st->execute([$orgRawId, $orgRawId]);
+    } else {
+        $st = $pdo->prepare("SELECT id, entidad, id AS ref FROM organizaciones WHERE id = ? LIMIT 1");
+        $st->execute([$orgRawId]);
+    }
+    $row = $st->fetch(PDO::FETCH_ASSOC) ?: [];
+    return [
+        'id' => (int)($row['id'] ?? 0),
+        'ref' => (int)($row['ref'] ?? 0),
+        'entidad' => (int)($row['entidad'] ?? 0),
+    ];
+};
+
 try {
     // owner_user_id: debe ser el ID del admin que registra el torneo (no puede ser 0 ni diferente al admin)
     if ($user_id <= 0) {
@@ -113,14 +138,14 @@ try {
             // Obtener la organización del admin_club
             $stmt_org = DB::pdo()->prepare("SELECT id FROM organizaciones WHERE admin_user_id = ? AND estatus = 1 LIMIT 1");
             $stmt_org->execute([$current_user['id']]);
-            $organizacion_id = $stmt_org->fetchColumn();
+            $organizacion_id = (int)$stmt_org->fetchColumn();
             
             if (!$organizacion_id) {
                 throw new Exception('No tiene una organización asignada. Contacte al administrador.');
             }
-            
-            // club_responsable = ID de la organización
-            $club_responsable = $organizacion_id;
+            $orgRefData = $resolveOrgRef(DB::pdo(), $organizacion_id);
+            $organizacion_id = (int)$orgRefData['ref'];
+            $club_responsable = (int)$orgRefData['ref'];
             
         } else {
             // admin_torneo requiere club_id asignado
@@ -131,30 +156,31 @@ try {
             // Obtener organización del club del admin_torneo
             $stmt_org = DB::pdo()->prepare("SELECT organizacion_id FROM clubes WHERE id = ?");
             $stmt_org->execute([$user_club_id]);
-            $organizacion_id = $stmt_org->fetchColumn();
+            $organizacion_id = (int)$stmt_org->fetchColumn();
             
             if (!$organizacion_id) {
                 throw new Exception('Su club no tiene una organización asignada. Contacte al administrador.');
             }
-            
-            // club_responsable = ID de la organización
-            $club_responsable = $organizacion_id;
+            $orgRefData = $resolveOrgRef(DB::pdo(), $organizacion_id);
+            $organizacion_id = (int)$orgRefData['ref'];
+            $club_responsable = (int)$orgRefData['ref'];
         }
     } else {
         // admin_general: si especificó un club, obtener su organización
         if ($club_responsable) {
             // Verificar si es un ID de club o de organización
-            $stmt_check_org = DB::pdo()->prepare("SELECT id FROM organizaciones WHERE id = ?");
-            $stmt_check_org->execute([$club_responsable]);
-            if ($stmt_check_org->fetch()) {
-                // Ya es un ID de organización
-                $organizacion_id = $club_responsable;
+            $orgRefData = $resolveOrgRef(DB::pdo(), (int)$club_responsable);
+            if ((int)$orgRefData['id'] > 0) {
+                $organizacion_id = (int)$orgRefData['ref'];
+                $club_responsable = (int)$orgRefData['ref'];
             } else {
                 // Es un ID de club, obtener su organización
                 $stmt_org = DB::pdo()->prepare("SELECT organizacion_id FROM clubes WHERE id = ?");
                 $stmt_org->execute([$club_responsable]);
-                $organizacion_id = $stmt_org->fetchColumn();
-                $club_responsable = $organizacion_id;
+                $organizacion_id = (int)$stmt_org->fetchColumn();
+                $orgRefData = $resolveOrgRef(DB::pdo(), $organizacion_id);
+                $organizacion_id = (int)$orgRefData['ref'];
+                $club_responsable = (int)$orgRefData['ref'];
             }
         }
     }
@@ -167,9 +193,8 @@ try {
         }
         throw new Exception('No se puede registrar el torneo sin organización. La entidad del torneo es la de la organización que lo crea.');
     }
-    $stmt_ent = DB::pdo()->prepare("SELECT entidad FROM organizaciones WHERE id = ?");
-    $stmt_ent->execute([$organizacion_id]);
-    $entidad = (int)$stmt_ent->fetchColumn();
+    $orgRefData = $resolveOrgRef(DB::pdo(), (int)$organizacion_id);
+    $entidad = (int)$orgRefData['entidad'];
     if ($entidad <= 0) {
         throw new Exception('La organización seleccionada no tiene entidad definida. No se puede crear el torneo hasta que un administrador asigne la entidad a la organización.');
     }

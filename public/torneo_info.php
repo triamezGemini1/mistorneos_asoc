@@ -14,6 +14,15 @@ require_once __DIR__ . '/../lib/app_helpers.php';
 require_once __DIR__ . '/../lib/PartiresulEstatusSql.php';
 
 $pdo = DB::pdo();
+$has_cod_org = false;
+try {
+    $has_cod_org = (bool)$pdo->query("SHOW COLUMNS FROM organizaciones LIKE 'cod_org'")->fetch(PDO::FETCH_ASSOC);
+} catch (Throwable $ignored) {
+    $has_cod_org = false;
+}
+$org_join = $has_cod_org
+    ? "LEFT JOIN organizaciones o ON (t.club_responsable = o.id OR t.club_responsable = o.cod_org) AND o.estatus = 1"
+    : "LEFT JOIN organizaciones o ON t.club_responsable = o.id AND o.estatus = 1";
 $wRegPInc = PartiresulEstatusSql::whereRegistradoUno('p');
 $wFfPInc = PartiresulEstatusSql::whereFfUno('p');
 $base_url = app_base_url();
@@ -37,7 +46,7 @@ try {
             o.responsable as club_delegado,
             o.telefono as club_telefono
         FROM tournaments t
-        LEFT JOIN organizaciones o ON t.club_responsable = o.id AND o.estatus = 1
+        {$org_join}
         WHERE t.id = ? AND t.estatus = 1
     ");
     $stmt->execute([$torneo_id]);

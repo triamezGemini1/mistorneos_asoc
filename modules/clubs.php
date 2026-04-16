@@ -34,6 +34,15 @@ if ($current_user['role'] === 'admin_club') {
 $id = $_GET['id'] ?? null;
 $success_message = $_GET['success'] ?? null;
 $error_message = $_GET['error'] ?? null;
+$has_cod_org = false;
+try {
+    $has_cod_org = (bool)DB::pdo()->query("SHOW COLUMNS FROM organizaciones LIKE 'cod_org'")->fetch(PDO::FETCH_ASSOC);
+} catch (Throwable $ignored) {
+    $has_cod_org = false;
+}
+$org_join_expr = $has_cod_org
+    ? "LEFT JOIN organizaciones o ON (t.club_responsable = o.id OR t.club_responsable = o.cod_org)"
+    : "LEFT JOIN organizaciones o ON t.club_responsable = o.id";
 
 // Procesar eliminaci�n si se solicita
 if ($action === 'delete' && $id) {
@@ -128,7 +137,7 @@ if ($action === 'afiliado_detail') {
                         FROM inscritos i
                         INNER JOIN tournaments t ON i.torneo_id = t.id
                         LEFT JOIN clubes c ON i.id_club = c.id
-                        LEFT JOIN organizaciones o ON t.club_responsable = o.id
+                        {$org_join_expr}
                         LEFT JOIN usuarios u ON i.id_usuario = u.id
                         WHERE i.id_usuario = ?
                         ORDER BY t.fechator DESC

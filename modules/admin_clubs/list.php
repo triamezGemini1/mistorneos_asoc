@@ -13,6 +13,12 @@ Auth::requireRole(['admin_general']);
 $pdo = DB::pdo();
 $view = $_GET['view'] ?? 'list';
 $admin_id = isset($_GET['admin_id']) ? (int)$_GET['admin_id'] : null;
+$has_cod_org = false;
+try {
+    $has_cod_org = (bool)$pdo->query("SHOW COLUMNS FROM organizaciones LIKE 'cod_org'")->fetch(PDO::FETCH_ASSOC);
+} catch (Throwable $ignored) {
+    $has_cod_org = false;
+}
 
 // Obtener todos los administradores de club con sus estadísticas usando StatisticsHelper
 require_once __DIR__ . '/../../lib/StatisticsHelper.php';
@@ -23,7 +29,7 @@ $admins = $admins_stats['admins_by_club'] ?? [];
 
 // Enriquecer con información adicional (torneos por organización)
 foreach ($admins as &$admin) {
-    $stmt = $pdo->prepare("SELECT id FROM organizaciones WHERE admin_user_id = ? AND estatus = 1 LIMIT 1");
+    $stmt = $pdo->prepare("SELECT " . ($has_cod_org ? "COALESCE(NULLIF(cod_org,0), id)" : "id") . " FROM organizaciones WHERE admin_user_id = ? AND estatus = 1 LIMIT 1");
     $stmt->execute([(int)($admin['admin_id'] ?? 0)]);
     $org_id = $stmt->fetchColumn();
     if ($org_id) {
@@ -58,7 +64,7 @@ if ($view === 'detail' && $admin_id) {
     }
     
     $org_id = null;
-    $stmt_org = $pdo->prepare("SELECT id FROM organizaciones WHERE admin_user_id = ? AND estatus = 1 LIMIT 1");
+    $stmt_org = $pdo->prepare("SELECT " . ($has_cod_org ? "COALESCE(NULLIF(cod_org,0), id)" : "id") . " FROM organizaciones WHERE admin_user_id = ? AND estatus = 1 LIMIT 1");
     $stmt_org->execute([$admin_id]);
     $org_id = $stmt_org->fetchColumn();
     
@@ -90,7 +96,9 @@ if ($view === 'detail' && $admin_id) {
                        (SELECT COUNT(*) FROM inscritos i INNER JOIN usuarios u ON i.id_usuario = u.id WHERE i.torneo_id = t.id AND u.sexo = 'M') as hombres_inscritos,
                        (SELECT COUNT(*) FROM inscritos i INNER JOIN usuarios u ON i.id_usuario = u.id WHERE i.torneo_id = t.id AND u.sexo = 'F') as mujeres_inscritos
                 FROM tournaments t
-                LEFT JOIN organizaciones o ON t.club_responsable = o.id
+                LEFT JOIN organizaciones o ON " . ($has_cod_org
+                    ? "(t.club_responsable = o.id OR t.club_responsable = o.cod_org)"
+                    : "t.club_responsable = o.id") . "
                 WHERE t.club_responsable = ?
                 ORDER BY t.fechator DESC
             ");

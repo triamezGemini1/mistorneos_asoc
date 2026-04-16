@@ -19,6 +19,12 @@ $current_user = Auth::user();
 $is_admin_general = Auth::isAdminGeneral();
 $message = $_GET['success'] ?? '';
 $error = $_GET['error'] ?? '';
+$has_cod_org = false;
+try {
+    $has_cod_org = (bool)DB::pdo()->query("SHOW COLUMNS FROM organizaciones LIKE 'cod_org'")->fetch(PDO::FETCH_ASSOC);
+} catch (Throwable $ignored) {
+    $has_cod_org = false;
+}
 
 // Obtener la organización del usuario
 $organizacion = null;
@@ -35,14 +41,16 @@ if ($is_admin_general) {
         $organizacion_id = null;
         $organizacion = [];
     } elseif ($organizacion_id) {
+        $whereOrg = $has_cod_org ? "WHERE (o.id = ? OR o.cod_org = ?)" : "WHERE o.id = ?";
         $stmt = DB::pdo()->prepare("
             SELECT o.*, e.nombre as entidad_nombre, u.nombre as admin_nombre, u.email as admin_email
             FROM organizaciones o
             LEFT JOIN entidad e ON o.entidad = e.id
             LEFT JOIN usuarios u ON o.admin_user_id = u.id
-            WHERE o.id = ?
+            {$whereOrg}
         ");
-        $stmt->execute([$organizacion_id]);
+        $paramsOrg = $has_cod_org ? [$organizacion_id, $organizacion_id] : [$organizacion_id];
+        $stmt->execute($paramsOrg);
         $organizacion = $stmt->fetch(PDO::FETCH_ASSOC);
     }
 } else {
@@ -81,11 +89,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
         $direccion = trim($_POST['direccion'] ?? '');
         $entidad = (int)($_POST['entidad'] ?? 0);
 
-        $stmt = DB::pdo()->prepare("
-            INSERT INTO organizaciones (nombre, direccion, responsable, telefono, email, entidad, admin_user_id, estatus, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, 1, NOW(), NOW())
-        ");
-        $stmt->execute([$nombre, $direccion, $responsable, $telefono, $email, $entidad, $admin_user_id]);
+        if ($has_cod_org) {
+            $stmt = DB::pdo()->prepare("
+                INSERT INTO organizaciones (nombre, direccion, responsable, telefono, email, entidad, cod_org, admin_user_id, estatus, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, NOW(), NOW())
+            ");
+            $stmt->execute([$nombre, $direccion, $responsable, $telefono, $email, $entidad, $entidad, $admin_user_id]);
+        } else {
+            $stmt = DB::pdo()->prepare("
+                INSERT INTO organizaciones (nombre, direccion, responsable, telefono, email, entidad, admin_user_id, estatus, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, 1, NOW(), NOW())
+            ");
+            $stmt->execute([$nombre, $direccion, $responsable, $telefono, $email, $entidad, $admin_user_id]);
+        }
         header('Location: index.php?page=mi_organizacion&success=' . urlencode('Organización creada correctamente'));
         exit;
     } catch (Exception $e) {
@@ -331,14 +347,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
 
 // Recargar datos después de actualización
 if ($organizacion_id && empty($organizacion)) {
+    $whereOrgReload = $has_cod_org ? "WHERE (o.id = ? OR o.cod_org = ?)" : "WHERE o.id = ?";
     $stmt = DB::pdo()->prepare("
         SELECT o.*, e.nombre as entidad_nombre, u.nombre as admin_nombre, u.email as admin_email
         FROM organizaciones o
         LEFT JOIN entidad e ON o.entidad = e.id
         LEFT JOIN usuarios u ON o.admin_user_id = u.id
-        WHERE o.id = ?
+        {$whereOrgReload}
     ");
-    $stmt->execute([$organizacion_id]);
+    $paramsOrgReload = $has_cod_org ? [$organizacion_id, $organizacion_id] : [$organizacion_id];
+    $stmt->execute($paramsOrgReload);
     $organizacion = $stmt->fetch(PDO::FETCH_ASSOC);
 }
 

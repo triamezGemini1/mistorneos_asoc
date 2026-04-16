@@ -58,8 +58,18 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
             $hasOrgTelefono = in_array('telefono', $orgCols, true);
             $hasOrgEmail = in_array('email', $orgCols, true);
             $hasOrgTipo = in_array('tipo_org', $orgCols, true);
+            $hasOrgCod = in_array('cod_org', $orgCols, true);
             $hasOrgCreatedAt = in_array('created_at', $orgCols, true);
             $hasOrgUpdatedAt = in_array('updated_at', $orgCols, true);
+            if (!$hasOrgCod) {
+                try {
+                    $pdo->exec("ALTER TABLE organizaciones ADD COLUMN cod_org INT NULL AFTER id");
+                    $pdo->exec("CREATE INDEX idx_organizaciones_cod_org ON organizaciones (cod_org)");
+                    $hasOrgCod = true;
+                } catch (Throwable $ignored) {
+                    $hasOrgCod = false;
+                }
+            }
 
             $colsClubRaw = $pdo->query("SHOW COLUMNS FROM clubes")->fetchAll(PDO::FETCH_ASSOC);
             $clubCols = array_map(static fn(array $c): string => strtolower((string)($c['Field'] ?? '')), $colsClubRaw);
@@ -84,6 +94,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
             if ($hasOrgTelefono) { $orgFields[] = 'telefono'; }
             if ($hasOrgEmail) { $orgFields[] = 'email'; }
             if ($hasOrgTipo) { $orgFields[] = 'tipo_org'; }
+            if ($hasOrgCod) { $orgFields[] = 'cod_org'; }
             if ($hasOrgCreatedAt) { $orgFields[] = 'created_at'; }
             if ($hasOrgUpdatedAt) { $orgFields[] = 'updated_at'; }
 
@@ -115,13 +126,22 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
                 }
 
                 $orgId = 0;
-                $checkOrgSql = "SELECT id FROM organizaciones WHERE entidad = ?";
+                $checkOrgSql = "SELECT id FROM organizaciones WHERE ";
+                if ($hasOrgCod) {
+                    $checkOrgSql .= "(entidad = ? OR cod_org = ?)";
+                } else {
+                    $checkOrgSql .= "entidad = ?";
+                }
                 if ($hasOrgTipo) {
                     $checkOrgSql .= " AND tipo_org = 0";
                 }
                 $checkOrgSql .= " ORDER BY id ASC LIMIT 1";
                 $checkOrgStmt = $pdo->prepare($checkOrgSql);
-                $checkOrgStmt->execute([$codigo]);
+                $checkOrgParams = [$codigo];
+                if ($hasOrgCod) {
+                    $checkOrgParams[] = $codigo;
+                }
+                $checkOrgStmt->execute($checkOrgParams);
                 $orgId = (int)$checkOrgStmt->fetchColumn();
 
                 if ($orgId <= 0) {
@@ -136,11 +156,15 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
                     if ($hasOrgTelefono) { $orgParams[':telefono'] = null; }
                     if ($hasOrgEmail) { $orgParams[':email'] = null; }
                     if ($hasOrgTipo) { $orgParams[':tipo_org'] = 0; }
+                    if ($hasOrgCod) { $orgParams[':cod_org'] = $codigo; }
                     if ($hasOrgCreatedAt) { $orgParams[':created_at'] = date('Y-m-d H:i:s'); }
                     if ($hasOrgUpdatedAt) { $orgParams[':updated_at'] = date('Y-m-d H:i:s'); }
                     $insertOrgStmt->execute($orgParams);
                     $orgId = (int)$pdo->lastInsertId();
                     $createdOrgs++;
+                } elseif ($hasOrgCod) {
+                    $syncCodStmt = $pdo->prepare("UPDATE organizaciones SET cod_org = ? WHERE id = ? AND (cod_org IS NULL OR cod_org = 0)");
+                    $syncCodStmt->execute([$codigo, $orgId]);
                 }
 
                 $checkClubSql = "SELECT id FROM clubes WHERE organizacion_id = ? AND LOWER(TRIM(nombre)) = LOWER(TRIM(?)) LIMIT 1";

@@ -27,6 +27,16 @@ final class RankingAtletasPublicoService
         }
     }
 
+    private function hasColumnCodOrg(): bool
+    {
+        try {
+            $c = $this->pdo->query("SHOW COLUMNS FROM organizaciones LIKE 'cod_org'")->fetchAll();
+            return !empty($c);
+        } catch (Throwable $e) {
+            return false;
+        }
+    }
+
     /**
      * Filas de participación + torneo para un sexo (M|F).
      *
@@ -39,7 +49,17 @@ final class RankingAtletasPublicoService
         $pub = $this->hasColumnPublicarLanding()
             ? ' AND (t.publicar_landing = 1 OR t.publicar_landing IS NULL)'
             : '';
-        $whereOrg = $organizacionId > 0 ? ' AND COALESCE(t.organizacion_id, t.club_responsable, 0) = :organizacion_id' : '';
+        $whereOrg = '';
+        if ($organizacionId > 0) {
+            $whereOrg = $this->hasColumnCodOrg()
+                ? " AND EXISTS (
+                        SELECT 1
+                        FROM organizaciones ox
+                        WHERE (ox.id = :organizacion_id OR ox.cod_org = :organizacion_id)
+                          AND (ox.id = COALESCE(t.organizacion_id, t.club_responsable, 0) OR ox.cod_org = COALESCE(t.organizacion_id, t.club_responsable, 0))
+                    )"
+                : " AND COALESCE(t.organizacion_id, t.club_responsable, 0) = :organizacion_id";
+        }
         $wEst = InscritosHelper::sqlWhereActivoConAlias('i');
         $ig = InscritosHelper::sqlExprColumnaNumerica('i.ganados');
         $ie = InscritosHelper::sqlExprColumnaNumerica('i.efectividad');

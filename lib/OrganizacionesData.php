@@ -8,6 +8,14 @@ declare(strict_types=1);
  */
 class OrganizacionesData
 {
+    private static function hasCodOrg(PDO $pdo): bool
+    {
+        try {
+            return (bool)$pdo->query("SHOW COLUMNS FROM organizaciones LIKE 'cod_org'")->fetch(PDO::FETCH_ASSOC);
+        } catch (Exception $e) {
+            return false;
+        }
+    }
     /**
      * Estadísticas globales para el dashboard admin_general (solo tarjetas).
      * Retorna: total_entidades, total_organizaciones, total_usuarios, total_admin_clubs,
@@ -131,6 +139,7 @@ class OrganizacionesData
 
         $resumen = [];
         $entidades = self::loadEntidadRows($pdo);
+        $hasCodOrg = self::hasCodOrg($pdo);
         foreach ($entidades as $e) {
             $cod = (int)($e['codigo'] ?? 0);
             if ($cod <= 0) {
@@ -160,7 +169,9 @@ class OrganizacionesData
             $stTor = $pdo->prepare("
                 SELECT COUNT(*)
                 FROM tournaments t
-                INNER JOIN organizaciones o ON o.id = t.club_responsable
+                INNER JOIN organizaciones o ON " . ($hasCodOrg
+                    ? "(o.id = t.club_responsable OR o.cod_org = t.club_responsable)"
+                    : "o.id = t.club_responsable") . "
                 WHERE o.entidad = ?
             ");
             $stTor->execute([$cod]);

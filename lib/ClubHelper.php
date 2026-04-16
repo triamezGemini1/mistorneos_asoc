@@ -10,6 +10,20 @@ if (!defined('APP_BOOTSTRAPPED')) {
 require_once __DIR__ . '/../config/db.php';
 
 class ClubHelper {
+    private static ?bool $hasCodOrgColumn = null;
+
+    private static function hasCodOrg(): bool
+    {
+        if (self::$hasCodOrgColumn !== null) {
+            return self::$hasCodOrgColumn;
+        }
+        try {
+            self::$hasCodOrgColumn = (bool)DB::pdo()->query("SHOW COLUMNS FROM organizaciones LIKE 'cod_org'")->fetch(PDO::FETCH_ASSOC);
+        } catch (Throwable $e) {
+            self::$hasCodOrgColumn = false;
+        }
+        return self::$hasCodOrgColumn;
+    }
     
     /**
      * Obtiene los clubes de una organización (esquema admin organización: clubes son de la org)
@@ -19,8 +33,13 @@ class ClubHelper {
      */
     public static function getClubesByOrganizacionId(int $organizacion_id): array {
         try {
-            $stmt = DB::pdo()->prepare("SELECT id FROM clubes WHERE organizacion_id = ? AND estatus = 1");
-            $stmt->execute([$organizacion_id]);
+            if (self::hasCodOrg()) {
+                $stmt = DB::pdo()->prepare("SELECT id FROM clubes WHERE (organizacion_id = ? OR organizacion_id = (SELECT id FROM organizaciones WHERE cod_org = ? LIMIT 1)) AND estatus = 1");
+                $stmt->execute([$organizacion_id, $organizacion_id]);
+            } else {
+                $stmt = DB::pdo()->prepare("SELECT id FROM clubes WHERE organizacion_id = ? AND estatus = 1");
+                $stmt->execute([$organizacion_id]);
+            }
             $ids = $stmt->fetchAll(PDO::FETCH_COLUMN);
             return array_values(array_map('intval', $ids ?: []));
         } catch (Exception $e) {

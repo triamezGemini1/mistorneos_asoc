@@ -17,6 +17,15 @@ $pdo = DB::pdo();
 $base_url = app_base_url();
 $user = Auth::user();
 $is_logged_in = !empty($user);
+$has_cod_org = false;
+try {
+    $has_cod_org = (bool)$pdo->query("SHOW COLUMNS FROM organizaciones LIKE 'cod_org'")->fetch(PDO::FETCH_ASSOC);
+} catch (Throwable $ignored) {
+    $has_cod_org = false;
+}
+$org_join = $has_cod_org
+    ? "LEFT JOIN organizaciones o ON (t.club_responsable = o.id OR t.club_responsable = o.cod_org)"
+    : "LEFT JOIN organizaciones o ON t.club_responsable = o.id";
 
 $torneo_id = isset($_GET['torneo_id']) ? (int)$_GET['torneo_id'] : 0;
 $vista = $_GET['vista'] ?? 'general';
@@ -35,7 +44,7 @@ try {
             (SELECT COUNT(*) FROM inscritos WHERE torneo_id = t.id AND (estatus IS NULL OR (estatus != 4 AND estatus != 'retirado'))) as total_inscritos,
             (SELECT COUNT(*) FROM club_photos WHERE torneo_id = t.id) as total_fotos
         FROM tournaments t
-        LEFT JOIN organizaciones o ON t.club_responsable = o.id
+        {$org_join}
         WHERE t.id = ?
     ");
     $stmt->execute([$torneo_id]);

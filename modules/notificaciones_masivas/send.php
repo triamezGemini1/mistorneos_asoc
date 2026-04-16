@@ -91,6 +91,15 @@ $url_inscripcion = '';
 if ($torneo_id > 0) {
     try {
         $pdo_t = DB::pdo();
+        $has_cod_org_t = false;
+        try {
+            $has_cod_org_t = (bool)$pdo_t->query("SHOW COLUMNS FROM organizaciones LIKE 'cod_org'")->fetch(PDO::FETCH_ASSOC);
+        } catch (Throwable $ignored) {
+            $has_cod_org_t = false;
+        }
+        $org_join_expr_t = $has_cod_org_t
+            ? "(t.club_responsable = o.id OR t.club_responsable = o.cod_org)"
+            : "t.club_responsable = o.id";
         $has_hora = $pdo_t->query("SHOW COLUMNS FROM tournaments LIKE 'hora_torneo'")->rowCount() > 0;
         $has_lugar = $pdo_t->query("SHOW COLUMNS FROM tournaments LIKE 'lugar'")->rowCount() > 0;
         $sel = "t.nombre, t.fechator";
@@ -102,7 +111,7 @@ if ($torneo_id > 0) {
                    COALESCE(o.nombre, c.nombre) as organizacion_nombre,
                    COALESCE(o.logo, c.logo) as logo_path
             FROM tournaments t
-            LEFT JOIN organizaciones o ON t.club_responsable = o.id
+            LEFT JOIN organizaciones o ON {$org_join_expr_t}
             LEFT JOIN clubes c ON t.club_responsable = c.id
             WHERE t.id = ?
         ");

@@ -23,7 +23,16 @@ if (!isset($torneo) || empty($torneo)) {
     if ($torneo_id_local > 0) {
         try {
             $pdo = DB::pdo();
-            $stmt = $pdo->prepare("SELECT t.*, o.nombre as organizacion_nombre FROM tournaments t LEFT JOIN organizaciones o ON t.club_responsable = o.id WHERE t.id = ?");
+            $has_cod_org = false;
+            try {
+                $has_cod_org = (bool)$pdo->query("SHOW COLUMNS FROM organizaciones LIKE 'cod_org'")->fetch(PDO::FETCH_ASSOC);
+            } catch (Throwable $ignored) {
+                $has_cod_org = false;
+            }
+            $org_join = $has_cod_org
+                ? "LEFT JOIN organizaciones o ON (t.club_responsable = o.id OR t.club_responsable = o.cod_org)"
+                : "LEFT JOIN organizaciones o ON t.club_responsable = o.id";
+            $stmt = $pdo->prepare("SELECT t.*, o.nombre as organizacion_nombre FROM tournaments t {$org_join} WHERE t.id = ?");
             $stmt->execute([$torneo_id_local]);
             $torneo = $stmt->fetch(PDO::FETCH_ASSOC);
         } catch (Exception $e) {

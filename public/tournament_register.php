@@ -17,13 +17,22 @@ if ($torneo_id <= 0) {
 }
 
 $pdo = DB::pdo();
+$has_cod_org = false;
+try {
+    $has_cod_org = (bool)$pdo->query("SHOW COLUMNS FROM organizaciones LIKE 'cod_org'")->fetch(PDO::FETCH_ASSOC);
+} catch (Throwable $ignored) {
+    $has_cod_org = false;
+}
+$org_join = $has_cod_org
+    ? "LEFT JOIN organizaciones o ON (t.club_responsable = o.id OR t.club_responsable = o.cod_org)"
+    : "LEFT JOIN organizaciones o ON t.club_responsable = o.id";
 
 // Obtener información del torneo (incluye entidad para validar ámbito)
 $stmt = $pdo->prepare("
     SELECT t.*, o.nombre as organizacion_nombre, o.responsable as organizacion_responsable, o.telefono as organizacion_telefono,
            COALESCE(o.entidad, 0) as entidad_torneo
     FROM tournaments t
-    LEFT JOIN organizaciones o ON t.club_responsable = o.id
+    {$org_join}
     WHERE t.id = ? AND t.estatus = 1
 ");
 $stmt->execute([$torneo_id]);

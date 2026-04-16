@@ -30,6 +30,12 @@ if (isset($_SESSION['user'])) {
 $pdo = DB::pdo();
 $base_url = app_base_url();
 $landingService = new LandingDataService($pdo);
+$has_cod_org = false;
+try {
+    $has_cod_org = (bool)$pdo->query("SHOW COLUMNS FROM organizaciones LIKE 'cod_org'")->fetch(PDO::FETCH_ASSOC);
+} catch (Throwable $ignored) {
+    $has_cod_org = false;
+}
 
 $step = (int)($_GET['step'] ?? 1);
 $entidad_id = isset($_GET['entidad']) ? (int)$_GET['entidad'] : 0;
@@ -120,7 +126,10 @@ if ($org_id > 0) {
     }
 }
 if ($club_id > 0) {
-    $stmt = $pdo->prepare("SELECT c.*, o.entidad as org_entidad FROM clubes c LEFT JOIN organizaciones o ON c.organizacion_id = o.id WHERE c.id = ? AND c.estatus = 1");
+    $org_join = $has_cod_org
+        ? "LEFT JOIN organizaciones o ON (c.organizacion_id = o.id OR c.organizacion_id = o.cod_org)"
+        : "LEFT JOIN organizaciones o ON c.organizacion_id = o.id";
+    $stmt = $pdo->prepare("SELECT c.*, o.entidad as org_entidad FROM clubes c {$org_join} WHERE c.id = ? AND c.estatus = 1");
     $stmt->execute([$club_id]);
     $club_info = $stmt->fetch(PDO::FETCH_ASSOC);
     if ($club_info && !$entidad_id && ($club_info['org_entidad'] ?? $club_info['entidad'] ?? 0) > 0) {

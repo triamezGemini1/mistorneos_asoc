@@ -339,6 +339,15 @@ class DashboardData
     {
         $torneos_por_entidad = [];
         try {
+            $has_cod_org = false;
+            try {
+                $has_cod_org = (bool)DB::pdo()->query("SHOW COLUMNS FROM organizaciones LIKE 'cod_org'")->fetch(PDO::FETCH_ASSOC);
+            } catch (Throwable $ignored) {
+                $has_cod_org = false;
+            }
+            $org_join = $has_cod_org
+                ? "LEFT JOIN organizaciones o ON (t.club_responsable = o.id OR t.club_responsable = o.cod_org)"
+                : "LEFT JOIN organizaciones o ON t.club_responsable = o.id";
             $tournament_filter = Auth::getTournamentFilterForRole('t');
             $where_t = !empty($tournament_filter['where']) ? ' AND ' . $tournament_filter['where'] : '';
             $params_t = $tournament_filter['params'];
@@ -349,7 +358,7 @@ class DashboardData
                        (SELECT COUNT(*) FROM inscritos WHERE torneo_id = t.id) as total_inscritos,
                        (SELECT COUNT(*) FROM inscritos WHERE torneo_id = t.id AND estatus = 'confirmado') as inscritos_confirmados
                 FROM tournaments t
-                LEFT JOIN organizaciones o ON t.club_responsable = o.id
+                {$org_join}
                 WHERE t.estatus = 1 $where_t
                 ORDER BY t.fechator DESC, t.id DESC
             ";

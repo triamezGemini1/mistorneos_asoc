@@ -20,6 +20,12 @@ try {
     // Cargar nombre de la entidad
     $entidad_map = [];
     $pdo = DB::pdo();
+    $has_cod_org = false;
+    try {
+        $has_cod_org = (bool)$pdo->query("SHOW COLUMNS FROM organizaciones LIKE 'cod_org'")->fetch(PDO::FETCH_ASSOC);
+    } catch (Throwable $ignored) {
+        $has_cod_org = false;
+    }
     $cols = $pdo->query("SHOW COLUMNS FROM entidad")->fetchAll(PDO::FETCH_ASSOC);
     $codeCol = null;
     $nameCol = null;
@@ -57,7 +63,7 @@ try {
             (SELECT COUNT(*) FROM usuarios ux WHERE ux.organizacion_id = o.id AND ux.entidad = ?) as total_afiliados,
             (SELECT COUNT(*) FROM usuarios ux WHERE ux.organizacion_id = o.id AND ux.entidad = ? AND UPPER(COALESCE(ux.sexo,'M')) = 'M') as hombres,
             (SELECT COUNT(*) FROM usuarios ux WHERE ux.organizacion_id = o.id AND ux.entidad = ? AND UPPER(COALESCE(ux.sexo,'M')) = 'F') as mujeres,
-            (SELECT COUNT(*) FROM tournaments t WHERE t.club_responsable = o.id AND t.estatus = 1) as total_torneos
+            (SELECT COUNT(*) FROM tournaments t WHERE " . ($has_cod_org ? "(t.club_responsable = o.id OR t.club_responsable = o.cod_org)" : "t.club_responsable = o.id") . " AND t.estatus = 1) as total_torneos
         FROM organizaciones o
         LEFT JOIN usuarios u ON u.id = o.admin_user_id
         WHERE o.entidad = ?

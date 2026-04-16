@@ -11,6 +11,15 @@ require_once __DIR__ . '/../lib/UrlHelper.php';
 
 $pdo = DB::pdo();
 $base_url = app_base_url();
+$has_cod_org = false;
+try {
+    $has_cod_org = (bool)$pdo->query("SHOW COLUMNS FROM organizaciones LIKE 'cod_org'")->fetch(PDO::FETCH_ASSOC);
+} catch (Throwable $ignored) {
+    $has_cod_org = false;
+}
+$org_join = $has_cod_org
+    ? "LEFT JOIN organizaciones o ON (t.club_responsable = o.id OR t.club_responsable = o.cod_org) AND o.estatus = 1"
+    : "LEFT JOIN organizaciones o ON t.club_responsable = o.id AND o.estatus = 1";
 
 // Obtener ID del torneo desde GET (soporta URLs amigables y tradicionales)
 $torneo_id = isset($_GET['torneo_id']) ? (int)$_GET['torneo_id'] : 0;
@@ -42,7 +51,7 @@ try {
             COALESCE(o.logo, c.logo) as organizacion_logo,
             (SELECT COUNT(*) FROM inscritos WHERE torneo_id = t.id AND (estatus = 'confirmado' OR estatus IS NULL)) as total_inscritos
         FROM tournaments t
-        LEFT JOIN organizaciones o ON t.club_responsable = o.id AND o.estatus = 1
+        {$org_join}
         LEFT JOIN clubes c ON t.club_responsable = c.id AND c.estatus = 1
         WHERE t.id = ? AND t.estatus = 1
     ");

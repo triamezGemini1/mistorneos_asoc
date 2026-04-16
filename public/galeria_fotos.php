@@ -26,6 +26,15 @@ function getImageUrl($ruta_imagen) {
 }
 
 $pdo = DB::pdo();
+$has_cod_org = false;
+try {
+    $has_cod_org = (bool)$pdo->query("SHOW COLUMNS FROM organizaciones LIKE 'cod_org'")->fetch(PDO::FETCH_ASSOC);
+} catch (Throwable $ignored) {
+    $has_cod_org = false;
+}
+$org_join = $has_cod_org
+    ? "LEFT JOIN organizaciones o ON (t.club_responsable = o.id OR t.club_responsable = o.cod_org) AND o.estatus = 1"
+    : "LEFT JOIN organizaciones o ON t.club_responsable = o.id AND o.estatus = 1";
 
 // Obtener filtros (club_id/organizacion_id: club_responsable almacena ID de organización)
 $club_id = isset($_GET['club_id']) ? (int)$_GET['club_id'] : 0;
@@ -45,7 +54,7 @@ $torneos = [];
 try {
     $query = "SELECT t.id, t.nombre, t.fechator, o.nombre as club_nombre 
               FROM tournaments t 
-              LEFT JOIN organizaciones o ON t.club_responsable = o.id AND o.estatus = 1 
+              {$org_join}
               WHERE t.estatus = 1";
     
     if ($club_id > 0) {
@@ -84,7 +93,7 @@ try {
                 o.id as club_id
             FROM club_photos tp
             INNER JOIN tournaments t ON tp.torneo_id = t.id
-            LEFT JOIN organizaciones o ON t.club_responsable = o.id AND o.estatus = 1
+            {$org_join}
             WHERE t.estatus = 1
         ";
         

@@ -178,6 +178,12 @@ class StatisticsHelper {
     private static function generateAdminClubStatsByUserId(int $admin_user_id): array {
         $pdo = DB::pdo();
         $stats = [];
+        $hasCodOrg = false;
+        try {
+            $hasCodOrg = (bool)$pdo->query("SHOW COLUMNS FROM organizaciones LIKE 'cod_org'")->fetch(PDO::FETCH_ASSOC);
+        } catch (Throwable $ignored) {
+            $hasCodOrg = false;
+        }
         
         try {
             $supervised_club_ids = ClubHelper::getClubesByAdminClubId($admin_user_id);
@@ -346,7 +352,7 @@ class StatisticsHelper {
             
             // Obtener organización del admin (club_responsable = org_id)
             $org_id = null;
-            $stmt_org = $pdo->prepare("SELECT id FROM organizaciones WHERE admin_user_id = ? AND estatus = 1 LIMIT 1");
+            $stmt_org = $pdo->prepare("SELECT " . ($hasCodOrg ? "COALESCE(NULLIF(cod_org,0), id)" : "id") . " FROM organizaciones WHERE admin_user_id = ? AND estatus = 1 LIMIT 1");
             $stmt_org->execute([$admin_user_id]);
             $org_id = $stmt_org->fetchColumn();
             
@@ -360,7 +366,9 @@ class StatisticsHelper {
                 $stmt = $pdo->prepare("
                     SELECT t.*, o.nombre as organizacion_nombre
                     FROM tournaments t
-                    LEFT JOIN organizaciones o ON t.club_responsable = o.id
+                    LEFT JOIN organizaciones o ON " . ($hasCodOrg
+                        ? "(t.club_responsable = o.id OR t.club_responsable = o.cod_org)"
+                        : "t.club_responsable = o.id") . "
                     WHERE t.club_responsable = ? AND t.estatus = 1
                     ORDER BY t.fechator DESC
                     LIMIT 50

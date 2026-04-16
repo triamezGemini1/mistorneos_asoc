@@ -17,6 +17,15 @@ $pdo = DB::pdo();
 $base_url = app_base_url();
 $user = Auth::user();
 $is_logged_in = !empty($user);
+$has_cod_org = false;
+try {
+    $has_cod_org = (bool)$pdo->query("SHOW COLUMNS FROM organizaciones LIKE 'cod_org'")->fetch(PDO::FETCH_ASSOC);
+} catch (Throwable $ignored) {
+    $has_cod_org = false;
+}
+$org_join = $has_cod_org
+    ? "LEFT JOIN organizaciones o ON ((t.club_responsable = o.id OR t.club_responsable = o.cod_org) AND o.estatus = 1)"
+    : "LEFT JOIN organizaciones o ON t.club_responsable = o.id AND o.estatus = 1";
 
 // Paginación
 $current_page = isset($_GET['p']) ? max(1, (int)$_GET['p']) : 1;
@@ -56,7 +65,7 @@ try {
             (SELECT COUNT(*) FROM partiresul WHERE id_torneo = t.id AND registrado = 1) as total_partidas,
             (SELECT COUNT(*) FROM club_photos WHERE torneo_id = t.id) as total_fotos
         FROM tournaments t
-        LEFT JOIN organizaciones o ON t.club_responsable = o.id
+        {$org_join}
         WHERE t.estatus = 1
         ORDER BY t.fechator DESC
         LIMIT {$pagination->getLimit()} OFFSET {$pagination->getOffset()}

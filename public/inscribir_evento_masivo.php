@@ -13,6 +13,15 @@ require_once __DIR__ . '/../lib/TournamentScopeHelper.php';
 
 $pdo = DB::pdo();
 $torneo_id = isset($_GET['torneo_id']) ? (int)$_GET['torneo_id'] : 0;
+$has_cod_org = false;
+try {
+    $has_cod_org = (bool)$pdo->query("SHOW COLUMNS FROM organizaciones LIKE 'cod_org'")->fetch(PDO::FETCH_ASSOC);
+} catch (Throwable $ignored) {
+    $has_cod_org = false;
+}
+$org_join = $has_cod_org
+    ? "LEFT JOIN organizaciones o ON (t.club_responsable = o.id OR t.club_responsable = o.cod_org)"
+    : "LEFT JOIN organizaciones o ON t.club_responsable = o.id";
 
 $error = '';
 $success = '';
@@ -36,7 +45,7 @@ if ($torneo_id > 0) {
                 cb.nombre_propietario as cuenta_propietario,
                 cb.cedula_propietario as cuenta_cedula
             FROM tournaments t
-            LEFT JOIN organizaciones o ON t.club_responsable = o.id
+            {$org_join}
             LEFT JOIN cuentas_bancarias cb ON t.cuenta_id = cb.id
             WHERE t.id = ? AND t.estatus = 1
         ");

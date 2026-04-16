@@ -175,12 +175,21 @@ $torneos_resultados = [];
 $ranking = [];
 $clubes = [];
 $mis_inscripciones = [];
+$has_cod_org = false;
+try {
+    $has_cod_org = (bool)$pdo->query("SHOW COLUMNS FROM organizaciones LIKE 'cod_org'")->fetch(PDO::FETCH_ASSOC);
+} catch (Throwable $ignored) {
+    $has_cod_org = false;
+}
+$org_join = $has_cod_org
+    ? "LEFT JOIN organizaciones o ON (t.club_responsable = o.id OR t.club_responsable = o.cod_org)"
+    : "LEFT JOIN organizaciones o ON t.club_responsable = o.id";
 
 // Torneos programados (futuros)
 $stmt = $pdo->query("
     SELECT t.*, o.nombre as organizacion_nombre 
     FROM tournaments t 
-    LEFT JOIN organizaciones o ON t.club_responsable = o.id 
+    {$org_join}
     WHERE t.fechator >= CURDATE() AND t.estatus = 1
     ORDER BY t.fechator ASC
     LIMIT 20
@@ -192,7 +201,7 @@ $stmt = $pdo->query("
     SELECT t.*, o.nombre as club_nombre,
            (SELECT COUNT(*) FROM inscritos WHERE torneo_id = t.id) as total_inscritos
     FROM tournaments t 
-    LEFT JOIN organizaciones o ON t.club_responsable = o.id 
+    {$org_join}
     WHERE t.fechator < CURDATE()
     ORDER BY t.fechator DESC
     LIMIT 20
@@ -208,7 +217,7 @@ $stmt = $pdo->prepare("
     SELECT i.*, t.nombre as torneo_nombre, t.fechator, t.lugar, o.nombre as organizacion_nombre
     FROM inscritos i
     JOIN tournaments t ON i.torneo_id = t.id
-    LEFT JOIN organizaciones o ON t.club_responsable = o.id
+    {$org_join}
     JOIN usuarios u ON i.id_usuario = u.id
     WHERE u.cedula = ?
     ORDER BY t.fechator DESC
