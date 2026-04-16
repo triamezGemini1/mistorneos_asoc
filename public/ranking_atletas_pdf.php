@@ -60,24 +60,24 @@ table.matriz-pdf tbody tr:nth-child(even) { background: #f4f6f8; }
 .r { text-align: right; }
 /* +20 % sobre 72px ≈ 86px */
 .nombre-col {
-  max-width: 86px;
-  width: 86px;
+  max-width: 103px;
+  width: 103px;
   overflow: hidden;
-  font-size: 6.5pt;
+  font-size: 6.8pt;
   font-weight: bold;
-  line-height: 1.25;
+  line-height: 1.3;
   color: #111;
 }
-.torneo-h { font-size: 4.25pt; line-height: 1.05; background: #475569; color: #fff; padding: 1px 2px !important; }
-/* Pos/P Gan/Pts: 50 % del ancho previo (22pt → 11pt); totales: +50 % (22pt → 33pt) */
+.torneo-h { font-size: 3.5pt; line-height: 1.05; background: #334155; color: #fff; padding: 1px 1px !important; }
+/* Pos/P Gan/Pts: ~mitad del ancho previo (11pt → 6.5pt, mínimo legible en Dompdf); totales sin cambio (33pt) */
 .stat-pdf {
-  width: 11pt;
-  min-width: 11pt;
-  max-width: 11pt;
-  font-size: 5.5pt;
+  width: 6.5pt;
+  min-width: 6.5pt;
+  max-width: 6.5pt;
+  font-size: 5pt;
   font-weight: bold;
   font-variant-numeric: tabular-nums;
-  padding: 1px 1px !important;
+  padding: 0 0 !important;
   box-sizing: border-box;
   text-align: center;
 }
@@ -102,10 +102,10 @@ $html .= '<th rowspan="2">#</th>';
 $html .= '<th rowspan="2">Atleta</th>';
 foreach ($torneos_matriz as $col) {
     $nom = (string) ($col['nombre'] ?? '');
-    if (function_exists('mb_strlen') && mb_strlen($nom) > 12) {
-        $nom = mb_substr($nom, 0, 10) . '…';
-    } elseif (strlen($nom) > 12) {
-        $nom = substr($nom, 0, 10) . '…';
+    if (function_exists('mb_strlen') && mb_strlen($nom) > 9) {
+        $nom = mb_substr($nom, 0, 7) . '…';
+    } elseif (strlen($nom) > 9) {
+        $nom = substr($nom, 0, 7) . '…';
     }
     $html .= '<th colspan="3" class="torneo-h c">' . htmlspecialchars($nom) . '</th>';
 }

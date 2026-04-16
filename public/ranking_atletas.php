@@ -115,43 +115,48 @@ function fmtfecha(?string $f): string
         }
         .tabla-matriz th, .tabla-matriz td {
             vertical-align: middle;
-            padding: 0.18rem 0.08rem;
+            padding: 0.12rem 0.05rem;
+        }
+        .tabla-matriz tbody td {
+            text-rendering: optimizeLegibility;
+            font-feature-settings: "tnum" 1, "lnum" 1;
         }
         .tabla-matriz .col-rank-num {
-            width: 1.85rem;
-            font-size: 0.72rem;
-            font-weight: 700;
+            width: 1.65rem;
+            font-size: 0.68rem;
+            font-weight: 800;
             font-variant-numeric: tabular-nums;
             color: #0f172a;
         }
-        /* +20 % respecto a 6.5rem ≈ 7.8rem */
+        /* Atleta: +20 % sobre 7.8rem ≈ 9.36rem */
         .tabla-matriz .col-atleta {
-            max-width: 7.8rem;
-            width: 7.8rem;
+            max-width: 9.36rem;
+            width: 9.36rem;
             overflow: hidden;
             text-overflow: ellipsis;
             white-space: nowrap;
-            font-size: 0.82rem;
+            font-size: 0.86rem;
             font-weight: 600;
-            line-height: 1.35;
-            letter-spacing: 0.01em;
+            line-height: 1.42;
+            letter-spacing: 0.015em;
             color: #0f172a;
         }
-        /* Pos / P Gan / Pts: 50 % del ancho anterior (2.65rem) */
+        /* Pos / P Gan / Pts: mitad del ancho actual (50 % de 2.65rem × 0.5) */
         .tabla-matriz .col-torneo-sub {
-            width: calc(2.65rem * 0.5);
-            min-width: calc(2.65rem * 0.5);
-            max-width: calc(2.65rem * 0.5);
+            width: calc(2.65rem * 0.25);
+            min-width: calc(2.65rem * 0.25);
+            max-width: calc(2.65rem * 0.25);
             box-sizing: border-box;
             font-variant-numeric: tabular-nums;
-            font-weight: 700;
-            line-height: 1.2;
+            font-weight: 600;
+            line-height: 1.22;
             text-align: center;
-            font-size: 0.56rem;
+            font-size: 0.52rem;
+            letter-spacing: -0.03em;
             color: #1e293b;
-            padding: 0.14rem 0.06rem !important;
+            padding: 0.1rem 0.02rem !important;
         }
-        /* Pts Σ, Efect. Σ, G Σ: +50 % respecto a 2.65rem */
+        /* Pts Σ, Efect. Σ, G Σ: sin cambios respecto a la versión anterior */
         .tabla-matriz .col-stat-total {
             width: calc(2.65rem * 1.5);
             min-width: calc(2.65rem * 1.5);
@@ -167,9 +172,11 @@ function fmtfecha(?string $f): string
         }
         .tabla-matriz thead .sub-h.col-torneo-sub {
             white-space: normal;
-            font-size: 0.46rem;
-            line-height: 1.05;
-            padding: 0.1rem 0.04rem !important;
+            font-size: 0.38rem;
+            font-weight: 800;
+            line-height: 1.02;
+            padding: 0.06rem 0.02rem !important;
+            letter-spacing: 0.02em;
         }
         .tabla-matriz thead th.col-stat-total {
             white-space: normal;
@@ -178,22 +185,23 @@ function fmtfecha(?string $f): string
             vertical-align: middle;
         }
         .tabla-matriz thead .torneo-nombre {
-            font-size: 0.48rem;
-            font-weight: 700;
-            line-height: 1.08;
-            padding: 0.1rem 0.04rem !important;
+            font-size: 0.36rem;
+            font-weight: 800;
+            line-height: 1.05;
+            padding: 0.06rem 0.02rem !important;
             word-break: break-word;
+            hyphens: auto;
             white-space: normal;
-            letter-spacing: 0.01em;
+            letter-spacing: 0.005em;
             color: #fff;
-            background: #475569 !important;
-            border-color: #334155 !important;
+            background: #334155 !important;
+            border-color: #1e293b !important;
         }
         .tabla-matriz thead .sub-h {
-            font-size: 0.56rem;
+            font-size: 0.42rem;
             font-weight: 700;
-            padding: 0.12rem 0.04rem !important;
-            letter-spacing: 0.04em;
+            padding: 0.08rem 0.03rem !important;
+            letter-spacing: 0.03em;
             text-transform: uppercase;
             color: #1e293b;
             background: #e2e8f0 !important;
@@ -204,7 +212,7 @@ function fmtfecha(?string $f): string
             .card-rank { box-shadow: none !important; max-width: 100% !important; border-radius: 0; }
             .header-rank { background: #1e293b !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
             .tabla-matriz { font-size: 8pt; }
-            .tabla-matriz .col-atleta { font-size: 9pt; max-width: 9rem; width: 9rem; }
+            .tabla-matriz .col-atleta { font-size: 9.5pt; max-width: 9.36rem; width: 9.36rem; }
         }
     </style>
 </head>
@@ -396,8 +404,8 @@ function fmtfecha(?string $f): string
                                     <?php
                                     $nomCol = (string) ($col['nombre'] ?? '');
                                     $nomCorto = function_exists('mb_strlen') && function_exists('mb_substr')
-                                        ? ((mb_strlen($nomCol) > 12) ? (mb_substr($nomCol, 0, 10) . '…') : $nomCol)
-                                        : ((strlen($nomCol) > 12) ? (substr($nomCol, 0, 10) . '…') : $nomCol);
+                                        ? ((mb_strlen($nomCol) > 9) ? (mb_substr($nomCol, 0, 7) . '…') : $nomCol)
+                                        : ((strlen($nomCol) > 9) ? (substr($nomCol, 0, 7) . '…') : $nomCol);
                                     ?>
                                     <th class="text-center torneo-nombre" colspan="3" title="<?= htmlspecialchars($nomCol . ' — ' . fmtfecha($col['fechator'] ?? '')) ?>">
                                         <?= htmlspecialchars($nomCorto) ?>
