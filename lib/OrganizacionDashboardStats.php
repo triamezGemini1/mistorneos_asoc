@@ -99,12 +99,14 @@ final class OrganizacionDashboardStats
         $idParams = count($ids) > 0 ? $ids : [$org_pk];
         $ph = implode(',', array_fill(0, count($idParams), '?'));
 
-        $entPart = "(? = 0 OR COALESCE({$a}.entidad, 0) = ?)";
+        // Incluir torneos sin entidad (0): datos legacy; el acople real es organizacion_id / club_responsable.
+        $entPart = "(? = 0 OR COALESCE({$a}.entidad, 0) = ? OR COALESCE({$a}.entidad, 0) = 0)";
         $entParams = [$org_entidad, $org_entidad];
 
         $fechaPart = $activosProximos ? " AND {$a}.fechator >= CURDATE()" : '';
 
         if ($flags['has_tournament_organizacion_id']) {
+            // club_responsable y, a veces, organizacion_id en torneos guardan cod_org (p. ej. 13) y no la PK: hay que matchear id y cod_org.
             $legacyClub = "{$a}.club_responsable IN ({$ph})";
             $legacyParams = $idParams;
             if ($has_cod_org) {
@@ -112,13 +114,13 @@ final class OrganizacionDashboardStats
                 $legacyParams = array_merge($idParams, [$org_ref]);
             }
             $sql = "{$entPart}{$fechaPart} AND {$a}.estatus = 1 AND (
-                ({$a}.organizacion_id IS NOT NULL AND {$a}.organizacion_id > 0 AND {$a}.organizacion_id = ?)
+                ({$a}.organizacion_id IS NOT NULL AND {$a}.organizacion_id > 0 AND {$a}.organizacion_id IN ({$ph}))
                 OR (
                     ({$a}.organizacion_id IS NULL OR {$a}.organizacion_id = 0)
                     AND ({$legacyClub})
                 )
             )";
-            $params = array_merge($entParams, [$org_pk], $legacyParams);
+            $params = array_merge($entParams, $idParams, $legacyParams);
 
             return [$sql, $params];
         }
