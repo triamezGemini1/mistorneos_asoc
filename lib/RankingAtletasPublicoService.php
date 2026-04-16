@@ -51,11 +51,12 @@ final class RankingAtletasPublicoService
             : '';
         $whereOrg = '';
         if ($organizacionId > 0) {
+            // PDO con emulación desactivada no permite repetir el mismo nombre de parámetro dos veces en MySQL.
             $whereOrg = $this->hasColumnCodOrg()
                 ? " AND EXISTS (
                         SELECT 1
                         FROM organizaciones ox
-                        WHERE (ox.id = :organizacion_id OR ox.cod_org = :organizacion_id)
+                        WHERE (ox.id = :organizacion_id_a OR ox.cod_org = :organizacion_id_b)
                           AND (ox.id = COALESCE(t.organizacion_id, t.club_responsable, 0) OR ox.cod_org = COALESCE(t.organizacion_id, t.club_responsable, 0))
                     )"
                 : " AND COALESCE(t.organizacion_id, t.club_responsable, 0) = :organizacion_id";
@@ -96,7 +97,12 @@ final class RankingAtletasPublicoService
         $st = $this->pdo->prepare($sql);
         $params = ['sexo' => $sexo];
         if ($organizacionId > 0) {
-            $params['organizacion_id'] = $organizacionId;
+            if ($this->hasColumnCodOrg()) {
+                $params['organizacion_id_a'] = $organizacionId;
+                $params['organizacion_id_b'] = $organizacionId;
+            } else {
+                $params['organizacion_id'] = $organizacionId;
+            }
         }
         $st->execute($params);
 

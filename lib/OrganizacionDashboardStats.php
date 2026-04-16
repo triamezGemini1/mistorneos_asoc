@@ -25,12 +25,15 @@ final class OrganizacionDashboardStats
             'has_usuario_organizacion_id' => false,
             'has_tournament_organizacion_id' => false,
         ];
+        // Comprobar columnas con SELECT LIMIT 0: más fiable que SHOW COLUMNS si el esquema difiere entre entornos.
         try {
-            self::$columnFlags['has_usuario_organizacion_id'] = (bool) $pdo->query("SHOW COLUMNS FROM usuarios LIKE 'organizacion_id'")->fetch(PDO::FETCH_ASSOC);
+            $pdo->query('SELECT `organizacion_id` FROM `usuarios` LIMIT 0');
+            self::$columnFlags['has_usuario_organizacion_id'] = true;
         } catch (Throwable $ignored) {
         }
         try {
-            self::$columnFlags['has_tournament_organizacion_id'] = (bool) $pdo->query("SHOW COLUMNS FROM tournaments LIKE 'organizacion_id'")->fetch(PDO::FETCH_ASSOC);
+            $pdo->query('SELECT `organizacion_id` FROM `tournaments` LIMIT 0');
+            self::$columnFlags['has_tournament_organizacion_id'] = true;
         } catch (Throwable $ignored) {
         }
 

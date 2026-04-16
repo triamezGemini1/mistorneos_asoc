@@ -3,6 +3,9 @@
  * Reporte de clasificación del torneo (ranking).
  * Página pública, optimizada para dispositivos móviles.
  * Acceso: clasificacion.php?torneo_id=X
+ *
+ * Nota: no usar declare(strict_types) aquí: debe ser lo primero tras <?php (sin comentarios previos)
+ * y en algunos despliegues un BOM o orden incorrecto provoca fatal error.
  */
 
 require_once __DIR__ . '/../config/bootstrap.php';
