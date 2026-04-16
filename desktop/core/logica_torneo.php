@@ -291,6 +291,7 @@ function asignarNumeroSecuencialPorEquipo($torneo_id) {
 }
 
 function recalcularPosiciones($torneo_id) {
+    require_once __DIR__ . '/../../lib/ClasirankingRankingHelper.php';
     $pdo = DB::pdo();
     $stmt = $pdo->prepare("SELECT modalidad, nombre FROM tournaments WHERE id = ?");
     $stmt->execute([$torneo_id]);
@@ -395,20 +396,18 @@ function recalcularPosiciones($torneo_id) {
 
         $ptosrnk = $pasFuera;
         if ($existeClasiRanking && $clasificacionRanking >= 1 && $clasificacionRanking <= $limitePosiciones) {
-            try {
-                if (!array_key_exists($clasificacionRanking, $rankingPorClasificacion)) {
-                    $stmt = $pdo->prepare("SELECT puntos_posicion, puntos_por_partida_ganada, COALESCE(puntos_asistencia, 1) as puntos_asistencia FROM clasiranking WHERE tipo_torneo = ? AND clasificacion = ? LIMIT 1");
-                    $stmt->execute([$tipoTorneoClasi, $clasificacionRanking]);
-                    $rankingPorClasificacion[$clasificacionRanking] = $stmt->fetch(PDO::FETCH_ASSOC) ?: null;
-                }
-                $ranking = $rankingPorClasificacion[$clasificacionRanking];
-                if ($ranking) {
-                    $puntosAsistencia = max(1, (int) ($ranking['puntos_asistencia'] ?? 1));
-                    $ptosrnk = (int) $ranking['puntos_posicion'] + ($ganados * (int) $ranking['puntos_por_partida_ganada']) + $puntosAsistencia;
-                } else {
-                    $ptosrnk = ($ganados * $pppFuera) + $pasFuera;
-                }
-            } catch (Exception $e) {
+            if (!array_key_exists($clasificacionRanking, $rankingPorClasificacion)) {
+                $rankingPorClasificacion[$clasificacionRanking] = ClasirankingRankingHelper::obtenerFilaParaClasificacion(
+                    $pdo,
+                    $tipoTorneoClasi,
+                    $clasificacionRanking,
+                    $limitePosiciones
+                );
+            }
+            $ranking = $rankingPorClasificacion[$clasificacionRanking];
+            if ($ranking) {
+                $ptosrnk = (int) $ranking['puntos_posicion'] + ($ganados * (int) $ranking['puntos_por_partida_ganada']) + (int) $ranking['puntos_asistencia'];
+            } else {
                 $ptosrnk = ($ganados * $pppFuera) + $pasFuera;
             }
         } elseif ($existeClasiRanking && $clasificacionRanking > $limitePosiciones) {
