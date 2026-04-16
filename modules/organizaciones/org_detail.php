@@ -20,8 +20,20 @@ $stats_hombres_total = isset($stats_hombres_total) ? (int)$stats_hombres_total :
 $stats_mujeres_total = isset($stats_mujeres_total) ? (int)$stats_mujeres_total : 0;
 $stats_otros_total = isset($stats_otros_total) ? (int)$stats_otros_total : 0;
 try {
-    $stmt = $pdo->prepare("SELECT COUNT(*) FROM tournaments WHERE club_responsable = ?");
-    $stmt->execute([$organizacion['id']]);
+    $org_ref = (int)($organizacion['cod_org'] ?? 0);
+    if ($org_ref <= 0) {
+        $org_ref = (int)($organizacion['id'] ?? 0);
+    }
+    $has_cod_org = false;
+    try {
+        $has_cod_org = (bool)$pdo->query("SHOW COLUMNS FROM organizaciones LIKE 'cod_org'")->fetch(PDO::FETCH_ASSOC);
+    } catch (Throwable $ignored) {
+        $has_cod_org = false;
+    }
+    $stmt = $pdo->prepare($has_cod_org
+        ? "SELECT COUNT(DISTINCT id) FROM tournaments WHERE (club_responsable = ? OR club_responsable = (SELECT id FROM organizaciones WHERE cod_org = ? LIMIT 1))"
+        : "SELECT COUNT(DISTINCT id) FROM tournaments WHERE club_responsable = ?");
+    $stmt->execute($has_cod_org ? [$org_ref, $org_ref] : [$org_ref]);
     $stats_torneos = (int)$stmt->fetchColumn();
 } catch (Exception $e) {}
 $stats_operadores = isset($stats_operadores) ? (int)$stats_operadores : 0;

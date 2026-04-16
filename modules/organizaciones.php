@@ -304,6 +304,21 @@ if ($organizacion_id) {
         $stmt->execute($has_cod_org ? [$organizacion_ref, $organizacion_ref] : [$organizacion_ref]);
         $clubes = $stmt->fetchAll(PDO::FETCH_ASSOC);
     }
+    // Evitar duplicados lógicos por migraciones legacy (id/cod_org mezclados).
+    $clubes_unicos = [];
+    $clubes_seen = [];
+    foreach ($clubes as $cRow) {
+        $clubId = (int)($cRow['id'] ?? 0);
+        $clubKey = $clubId > 0
+            ? 'id:' . $clubId
+            : 'nm:' . mb_strtoupper(trim((string)($cRow['nombre'] ?? ''))) . '|ent:' . (int)($cRow['entidad'] ?? 0);
+        if (isset($clubes_seen[$clubKey])) {
+            continue;
+        }
+        $clubes_seen[$clubKey] = true;
+        $clubes_unicos[] = $cRow;
+    }
+    $clubes = $clubes_unicos;
     $stats_afiliados_sin_club = 0;
     $stats_afiliados_total = 0;
     $stats_hombres_total = 0;
