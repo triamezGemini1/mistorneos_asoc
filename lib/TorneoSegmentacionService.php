@@ -141,47 +141,40 @@ final class TorneoSegmentacionService
             $stUpI->execute($paramsIns);
             $out['inscritos_movidos'] = $stUpI->rowCount();
 
-            $stU = $pdo->prepare(
-                "SELECT DISTINCT id_usuario FROM inscritos WHERE torneo_id = ? AND codigo_equipo IN ($phCod)"
+            // partiresul: fuente de verdad = inscritos ya migrados al torneo nuevo (mismo id_usuario, filas aún en id_torneo origen)
+            $stPr = $pdo->prepare(
+                'UPDATE partiresul pr
+                 INNER JOIN inscritos i ON i.id_usuario = pr.id_usuario AND i.torneo_id = ?
+                 SET pr.id_torneo = ?
+                 WHERE pr.id_torneo = ?'
             );
-            $stU->execute(array_merge([$idNuevo], $codigos));
-            $uids = [];
-            while ($r = $stU->fetch(PDO::FETCH_ASSOC)) {
-                $u = (int) ($r['id_usuario'] ?? 0);
-                if ($u > 0) {
-                    $uids[] = $u;
-                }
-            }
-            $uids = array_values(array_unique($uids));
+            $stPr->execute([$idNuevo, $idNuevo, $idTorneoOriginal]);
+            $out['partiresul_movidos'] = $stPr->rowCount();
 
-            if ($uids !== []) {
-                $phU = implode(',', array_fill(0, count($uids), '?'));
-                $paramsPr = array_merge([$idNuevo, $idTorneoOriginal], $uids);
-                $stPr = $pdo->prepare(
-                    "UPDATE partiresul SET id_torneo = ? WHERE id_torneo = ? AND id_usuario IN ($phU)"
+            try {
+                $stMa = $pdo->prepare(
+                    'UPDATE mesas_asignacion ma
+                     INNER JOIN inscritos i ON i.id_usuario = ma.id_usuario AND i.torneo_id = ?
+                     SET ma.tournament_id = ?
+                     WHERE ma.tournament_id = ?'
                 );
-                $stPr->execute($paramsPr);
-                $out['partiresul_movidos'] = $stPr->rowCount();
+                $stMa->execute([$idNuevo, $idNuevo, $idTorneoOriginal]);
+            } catch (Throwable $e) {
+                // tabla opcional
+            }
 
-                try {
-                    $stMa = $pdo->prepare(
-                        "UPDATE mesas_asignacion SET tournament_id = ? WHERE tournament_id = ? AND id_usuario IN ($phU)"
-                    );
-                    $stMa->execute($paramsPr);
-                } catch (Throwable $e) {
-                    // tabla opcional
-                }
-
-                try {
-                    $paramsHp = array_merge([$idNuevo, $idTorneoOriginal], $uids, $uids);
-                    $stHp = $pdo->prepare(
-                        "UPDATE historial_parejas SET torneo_id = ? WHERE torneo_id = ?
-                         AND jugador_1_id IN ($phU) AND jugador_2_id IN ($phU)"
-                    );
-                    $stHp->execute($paramsHp);
-                } catch (Throwable $e) {
-                    // tabla opcional / motor distinto
-                }
+            try {
+                // Historial de parejas: solo si ambos jugadores quedaron inscritos en el torneo nuevo
+                $stHp = $pdo->prepare(
+                    'UPDATE historial_parejas hp
+                     SET hp.torneo_id = ?
+                     WHERE hp.torneo_id = ?
+                       AND hp.jugador_1_id IN (SELECT id_usuario FROM inscritos WHERE torneo_id = ?)
+                       AND hp.jugador_2_id IN (SELECT id_usuario FROM inscritos WHERE torneo_id = ?)'
+                );
+                $stHp->execute([$idNuevo, $idTorneoOriginal, $idNuevo, $idNuevo]);
+            } catch (Throwable $e) {
+                // tabla opcional / motor distinto
             }
 
             try {
