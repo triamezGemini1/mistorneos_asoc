@@ -765,7 +765,7 @@ function getUsers($page = 1, $per_page = 25, $admin_id = null, $search = null, $
     $pdo = DB::pdo();
     $current_user = Auth::user();
     $is_admin_club = $current_user['role'] === 'admin_club';
-    $is_admin_general = $current_user['role'] === 'admin_general';
+    $is_admin_general = Auth::isAdminGeneral();
     $role_filter = $role_filter ? strtolower(trim((string)$role_filter)) : null;
     if ($role_filter) {
         $allowed_roles = $is_admin_club

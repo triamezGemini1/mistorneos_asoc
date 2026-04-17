@@ -11,6 +11,7 @@ if (!$user || !is_array($user)) {
     echo '<div class="container p-4"><div class="alert alert-warning">Sesión no válida. <a href="' . (class_exists('AppHelpers') ? AppHelpers::getPublicUrl() . '/login.php' : 'login.php') . '">Iniciar sesión</a>.</div></div>';
     return;
 }
+require_once __DIR__ . '/../../config/auth.php';
 $current_page = (isset($page) && $page !== '') ? $page : ($_GET['page'] ?? 'home');
 $layout_nav_action = trim((string) ($_GET['action'] ?? ''));
 require_once __DIR__ . '/../../lib/ReportReturnNavigation.php';
@@ -334,7 +335,7 @@ if ($current_page === 'estadisticas_torneos') {
         </li>
         <?php endif; ?>
         
-        <?php if ($user['role'] === 'admin_general'): ?>
+        <?php if (Auth::isAdminGeneral()): ?>
         <?php
         $is_inicio_open = in_array($current_page, ['home', 'calendario']);
         $is_estructura_open = in_array($current_page, ['entidades', 'organizaciones', 'clubs', 'directorio_clubes']);

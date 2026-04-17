@@ -53,7 +53,7 @@ class InvitationRegisterContext
         // Si el token no devolvió torneo/club pero el usuario es admin, permitir acceso buscando por token sin filtrar por estado (invitación expirada/inactiva)
         if ((empty($torneo_id) || empty($club_id)) && !empty($token) && strlen($token) >= 32) {
             $current_user = Auth::user();
-            $is_admin = $current_user && in_array($current_user['role'], ['admin_general', 'admin_torneo', 'admin_club'], true);
+            $is_admin = $current_user && (Auth::isAdminGeneral() || in_array($current_user['role'], ['admin_torneo', 'admin_club'], true));
             if ($is_admin) {
                 try {
                     $stmt = DB::pdo()->prepare("SELECT torneo_id, club_id FROM {$tb_inv} WHERE token = ? LIMIT 1");
@@ -124,7 +124,7 @@ class InvitationRegisterContext
             if (!$invitation_data) {
                 $tid_int = (int) $torneo_id;
                 $current_user = Auth::user();
-                $is_admin = $current_user && in_array($current_user['role'], ['admin_general', 'admin_torneo', 'admin_club'], true);
+                $is_admin = $current_user && (Auth::isAdminGeneral() || in_array($current_user['role'], ['admin_torneo', 'admin_club'], true));
                 $can_view_as_admin = $tid_int > 0 && $is_admin && Auth::canAccessTournament($tid_int);
                 if ($can_view_as_admin) {
                     $pdo = DB::pdo();
@@ -179,7 +179,7 @@ class InvitationRegisterContext
                         }
                         $base = rtrim(class_exists('AppHelpers') ? AppHelpers::getPublicUrl() : ($GLOBALS['APP_CONFIG']['app']['base_url'] ?? ''), '/');
                         $url_retorno = ($base !== '') ? $base . '/index.php?page=invitations' : 'index.php?page=invitations';
-                        $is_admin_general = $current_user && $current_user['role'] === 'admin_general';
+                        $is_admin_general = $current_user && Auth::isAdminGeneral();
                         $is_admin_torneo = $current_user && $current_user['role'] === 'admin_torneo';
                         $is_admin_club = $current_user && $current_user['role'] === 'admin_club';
                         unset($_SESSION['invitation_token'], $_SESSION['invitation_club_name']);
@@ -258,7 +258,7 @@ class InvitationRegisterContext
 
             $id_vinculado = isset($invitation_data['id_usuario_vinculado']) ? (int)$invitation_data['id_usuario_vinculado'] : 0;
             $current_user = Auth::user();
-            $is_admin_general = $current_user && $current_user['role'] === 'admin_general';
+            $is_admin_general = $current_user && Auth::isAdminGeneral();
             $is_admin_torneo = $current_user && $current_user['role'] === 'admin_torneo';
             $is_admin_club = $current_user && $current_user['role'] === 'admin_club';
             $es_usuario_vinculado = $current_user && $id_vinculado > 0 && (int)$current_user['id'] === $id_vinculado;

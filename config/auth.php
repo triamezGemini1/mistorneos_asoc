@@ -111,7 +111,11 @@ class Auth {
 
   public static function requireRole(array $roles): void {
     $u = self::user();
-    if (!$u || !in_array($u['role'], $roles, true)) {
+    $ok = $u && in_array($u['role'], $roles, true);
+    if (!$ok && $u && in_array('admin_general', $roles, true) && self::isAdminGeneral()) {
+      $ok = true;
+    }
+    if (!$ok) {
       // Redirigir a una p�gina de error en lugar de establecer c�digo de respuesta
       if (!headers_sent()) {
         $base = class_exists('AppHelpers') && method_exists('AppHelpers', 'getRequestEntryUrl') ? AppHelpers::getRequestEntryUrl() : rtrim(app_base_url(), '/') . '/public';
@@ -147,7 +151,11 @@ class Auth {
       ], JSON_UNESCAPED_UNICODE);
       exit;
     }
-    if (!in_array($u['role'], $roles, true)) {
+    $ok = in_array($u['role'], $roles, true);
+    if (!$ok && in_array('admin_general', $roles, true) && self::isAdminGeneral()) {
+      $ok = true;
+    }
+    if (!$ok) {
       if (!headers_sent()) {
         header('Content-Type: application/json; charset=utf-8');
         http_response_code(403);
@@ -165,6 +173,9 @@ class Auth {
     
     // Si tiene alguno de los roles especificados, permitir acceso
     if ($u && in_array($u['role'], $roles, true)) {
+      return;
+    }
+    if ($u && in_array('admin_general', $roles, true) && self::isAdminGeneral()) {
       return;
     }
     
@@ -205,12 +216,27 @@ class Auth {
   }
 
   /**
-   * Verifica si el usuario actual es admin_general
+   * Cuenta con privilegio de administrador general (según rol original de sesión).
+   * Incluye modo de prueba de rol: con role_switch_mode el rol activo puede ser otro,
+   * pero la cuenta sigue siendo admin_general.
+   */
+  public static function isAdminGeneralUser(?array $u): bool {
+    if (!$u || !is_array($u)) {
+      return false;
+    }
+    $orig = (string)($u['role_original'] ?? '');
+    if ($orig === '') {
+      $orig = (string)($u['role'] ?? '');
+    }
+    return $orig === 'admin_general';
+  }
+
+  /**
+   * Verifica si el usuario actual es admin_general (cuenta real, no solo el rol simulado).
    * @return bool
    */
   public static function isAdminGeneral(): bool {
-    $u = self::user();
-    return $u && $u['role'] === 'admin_general';
+    return self::isAdminGeneralUser(self::user());
   }
 
   /**
@@ -815,7 +841,7 @@ class Auth {
       self::$cached_user_clubes = [];
       return [];
     }
-    if ($u['role'] === 'admin_general') {
+    if (self::isAdminGeneral()) {
       try {
         $stmt = DB::pdo()->query("SELECT id FROM clubes WHERE estatus = 1");
         self::$cached_user_clubes = $stmt->fetchAll(PDO::FETCH_COLUMN) ?: [];
@@ -859,7 +885,7 @@ class Auth {
     $u = self::user();
     if (!$u) return false;
     
-    if ($u['role'] === 'admin_general') return true;
+    if (self::isAdminGeneral()) return true;
     
     $clubes = self::getUserClubes();
     return in_array($club_id, $clubes);

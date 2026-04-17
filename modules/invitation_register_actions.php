@@ -91,7 +91,7 @@ if ($_POST['action'] === 'retirar') {
 
 if ($_POST['action'] === 'register_player') {
     $current_user = Auth::user();
-    $is_admin_general = $current_user && $current_user['role'] === 'admin_general';
+    $is_admin_general = $current_user && Auth::isAdminGeneral();
     $is_admin_torneo = $current_user && $current_user['role'] === 'admin_torneo';
     $is_admin_club = $current_user && $current_user['role'] === 'admin_club';
     $id_vinculado_inv = $invitation_data ? (int)($invitation_data['id_usuario_vinculado'] ?? 0) : 0;
@@ -261,7 +261,7 @@ if ($_POST['action'] === 'register_player') {
 if ($_POST['action'] === 'register_pair') {
     require_once __DIR__ . '/../lib/ParejasFijasHelper.php';
     $current_user = Auth::user();
-    $is_admin_general = $current_user && $current_user['role'] === 'admin_general';
+    $is_admin_general = $current_user && Auth::isAdminGeneral();
     $is_admin_torneo = $current_user && $current_user['role'] === 'admin_torneo';
     $is_admin_club = $current_user && $current_user['role'] === 'admin_club';
     $id_vinculado_inv = $invitation_data ? (int)($invitation_data['id_usuario_vinculado'] ?? 0) : 0;

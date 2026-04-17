@@ -85,7 +85,7 @@ if (empty($torneo_id) || empty($club_id)) {
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'register_player') {
     // Verificar si el usuario est� autenticado
     $current_user = Auth::user();
-    $is_admin_general = $current_user && $current_user['role'] === 'admin_general';
+    $is_admin_general = $current_user && Auth::isAdminGeneral();
     $is_admin_torneo = $current_user && $current_user['role'] === 'admin_torneo';
     $is_admin_club = $current_user && $current_user['role'] === 'admin_club';
 
@@ -180,7 +180,7 @@ if ($invitation_data && !$error_message) {
 
 // Verificar si el usuario est� autenticado
 $current_user = Auth::user();
-$is_admin_general = $current_user && $current_user['role'] === 'admin_general';
+$is_admin_general = $current_user && Auth::isAdminGeneral();
 $is_admin_torneo = $current_user && $current_user['role'] === 'admin_torneo';
 $is_admin_club = $current_user && $current_user['role'] === 'admin_club';
 

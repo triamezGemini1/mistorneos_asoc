@@ -26,8 +26,8 @@ class TournamentService
      */
     public function getTournamentsForUser(array $user, array $filters = []): array
     {
-        // Admin general ve todo
-        if ($user['role'] === 'admin_general') {
+        // Admin general ve todo (incl. cuenta admin_general con rol simulado)
+        if (class_exists('Auth') && \Auth::isAdminGeneralUser($user)) {
             return $this->tournamentRepository->findAll($filters);
         }
 
@@ -67,7 +67,7 @@ class TournamentService
      */
     public function canUserAccessTournament(array $user, array $tournament): bool
     {
-        if ($user['role'] === 'admin_general') {
+        if (class_exists('Auth') && \Auth::isAdminGeneralUser($user)) {
             return true;
         }
 
@@ -83,8 +83,8 @@ class TournamentService
      */
     public function canUserModifyTournament(array $user, int $tournamentId): bool
     {
-        // Admin general puede todo
-        if ($user['role'] === 'admin_general') {
+        // Admin general puede todo (incl. cuenta admin_general con rol simulado)
+        if (class_exists('Auth') && \Auth::isAdminGeneralUser($user)) {
             return true;
         }
 
@@ -118,8 +118,8 @@ class TournamentService
             return ['success' => false, 'errors' => $errors];
         }
 
-        // Si no es admin_general, forzar club del usuario
-        if ($user['role'] !== 'admin_general') {
+        // Si no es cuenta admin_general, forzar club del usuario
+        if (!(class_exists('Auth') && \Auth::isAdminGeneralUser($user))) {
             $data['club_responsable'] = $user['club_id'];
         }
 

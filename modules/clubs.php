@@ -21,7 +21,7 @@ if (in_array($action, $crud_actions, true)) {
 
 // Si es admin_club y está intentando ver detalles o editar, verificar permisos después
 // Si es admin_club y está en list u otra acción, redirigir
-if ($current_user['role'] === 'admin_club') {
+if ($current_user['role'] === 'admin_club' && !Auth::isAdminGeneral()) {
     if ($action !== 'detail' && $action !== 'afiliado_detail' && $action !== 'edit') {
         // Redirigir a clubes asociados solo si no es detalle
         echo '<script>window.location.href = "index.php?page=clubes_asociados";</script>';
@@ -314,8 +314,8 @@ $entidad_map = loadEntidadMap();
 // Para formulario nuevo club: organizaciones (admin_general elige; admin_torneo usa la de su club)
 $organizaciones_list = [];
 $organizacion_id_new = null;
-if ($action === 'new' && ($current_user['role'] === 'admin_general' || $current_user['role'] === 'admin_torneo')) {
-    if ($current_user['role'] === 'admin_general') {
+if ($action === 'new' && (Auth::isAdminGeneral() || $current_user['role'] === 'admin_torneo')) {
+    if (Auth::isAdminGeneral()) {
         $stmt = DB::pdo()->query("SELECT id, nombre FROM organizaciones WHERE estatus = 1 ORDER BY nombre ASC");
         $organizaciones_list = $stmt ? $stmt->fetchAll(PDO::FETCH_ASSOC) : [];
     } else {
@@ -995,7 +995,7 @@ if ($action === 'list') {
                     <input type="hidden" name="id" value="<?= (int)$club['id'] ?>">
                 <?php endif; ?>
                 <?php if ($action === 'new'): ?>
-                    <?php if ($current_user['role'] === 'admin_general'): ?>
+                    <?php if (Auth::isAdminGeneral()): ?>
                         <?php if (!empty($organizaciones_list)): ?>
                             <div class="mb-3">
                                 <label for="organizacion_id" class="form-label">Organización (entidad territorial) *</label>

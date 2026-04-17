@@ -21,6 +21,5 @@ function requireAdminGeneral(): void {
  * @return bool
  */
 function isAdminGeneral(): bool {
-    $user = Auth::user();
-    return $user && ($user['role'] ?? '') === 'admin_general';
+    return Auth::isAdminGeneral();
 }

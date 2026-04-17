@@ -60,7 +60,7 @@ if (!empty($entidades_options)) {
 if (!empty($stats) && !isset($stats['error'])):
 ?>
 <div class="row g-4 mb-4">
-    <?php if ($current_user['role'] === 'admin_general'): ?>
+    <?php if (Auth::isAdminGeneral()): ?>
         <div class="col-md-2">
             <div class="card border-primary">
                 <div class="card-body text-center">
@@ -205,7 +205,7 @@ if (!empty($stats) && !isset($stats['error'])):
 $is_admin_list = $users_result && isset($users_result['is_admin_list']) && $users_result['is_admin_list'];
 $is_club_list = $users_result && isset($users_result['is_club_list']) && $users_result['is_club_list'];
 $is_club_by_entidad = $users_result && isset($users_result['is_club_by_entidad']) && $users_result['is_club_by_entidad'];
-$is_admin_general = $current_user['role'] === 'admin_general';
+$is_admin_general = Auth::isAdminGeneral();
 $is_admin_club = $current_user['role'] === 'admin_club';
 ?>
 
@@ -973,7 +973,7 @@ $is_admin_club = $current_user['role'] === 'admin_club';
                         <div class="col-md-6 mb-3">
                             <label for="role" class="form-label">Rol *</label>
                             <select class="form-select" id="role" name="role" required onchange="toggleClubField('create')">
-                                <?php if ($current_user['role'] === 'admin_general'): ?>
+                                <?php if (Auth::isAdminGeneral()): ?>
                                     <option value="usuario" <?= ($form_data['role'] ?? '') === 'usuario' ? 'selected' : '' ?>>Usuario</option>
                                     <option value="admin_club" <?= ($form_data['role'] ?? '') === 'admin_club' ? 'selected' : '' ?>>Admin Organización</option>
                                     <option value="admin_torneo" <?= ($form_data['role'] ?? '') === 'admin_torneo' ? 'selected' : '' ?>>Admin Torneo</option>
@@ -987,7 +987,7 @@ $is_admin_club = $current_user['role'] === 'admin_club';
                         </div>
                     </div>
                     
-                    <?php if ($current_user['role'] === 'admin_general'): ?>
+                    <?php if (Auth::isAdminGeneral()): ?>
                     <div class="mb-3" id="club_field_create">
                         <label for="club_id" class="form-label">
                             Club Asignado
@@ -1077,7 +1077,7 @@ $is_admin_club = $current_user['role'] === 'admin_club';
                     <div class="mb-3">
                         <label for="edit_role" class="form-label">Rol *</label>
                         <select class="form-select" id="edit_role" name="role" required onchange="toggleClubField('edit')">
-                            <?php if ($current_user['role'] === 'admin_general'): ?>
+                            <?php if (Auth::isAdminGeneral()): ?>
                                 <option value="usuario">Usuario</option>
                                 <option value="admin_club">Admin Organización</option>
                                 <option value="admin_torneo">Admin Torneo</option>

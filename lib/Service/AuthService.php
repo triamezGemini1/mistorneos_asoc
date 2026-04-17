@@ -129,8 +129,8 @@ class AuthService
      */
     public function canAccessTournament(array $user, int $tournamentId, \PDO $pdo): bool
     {
-        // Admin general puede todo
-        if ($user['role'] === 'admin_general') {
+        // Admin general puede todo (incl. cuenta admin_general con rol simulado)
+        if (class_exists('Auth') && \Auth::isAdminGeneralUser($user)) {
             return true;
         }
 

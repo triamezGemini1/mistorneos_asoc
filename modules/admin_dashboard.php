@@ -14,7 +14,8 @@ $success_message = $_GET['success'] ?? null;
 $error_message = $_GET['error'] ?? null;
 
 $current_user = Auth::user();
-$user_role = $current_user['role'];
+// Datos del dashboard: cuenta admin_general (incl. modo prueba de rol) usa vistas y estadísticas globales.
+$user_role = Auth::isAdminGeneral() ? 'admin_general' : $current_user['role'];
 
 require_once __DIR__ . '/../lib/DashboardData.php';
 
@@ -23,7 +24,7 @@ $data = DashboardData::loadAll($user_role, $current_user);
 $view = $_GET['view'] ?? 'home';
 
 // Dashboard admin_general: home solo muestra tarjetas de estadísticas (sin tablas de torneos/entidades)
-if ($user_role === 'admin_general' && $view === 'home') {
+if (Auth::isAdminGeneral() && $view === 'home') {
     require_once __DIR__ . '/../lib/OrganizacionesData.php';
     $data['stats'] = array_merge($data['stats'] ?? [], OrganizacionesData::loadStatsGlobales());
 }

@@ -72,7 +72,7 @@ $athletes_by_club = $athletes_by_club ?? [];
 
     <!-- Stats Cards -->
     <div class="row g-4 mb-5 fade-in">
-        <?php if ($_SESSION['user']['role'] === 'admin_general'): ?>
+        <?php if ($user_role === 'admin_general'): ?>
         <div class="col-12 mb-3">
             <h4 class="text-muted"><i class="fas fa-chart-line me-2"></i>Estadísticas Globales del Sistema</h4>
         </div>
