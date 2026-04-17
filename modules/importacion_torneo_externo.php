@@ -352,7 +352,16 @@ foreach ($torneos as $t) {
         break;
     }
 }
-$modalidad = (int)($torneo_actual['modalidad'] ?? 0);
+/* Torneo por URL pero fuera del top 300 por fecha: cargar por id (evita null y error 500 en PHP 8+). */
+if ($torneo_id_sel > 0 && $torneo_actual === null) {
+    $stT = $pdo->prepare('SELECT id, nombre, fechator, modalidad FROM tournaments WHERE id = ? LIMIT 1');
+    $stT->execute([$torneo_id_sel]);
+    $filaT = $stT->fetch(PDO::FETCH_ASSOC);
+    if ($filaT) {
+        $torneo_actual = $filaT;
+    }
+}
+$modalidad = $torneo_actual !== null ? (int)($torneo_actual['modalidad'] ?? 0) : 0;
 $es_equipos = $modalidad === 3;
 $etiqueta_modalidad = $es_equipos ? 'Equipos (4 integrantes)' : ($modalidad === 4 ? 'Parejas fijas' : 'Individual / mesas');
 $url_panel = 'index.php?page=torneo_gestion&action=panel&torneo_id=' . $torneo_id_sel;
