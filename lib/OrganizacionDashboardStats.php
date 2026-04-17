@@ -17,6 +17,8 @@ final class OrganizacionDashboardStats
 
     private static ?bool $clubesHasOrganizacionId = null;
 
+    private static ?bool $clubesHasCodOrg = null;
+
     private static function clubesHasOrganizacionIdColumn(PDO $pdo): bool
     {
         if (self::$clubesHasOrganizacionId !== null) {
@@ -30,6 +32,21 @@ final class OrganizacionDashboardStats
         }
 
         return self::$clubesHasOrganizacionId;
+    }
+
+    private static function clubesHasCodOrgColumn(PDO $pdo): bool
+    {
+        if (self::$clubesHasCodOrg !== null) {
+            return self::$clubesHasCodOrg;
+        }
+        try {
+            $pdo->query('SELECT `cod_org` FROM `clubes` LIMIT 0');
+            self::$clubesHasCodOrg = true;
+        } catch (Throwable $ignored) {
+            self::$clubesHasCodOrg = false;
+        }
+
+        return self::$clubesHasCodOrg;
     }
 
     /** @return array{has_usuario_cod_org: bool, has_tournament_cod_org: bool} */
@@ -65,23 +82,23 @@ final class OrganizacionDashboardStats
 
     /**
      * WHERE sobre clubes (alias c) + parámetros.
-     * Solo vínculo explícito a la organización (organizacion_id y/o cod_org).
-     * No usar entidad territorial aquí: varias organizaciones pueden compartir la misma entidad
-     * y el OR por entidad mezclaba clubes ajenos (p. ej. desplegable de responsables al editar club).
+     * - organizacion_id (si existe): FK legacy a organizaciones.id.
+     * - cod_org: debe ser el código canónico de federación (organizaciones.cod_org = entidad), ver sql/normalizar_modelo_organizacion_canonico.sql
+     *   No usar c.cod_org IN (id_organización, cod_org): el id interno puede coincidir con el código territorial de otra federación
+     *   y mezclaba clubes de Cojedes, Táchira, etc. con otra organización.
      */
     private static function clubScopeSqlAndParams(PDO $pdo, int $org_pk, int $org_ref): array
     {
-        $ids = self::idsRef($org_pk, $org_ref);
+        $canonical = $org_ref > 0 ? $org_ref : $org_pk;
         $parts = [];
         $params = [];
         if (self::clubesHasOrganizacionIdColumn($pdo)) {
             $parts[] = 'c.organizacion_id = ?';
             $params[] = $org_pk;
         }
-        if ($ids !== []) {
-            $ph = implode(',', array_fill(0, count($ids), '?'));
-            $parts[] = "c.cod_org IN ({$ph})";
-            $params = array_merge($params, $ids);
+        if (self::clubesHasCodOrgColumn($pdo)) {
+            $parts[] = 'c.cod_org = ?';
+            $params[] = $canonical;
         }
         if ($parts === []) {
             return ['1=0', []];
