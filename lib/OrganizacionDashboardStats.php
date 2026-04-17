@@ -15,6 +15,23 @@ final class OrganizacionDashboardStats
     /** @var array{has_usuario_cod_org: bool, has_tournament_cod_org: bool}|null */
     private static ?array $columnFlags = null;
 
+    private static ?bool $clubesHasOrganizacionId = null;
+
+    private static function clubesHasOrganizacionIdColumn(PDO $pdo): bool
+    {
+        if (self::$clubesHasOrganizacionId !== null) {
+            return self::$clubesHasOrganizacionId;
+        }
+        try {
+            $pdo->query('SELECT `organizacion_id` FROM `clubes` LIMIT 0');
+            self::$clubesHasOrganizacionId = true;
+        } catch (Throwable $ignored) {
+            self::$clubesHasOrganizacionId = false;
+        }
+
+        return self::$clubesHasOrganizacionId;
+    }
+
     /** @return array{has_usuario_cod_org: bool, has_tournament_cod_org: bool} */
     public static function columnFlags(PDO $pdo): array
     {
@@ -46,14 +63,31 @@ final class OrganizacionDashboardStats
         return array_values(array_unique(array_filter([$org_pk, $org_ref], static fn (int $v): bool => $v > 0)));
     }
 
-    /** WHERE sobre clubes (alias c) + parámetros */
-    private static function clubScopeSqlAndParams(int $org_pk, int $org_ref, int $org_entidad): array
+    /**
+     * WHERE sobre clubes (alias c) + parámetros.
+     * Solo vínculo explícito a la organización (organizacion_id y/o cod_org).
+     * No usar entidad territorial aquí: varias organizaciones pueden compartir la misma entidad
+     * y el OR por entidad mezclaba clubes ajenos (p. ej. desplegable de responsables al editar club).
+     */
+    private static function clubScopeSqlAndParams(PDO $pdo, int $org_pk, int $org_ref): array
     {
         $ids = self::idsRef($org_pk, $org_ref);
-        $ph = implode(',', array_fill(0, count($ids), '?'));
-        $sql = "c.estatus = 1 AND (c.cod_org IN ({$ph}) OR (? > 0 AND COALESCE(c.entidad, 0) = ?))";
+        $parts = [];
+        $params = [];
+        if (self::clubesHasOrganizacionIdColumn($pdo)) {
+            $parts[] = 'c.organizacion_id = ?';
+            $params[] = $org_pk;
+        }
+        if ($ids !== []) {
+            $ph = implode(',', array_fill(0, count($ids), '?'));
+            $parts[] = "c.cod_org IN ({$ph})";
+            $params = array_merge($params, $ids);
+        }
+        if ($parts === []) {
+            return ['1=0', []];
+        }
 
-        return [$sql, array_merge($ids, [$org_entidad, $org_entidad])];
+        return ['c.estatus = 1 AND (' . implode(' OR ', $parts) . ')', $params];
     }
 
     /**
@@ -72,8 +106,7 @@ final class OrganizacionDashboardStats
         if ($org_ref <= 0) {
             $org_ref = $org_pk;
         }
-        $org_entidad = (int) ($organizacion['entidad'] ?? 0);
-        [$clubWhere, $clubParams] = self::clubScopeSqlAndParams($org_pk, $org_ref, $org_entidad);
+        [$clubWhere, $clubParams] = self::clubScopeSqlAndParams($pdo, $org_pk, $org_ref);
         $stmt = $pdo->prepare("SELECT DISTINCT c.id FROM clubes c WHERE {$clubWhere}");
         $stmt->execute($clubParams);
 
@@ -223,7 +256,7 @@ final class OrganizacionDashboardStats
         }
         $org_entidad = (int) ($organizacion['entidad'] ?? 0);
 
-        [$clubWhere, $clubParams] = self::clubScopeSqlAndParams($org_pk, $org_ref, $org_entidad);
+        [$clubWhere, $clubParams] = self::clubScopeSqlAndParams($pdo, $org_pk, $org_ref);
         $stmt = $pdo->prepare("SELECT COUNT(DISTINCT c.id) FROM clubes c WHERE {$clubWhere}");
         $stmt->execute($clubParams);
         $stats_clubes = (int) $stmt->fetchColumn();
@@ -325,7 +358,7 @@ final class OrganizacionDashboardStats
         }
         $org_entidad = (int) ($organizacion['entidad'] ?? 0);
 
-        [$clubWhere, $clubParams] = self::clubScopeSqlAndParams($org_pk, $org_ref, $org_entidad);
+        [$clubWhere, $clubParams] = self::clubScopeSqlAndParams($pdo, $org_pk, $org_ref);
         $uTerr = self::usuarioTerritorioSql($pdo);
         $terrParams = [$org_entidad, $org_entidad];
 
