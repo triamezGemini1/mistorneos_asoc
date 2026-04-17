@@ -26,10 +26,11 @@ class ClubHelper {
     }
     
     /**
-     * Obtiene los clubes de una organización (vínculo solo por clubes.cod_org = código de federación).
+     * IDs de clubes bajo el alcance de una federación (código canónico vía OrganizacionDashboardStats).
+     * Uso: listados, filtros, permisos por organización. No sustituye a cargar un club por PK.
      *
-     * @param int $organizacion_id ID o cod_org de la fila en organizaciones (resolución interna)
-     * @return array Lista de IDs de clubes
+     * @param int $organizacion_id PK de organización o valor pasado a resolución interna (id/cod_org de la fila org)
+     * @return int[] IDs primarios en `clubes.id` (no son valores de cod_org del club)
      */
     public static function getClubesByOrganizacionId(int $organizacion_id): array {
         try {
@@ -53,12 +54,11 @@ class ClubHelper {
     }
 
     /**
-     * Obtiene los clubes gestionados por un admin_club (admin organización)
-     * Por organización: clubes vía OrganizacionDashboardStats (solo clubes.cod_org).
-     * Fallback legacy: clubes.admin_club_id = user (por si no tienen org aún).
+     * IDs de clubes gestionados por el admin (lista de PKs `clubes.id`).
+     * Para edición/detalle de un club concreto desde UI, seguir usando siempre ese id; no mapear a cod_org.
      *
      * @param int $admin_club_user_id ID del usuario admin_club (usuarios.id)
-     * @return array Lista de IDs de clubes
+     * @return int[] Lista de `clubes.id`
      */
     public static function getClubesByAdminClubId(int $admin_club_user_id): array {
         try {

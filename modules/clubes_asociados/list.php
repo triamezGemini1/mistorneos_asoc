@@ -2,6 +2,10 @@
 /**
  * Clubes de la organización (admin organización)
  * Muestra los clubes de la organización del admin con sus estadísticas
+ *
+ * Regla de identificación:
+ * - Listado / modal / POST editar: siempre el club por PK `clubes.id` (parámetro `club_id`). No sustituir por `cod_org`.
+ * - Alcance “qué clubes pertenecen a la federación”: `ClubHelper` + código canónico (distinto; no es la PK del club).
  */
 
 if (!defined('APP_BOOTSTRAPPED')) { 
@@ -14,6 +18,7 @@ require_once __DIR__ . '/../../lib/OrganizacionDashboardStats.php';
 
 /**
  * Normaliza una fila de club para listado / modal (mismos campos que espera editarClub() en JS).
+ * `fed_codigo_resuelto` es solo informativo (columna Cód.); el identificador de edición sigue siendo `id` (PK).
  *
  * @param array<string, mixed> $c
  * @return array<string, mixed>
@@ -184,7 +189,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
     }
     
-    // Editar club (estructura tabla: rif, nombre, direccion, delegado, delegado_user_id, telefono, email, permite_inscripcion_linea, etc.)
+    // Editar club: solo por PK (clubes.id). Nunca interpretar como cod_org ni como id de organización.
     if ($action === 'editar') {
         $club_id = (int)($_POST['club_id'] ?? 0);
         $rif = trim($_POST['rif'] ?? '');
@@ -394,10 +399,10 @@ try {
     $error = 'Error al cargar clubes: ' . $e->getMessage();
 }
 
-// ?club_id= solo para abrir el modal (validación de acceso se hace en public/index.php antes del layout)
+// ?club_id= es PK de clubes (misma semántica que el listado). No es cod_org de federación.
 $club_id_get = isset($_GET['club_id']) ? (int) $_GET['club_id'] : 0;
 
-// Payload del modal: siempre la fila real en BD para ese id + permiso de org (no depender del array del listado).
+// Modal: SELECT por id (PK). No buscar por cod_org aunque coincida numéricamente con otro concepto.
 $club_edit_modal_payload = null;
 if ($club_id_get > 0 && ClubHelper::isClubManagedByAdmin($admin_club_user_id, $club_id_get)) {
     try {
@@ -753,7 +758,7 @@ if ($organizacion_cod_org && !empty($mis_clubes)) {
         <div class="modal-content">
             <form method="POST" enctype="multipart/form-data">
                 <input type="hidden" name="action" value="editar">
-                <input type="hidden" name="club_id" id="edit_club_id">
+                <input type="hidden" name="club_id" id="edit_club_id" value="" autocomplete="off"><?php /* PK clubes.id; no cod_org */ ?>
                 <div class="modal-header bg-primary text-white">
                     <h5 class="modal-title"><i class="fas fa-edit"></i> Editar Club</h5>
                     <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
@@ -859,8 +864,13 @@ if ($club_edit_modal_payload !== null) {
 <script>
 var baseViewImageUrl = '<?= htmlspecialchars(class_exists("AppHelpers") ? AppHelpers::url("view_image.php") : "") ?>';
 var mis_clubes_json = <?= $mis_clubes_json ?>;
+/** Abre el modal de edición. `club.id` debe ser la PK de `clubes` (viene del listado). No usar cod_org como id. */
 function editarClub(club) {
-    document.getElementById('edit_club_id').value = club.id;
+    var pk = parseInt(club && club.id, 10);
+    if (!(pk > 0)) {
+        return;
+    }
+    document.getElementById('edit_club_id').value = String(pk);
     document.getElementById('edit_nombre').value = club.nombre || '';
     document.getElementById('edit_rif').value = club.rif || 'J000000000000';
     document.getElementById('edit_delegado_user_id').value = club.delegado_user_id || '0';
