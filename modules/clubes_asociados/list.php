@@ -37,6 +37,8 @@ function clubes_asociados_normalize_club_row(PDO $pdo, array $c): array
     $co = isset($c['cod_org']) ? (int) $c['cod_org'] : 0;
     $en = isset($c['entidad']) ? (int) $c['entidad'] : 0;
     $c['fed_codigo_resuelto'] = $co > 0 ? $co : ($en > 0 ? $en : 0);
+    // PK explícita para edición/JSON (nunca confundir con cod_org de federación ni con otro identificador).
+    $c['club_id_pk'] = (int) ($c['id'] ?? 0);
     if (!isset($c['rif']) || trim((string) $c['rif']) === '') {
         $c['rif'] = 'J000000000000';
     }
@@ -334,9 +336,13 @@ $mis_clubes = [];
 $club_ids = [];
 try {
     $club_ids = ClubHelper::getClubesByAdminClubId($admin_club_user_id);
-    if (empty($club_ids) && $organizacion_cod_org) {
-        // Misma regla que el dashboard (solo clubes.cod_org = código federación)
-        $club_ids = ClubHelper::getClubesByOrganizacionId((int) $organizacion_cod_org);
+    if (empty($club_ids)) {
+        // Siempre por PK de organización (Auth::getUserOrganizacionId). No pasar getUserOrganizacionCodOrg():
+        // un mismo entero puede ser cod_org de una org y PK de otra, y (id=? OR cod_org=?) devolvía la fila equivocada.
+        $orgPk = Auth::getUserOrganizacionId();
+        if ($orgPk) {
+            $club_ids = ClubHelper::getClubesByOrganizacionId((int) $orgPk);
+        }
     }
     if (!empty($club_ids)) {
             $placeholders = implode(',', array_fill(0, count($club_ids), '?'));
@@ -584,7 +590,7 @@ if ($organizacion_cod_org && !empty($mis_clubes)) {
                                             <div>
                                                 <strong><?= htmlspecialchars(trim((string) ($club['nombre'] ?? ''))) ?></strong>
                                                 <br>
-                                                <a href="index.php?page=clubs&action=detail&id=<?= $club['id'] ?>" class="btn btn-sm btn-link p-0 text-primary" title="Ver afiliados"><small><i class="fas fa-users me-1"></i>Ver afiliados</small></a>
+                                                <a href="index.php?page=clubs&action=detail&id=<?= (int) ($club['club_id_pk'] ?? $club['id'] ?? 0) ?>" class="btn btn-sm btn-link p-0 text-primary" title="Ver afiliados"><small><i class="fas fa-users me-1"></i>Ver afiliados</small></a>
                                             </div>
                                         </div>
                                     </td>
@@ -627,22 +633,22 @@ if ($organizacion_cod_org && !empty($mis_clubes)) {
                                         <?php endif; ?>
                                     </td>
                                     <td class="text-center">
-                                        <a href="<?= htmlspecialchars(AppHelpers::dashboard('notificaciones_masivas', ['tipo' => 'club', 'club_id' => $club['id'], 'from' => 'clubes'])) ?>" 
+                                        <a href="<?= htmlspecialchars(AppHelpers::dashboard('notificaciones_masivas', ['tipo' => 'club', 'club_id' => (int) ($club['club_id_pk'] ?? $club['id'] ?? 0), 'from' => 'clubes'])) ?>" 
                                            class="btn btn-sm btn-outline-warning" title="Enviar notificación a afiliados del club">
                                             <i class="fas fa-bell"></i>
                                         </a>
-                                        <a href="<?= htmlspecialchars(AppHelpers::dashboard('clubs/invitation_link', ['club_id' => $club['id']])) ?>" 
+                                        <a href="<?= htmlspecialchars(AppHelpers::dashboard('clubs/invitation_link', ['club_id' => (int) ($club['club_id_pk'] ?? $club['id'] ?? 0)])) ?>" 
                                            class="btn btn-sm btn-outline-success" title="Link invitación club">
                                             <i class="fab fa-whatsapp"></i>
                                         </a>
                                         <button type="button" class="btn btn-sm btn-outline-primary"
-                                                onclick="editarClubPorId(<?= (int) ($club['id'] ?? 0) ?>)"
-                                                title="Editar este club (id <?= (int) ($club['id'] ?? 0) ?>)">
+                                                onclick="editarClubPorId(<?= (int) ($club['club_id_pk'] ?? $club['id'] ?? 0) ?>)"
+                                                title="Editar este club (PK <?= (int) ($club['club_id_pk'] ?? $club['id'] ?? 0) ?>)">
                                             <i class="fas fa-edit"></i>
                                         </button>
                                         <?php if (($club['total_afiliados'] ?? 0) == 0): ?>
                                             <button type="button" class="btn btn-sm btn-outline-danger"
-                                                    onclick="eliminarClub(<?= $club['id'] ?>, <?= json_encode($club['nombre']) ?>)">
+                                                    onclick="eliminarClub(<?= (int) ($club['club_id_pk'] ?? $club['id'] ?? 0) ?>, <?= json_encode($club['nombre']) ?>)">
                                                 <i class="fas fa-trash"></i>
                                             </button>
                                         <?php endif; ?>
@@ -875,7 +881,8 @@ function editarClubPorId(id) {
     var i, row;
     for (i = 0; i < MIS_CLUBES.length; i++) {
         row = MIS_CLUBES[i];
-        if (parseInt(row.id, 10) === pk) {
+        var rowPk = parseInt(row.club_id_pk != null ? row.club_id_pk : row.id, 10);
+        if (rowPk === pk) {
             editarClub(row);
             return;
         }
@@ -891,21 +898,23 @@ function clubParaEdicionDesdeUrl(clubId) {
         if (Array.isArray(extra)) {
             for (i = 0; i < extra.length; i++) {
                 row = extra[i];
-                if (parseInt(row.id, 10) === pk) return row;
+                var rowPkE = parseInt(row.club_id_pk != null ? row.club_id_pk : row.id, 10);
+                if (rowPkE === pk) return row;
             }
         }
     } catch (e) {}
     if (Array.isArray(MIS_CLUBES)) {
         for (i = 0; i < MIS_CLUBES.length; i++) {
             row = MIS_CLUBES[i];
-            if (parseInt(row.id, 10) === pk) return row;
+            var rowPk2 = parseInt(row.club_id_pk != null ? row.club_id_pk : row.id, 10);
+            if (rowPk2 === pk) return row;
         }
     }
     return null;
 }
 /** Abre el modal. `club` debe ser la fila con `id` = PK de `clubes`. */
 function editarClub(club) {
-    var pk = parseInt(club && club.id, 10);
+    var pk = parseInt(club && (club.club_id_pk != null ? club.club_id_pk : club.id), 10);
     if (!(pk > 0)) {
         return;
     }

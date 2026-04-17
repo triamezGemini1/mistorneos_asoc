@@ -29,18 +29,26 @@ class ClubHelper {
      * IDs de clubes bajo el alcance de una federación (código canónico vía OrganizacionDashboardStats).
      * Uso: listados, filtros, permisos por organización. No sustituye a cargar un club por PK.
      *
-     * @param int $organizacion_id PK de organización o valor pasado a resolución interna (id/cod_org de la fila org)
+     * @param int $organizacion_id Preferir siempre la PK `organizaciones.id`. Si no hay fila, y existe `cod_org`,
+     *                             se intenta una segunda búsqueda solo por `cod_org` (nunca `id = ? OR cod_org = ?`
+     *                             con el mismo parámetro: colisión cuando el código federación coincide con la PK de otra org).
      * @return int[] IDs primarios en `clubes.id` (no son valores de cod_org del club)
      */
     public static function getClubesByOrganizacionId(int $organizacion_id): array {
+        if ($organizacion_id <= 0) {
+            return [];
+        }
         try {
             $pdo = DB::pdo();
             $hasCod = self::hasCodOrg();
-            $stmt = $pdo->prepare($hasCod
-                ? "SELECT * FROM organizaciones WHERE (id = ? OR cod_org = ?) AND estatus = 1 LIMIT 1"
-                : "SELECT * FROM organizaciones WHERE id = ? AND estatus = 1 LIMIT 1");
-            $stmt->execute($hasCod ? [$organizacion_id, $organizacion_id] : [$organizacion_id]);
+            $stmt = $pdo->prepare('SELECT * FROM organizaciones WHERE id = ? AND estatus = 1 LIMIT 1');
+            $stmt->execute([$organizacion_id]);
             $org = $stmt->fetch(PDO::FETCH_ASSOC);
+            if (!$org && $hasCod) {
+                $stmt = $pdo->prepare('SELECT * FROM organizaciones WHERE cod_org = ? AND estatus = 1 ORDER BY id ASC LIMIT 1');
+                $stmt->execute([$organizacion_id]);
+                $org = $stmt->fetch(PDO::FETCH_ASSOC);
+            }
             if (!$org) {
                 return [];
             }
