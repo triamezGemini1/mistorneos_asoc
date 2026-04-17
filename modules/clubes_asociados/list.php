@@ -635,8 +635,9 @@ if ($organizacion_cod_org && !empty($mis_clubes)) {
                                            class="btn btn-sm btn-outline-success" title="Link invitación club">
                                             <i class="fab fa-whatsapp"></i>
                                         </a>
-                                        <button type="button" class="btn btn-sm btn-outline-primary" 
-                                                onclick="editarClub(<?= htmlspecialchars(json_encode($club)) ?>)">
+                                        <button type="button" class="btn btn-sm btn-outline-primary"
+                                                onclick="editarClubPorId(<?= (int) ($club['id'] ?? 0) ?>)"
+                                                title="Editar este club (id <?= (int) ($club['id'] ?? 0) ?>)">
                                             <i class="fas fa-edit"></i>
                                         </button>
                                         <?php if (($club['total_afiliados'] ?? 0) == 0): ?>
@@ -863,8 +864,38 @@ if ($club_edit_modal_payload !== null) {
 ?>
 <script>
 var baseViewImageUrl = '<?= htmlspecialchars(class_exists("AppHelpers") ? AppHelpers::url("view_image.php") : "") ?>';
+/** Misma data que la tabla: la edición resuelve siempre por PK dentro de este array. */
+var MIS_CLUBES = <?= json_encode($mis_clubes, JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE) ?>;
+/** Solo entrada profunda (?club_id=) si el club no está en MIS_CLUBES. */
 var mis_clubes_json = <?= $mis_clubes_json ?>;
-/** Abre el modal de edición. `club.id` debe ser la PK de `clubes` (viene del listado). No usar cod_org como id. */
+function obtenerClubEdicionPorId(pk) {
+    pk = parseInt(pk, 10);
+    if (!(pk > 0)) return null;
+    var i, row;
+    if (Array.isArray(MIS_CLUBES)) {
+        for (i = 0; i < MIS_CLUBES.length; i++) {
+            row = MIS_CLUBES[i];
+            if (parseInt(row.id, 10) === pk) return row;
+        }
+    }
+    try {
+        var extra = JSON.parse(typeof mis_clubes_json !== 'undefined' ? mis_clubes_json : '[]');
+        if (Array.isArray(extra)) {
+            for (i = 0; i < extra.length; i++) {
+                row = extra[i];
+                if (parseInt(row.id, 10) === pk) return row;
+            }
+        }
+    } catch (e) {}
+    return null;
+}
+/** Desde el listado: solo el id de la fila; los datos salen de MIS_CLUBES (no JSON en HTML). */
+function editarClubPorId(id) {
+    var club = obtenerClubEdicionPorId(id);
+    if (!club) return;
+    editarClub(club);
+}
+/** Abre el modal. `club` debe ser la fila con `id` = PK de `clubes`. */
 function editarClub(club) {
     var pk = parseInt(club && club.id, 10);
     if (!(pk > 0)) {
@@ -903,23 +934,16 @@ function eliminarClub(id, nombre) {
     modal.show();
 }
 
-// Auto-abrir modal si ?club_id=X: el servidor ya inyectó la fila exacta de ese id (alcance organización).
 (function() {
     var params = new URLSearchParams(window.location.search);
     var clubId = parseInt(params.get('club_id'), 10);
-    if (clubId <= 0 || typeof mis_clubes_json === 'undefined') return;
-    var clubs = JSON.parse(mis_clubes_json || '[]');
-    var club = null;
-    if (clubs.length === 1 && parseInt(clubs[0].id, 10) === clubId) {
-        club = clubs[0];
-    } else {
-        club = clubs.find(function(c) { return parseInt(c.id, 10) === clubId; });
-    }
-    if (club) {
-        document.addEventListener('DOMContentLoaded', function() {
+    if (clubId <= 0) return;
+    document.addEventListener('DOMContentLoaded', function() {
+        var club = obtenerClubEdicionPorId(clubId);
+        if (club) {
             editarClub(club);
             history.replaceState(null, '', window.location.pathname + '?page=clubes_asociados');
-        });
-    }
+        }
+    });
 })();
 </script>
