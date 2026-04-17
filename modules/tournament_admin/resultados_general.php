@@ -325,7 +325,9 @@ $base_url_return = $use_standalone ? $script_actual : 'index.php?page=torneo_ges
                 <tbody>
                     <?php 
                     $posicion_display = 1;
+                    $fila_idx_general = 0;
                     foreach ($participantes as $participante): 
+                        $fila_idx_general++;
                         $posicion_actual = (int)($participante['posicion'] ?? 0);
                         if ($posicion_actual == 0) {
                             $posicion_actual = $posicion_display;
@@ -335,6 +337,7 @@ $base_url_return = $use_standalone ? $script_actual : 'index.php?page=torneo_ges
                         if ($posicion_actual == 1) $medalla_class = 'bg-yellow-50';
                         elseif ($posicion_actual == 2) $medalla_class = 'bg-gray-50';
                         elseif ($posicion_actual == 3) $medalla_class = 'bg-orange-50';
+                        $stripe_class = $medalla_class === '' && ($fila_idx_general % 2 === 0) ? 'bg-slate-50' : '';
                         
                         $nombre_equipo = $participante['nombre_equipo'] ?? 'Sin Equipo';
                         $codigo_equipo = $participante['codigo_equipo'] ?? '';
@@ -345,7 +348,7 @@ $base_url_return = $use_standalone ? $script_actual : 'index.php?page=torneo_ges
                         $action_param = $use_standalone ? '?' : '&';
                         $url_resumen = $base_url_link . $action_param . 'action=resumen_individual&torneo_id=' . $torneo_id . '&inscrito_id=' . $participante['id_usuario'] . '&from=resultados_general';
                     ?>
-                        <tr class="hover:bg-gray-50 <?php echo $medalla_class; ?> border-b border-gray-200">
+                        <tr class="hover:bg-gray-50 <?php echo $medalla_class; ?> <?php echo $stripe_class; ?> border-b border-gray-200">
                             <td class="border border-gray-300 px-4 py-3 text-center font-bold">
                                 <?php if ($posicion_actual == 1): ?>
                                     <i class="fas fa-trophy text-yellow-500"></i>

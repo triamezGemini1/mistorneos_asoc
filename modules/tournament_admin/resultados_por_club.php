@@ -573,7 +573,7 @@ $base_url_return = $use_standalone ? $script_actual : 'index.php?page=torneo_ges
                         foreach ($resultados_por_club_mostrar as $club_id => $club_data): 
                             error_log("HTML Vista Resumida: Mostrando club ID: $club_id, Nombre: {$club_data['club_nombre']}, Posición: $posicion_club");
                         ?>
-                        <tr class="border-b border-gray-200 hover:bg-gray-50 <?= $posicion_club <= 3 ? ($posicion_club == 1 ? 'bg-yellow-50' : ($posicion_club == 2 ? 'bg-gray-100' : 'bg-orange-50')) : '' ?>">
+                        <tr class="border-b border-gray-200 hover:bg-gray-50 <?= $posicion_club <= 3 ? ($posicion_club == 1 ? 'bg-yellow-50' : ($posicion_club == 2 ? 'bg-gray-100' : 'bg-orange-50')) : (($posicion_club % 2 === 0) ? 'bg-slate-50' : '') ?>">
                             <td class="px-4 py-4 font-bold text-center">
                                 <?= $posicion_club ?>
                                 <?php if ($posicion_club == 1): ?>
@@ -720,8 +720,13 @@ $base_url_return = $use_standalone ? $script_actual : 'index.php?page=torneo_ges
                         </tr>
                     </thead>
                     <tbody>
-                        <?php foreach ($club_data['jugadores'] as $jugador): ?>
-                        <tr class="border-b border-gray-200 hover:bg-gray-50">
+                        <?php
+                        $jidx = 0;
+                        foreach ($club_data['jugadores'] as $jugador):
+                            $jidx++;
+                            $stripeJ = ($jidx % 2 === 0) ? 'bg-slate-50' : '';
+                        ?>
+                        <tr class="border-b border-gray-200 hover:bg-gray-50 <?= $stripeJ ?>">
                             <td class="px-4 py-3 font-bold text-center">
                                 <?php $posJ = (int)($jugador['posicion'] ?? 0); ?>
                                 <?= $posJ > 0 ? $posJ : '-' ?>

@@ -247,10 +247,13 @@ $base_url_return = $use_standalone ? $script_actual : 'index.php?page=torneo_ges
                 </thead>
                 <tbody>
                     <?php 
+                    $eq_row = 0;
                     foreach ($equipos as $equipo): 
+                        $eq_row++;
                         $posicion_display = $equipo['posicion'] > 0 ? $equipo['posicion'] : '-';
+                        $stripeEq = ($eq_row % 2 === 0) ? 'bg-slate-50' : '';
                     ?>
-                        <tr class="hover:bg-gray-50">
+                        <tr class="hover:bg-gray-50 <?= $stripeEq ?>">
                             <td class="border border-gray-300 px-4 py-3 font-bold text-gray-800"><?php echo $posicion_display; ?></td>
                             <td class="border border-gray-300 px-4 py-3 font-mono text-gray-700"><?php echo htmlspecialchars($equipo['codigo_equipo']); ?></td>
                             <td class="border border-gray-300 px-4 py-3 font-semibold text-gray-800">

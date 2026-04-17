@@ -60,6 +60,12 @@ $es_parejas_posiciones = in_array((int)($torneo['modalidad'] ?? 0), [2, 4], true
             <a href="<?php echo htmlspecialchars($u('resultados_reportes')); ?>" class="btn btn-outline-secondary fw-bold">
                 <i class="fas fa-file-alt mr-1"></i> Todos los reportes
             </a>
+            <a href="<?php echo htmlspecialchars(AppHelpers::url('export_resultados_pdf.php', ['torneo_id' => $tid, 'tipo' => 'todos'])); ?>" target="_blank" rel="noopener" class="btn btn-outline-danger fw-bold border border-dark" title="Un solo PDF con clasificación, clubes y consolidado">
+                <i class="fas fa-file-pdf mr-1"></i> PDF (todos)
+            </a>
+            <a href="<?php echo htmlspecialchars($u('resultados_reportes_print', ['tipo' => 'todos'])); ?>" target="_blank" rel="noopener" class="btn btn-outline-info fw-bold border border-dark" title="Vista imprimible con todos los bloques">
+                <i class="fas fa-print mr-1"></i> Imprimir todos
+            </a>
             <?php endif; ?>
         </div>
     </div>
@@ -82,6 +88,8 @@ $es_parejas_posiciones = in_array((int)($torneo['modalidad'] ?? 0), [2, 4], true
     <a href="<?php echo htmlspecialchars(AppHelpers::url('export_resultados_pdf.php', ['torneo_id' => $tid, 'tipo' => 'posiciones'])); ?>" target="_blank" rel="noopener" class="btn btn-sm btn-danger text-dark fw-bold border border-dark">PDF</a>
     <a href="<?php echo htmlspecialchars($u2('resultados_reportes_print', ['tipo' => 'posiciones'])); ?>" target="_blank" rel="noopener" class="btn btn-sm btn-warning text-dark fw-bold">Imprimir</a>
     <a href="<?php echo htmlspecialchars($u2('resultados_reportes')); ?>" class="btn btn-sm btn-outline-secondary fw-bold">Reportes</a>
+    <a href="<?php echo htmlspecialchars(AppHelpers::url('export_resultados_pdf.php', ['torneo_id' => $tid, 'tipo' => 'todos'])); ?>" target="_blank" rel="noopener" class="btn btn-sm btn-outline-danger fw-bold border border-dark" title="Un solo PDF con todos los bloques">PDF todos</a>
+    <a href="<?php echo htmlspecialchars($u2('resultados_reportes_print', ['tipo' => 'todos'])); ?>" target="_blank" rel="noopener" class="btn btn-sm btn-outline-info fw-bold border border-dark" title="Vista imprimible con todos los bloques">Impr. todos</a>
     <?php endif; ?>
 </div>
 <?php endif; ?>
@@ -100,7 +108,7 @@ $es_parejas_posiciones = in_array((int)($torneo['modalidad'] ?? 0), [2, 4], true
                         </div>
                     <?php else: ?>
                         <div class="table-responsive">
-                            <table class="table table-striped table-hover">
+                            <table class="table table-bordered table-hover">
                                 <thead class="thead-dark">
                                     <tr>
                                         <th>Pos</th>
@@ -134,7 +142,9 @@ $es_parejas_posiciones = in_array((int)($torneo['modalidad'] ?? 0), [2, 4], true
                                             : $posiciones;
                                     }
                                     
+                                    $pos_idx = 0;
                                     foreach ($posiciones_paginadas as $pos): 
+                                        $pos_idx++;
                                         // Usar la posición calculada directamente desde la base de datos
                                         $posicion_actual = (int)($pos['posicion'] ?? 0);
                                         
@@ -148,8 +158,9 @@ $es_parejas_posiciones = in_array((int)($torneo['modalidad'] ?? 0), [2, 4], true
                                         if ($posicion_actual == 1) $medalla_class = 'table-warning';
                                         elseif ($posicion_actual == 2) $medalla_class = 'table-secondary';
                                         elseif ($posicion_actual == 3) $medalla_class = 'table-light';
+                                        $stripe_pos = ($medalla_class === '' && ($pos_idx % 2 === 0)) ? 'bg-light' : '';
                                     ?>
-                                        <tr class="<?php echo $medalla_class; ?>">
+                                        <tr class="<?php echo $medalla_class; ?> <?php echo $stripe_pos; ?>">
                                             <td>
                                                 <strong><?php echo $posicion_actual; ?></strong>
                                                 <?php if ($posicion_actual <= 3): ?>

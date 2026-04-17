@@ -337,7 +337,9 @@ $base_url_return = $use_standalone ? $script_actual : 'index.php?page=torneo_ges
                                 
                                 // Los jugadores ya vienen ordenados por clasificación dentro del equipo (ganados DESC, efectividad DESC, puntos DESC)
                                 // Mostrar posición en el torneo (no dentro del equipo)
+                                $jdet = 0;
                                 foreach ($equipo['jugadores'] as $jugador): 
+                                    $jdet++;
                                     $posicion_torneo = (int)($jugador['posicion'] ?? 0);
                                     $nombre_jugador = htmlspecialchars($jugador['nombre_completo'] ?? $jugador['nombre'] ?? 'N/A');
                                     $id_usuario = (int)($jugador['id_usuario'] ?? 0);
@@ -346,7 +348,7 @@ $base_url_return = $use_standalone ? $script_actual : 'index.php?page=torneo_ges
                                     $base_url_link = $base_url_return;
                                     $action_param = $use_standalone ? '?' : '&';
                                 ?>
-                                    <tr class="hover:bg-purple-50 border-b border-purple-100">
+                                    <tr class="hover:bg-purple-50 border-b border-purple-100 <?= ($jdet % 2 === 0) ? 'bg-violet-50/60' : '' ?>">
                                         <td class="border border-purple-200 px-3 py-2 text-center font-semibold">
                                             <?php echo $posicion_torneo > 0 ? $posicion_torneo : '-'; ?>
                                         </td>

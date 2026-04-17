@@ -61,6 +61,18 @@ $bloques = [
             <strong class="text-black">Excel (varias hojas):</strong>
             <a href="<?= htmlspecialchars($urlExcel) ?>" class="ml-2 text-black font-bold underline">Descargar Excel</a>
         </div>
+        <div class="mt-4 p-4 bg-amber-50 border-2 border-amber-600 rounded-lg">
+            <strong class="text-black"><i class="fas fa-layer-group mr-1"></i> Todos los reportes de clasificación y ranking</strong>
+            <p class="text-sm text-gray-800 mt-2 mb-3">Un solo documento con posiciones, clubes, <?php if ($esEquipos): ?>equipos, <?php endif; ?>consolidado, etc. (mismo orden que el índice).</p>
+            <div class="flex flex-wrap gap-2">
+                <a href="<?= htmlspecialchars($urlPrint('todos')) ?>" target="_blank" rel="noopener" class="inline-flex items-center px-4 py-2 bg-blue-200 text-black font-bold rounded-lg border border-blue-800 text-sm">
+                    <i class="fas fa-print mr-2"></i> Imprimir / vista (todos)
+                </a>
+                <a href="<?= htmlspecialchars($urlPdf('todos')) ?>" class="inline-flex items-center px-4 py-2 bg-red-200 text-black font-bold rounded-lg border border-red-800 text-sm" target="_blank" rel="noopener">
+                    <i class="fas fa-file-pdf mr-2"></i> Descargar PDF (todos)
+                </a>
+            </div>
+        </div>
     </div>
 
     <?php foreach ($bloques as $b):
