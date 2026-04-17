@@ -1,8 +1,9 @@
 <?php
 /**
  * Admin general — Carga externa transparente.
- * Homologación: cédula → usuario local (inscripción en sitio) → BD externa de personas → alta mínima con datos del archivo;
- * id externo del archivo se mapea a id_usuario. Resultados: Result1/PF, Result2/PC, SancionP, FF → partiresul.
+ * Homologación: cédula → usuario (inscripción en sitio / BD externa / alta mínima). Opción A: id externo + cédula (como individual).
+ * Opción B (parejas): cédula + columna pareja (sin id externo); se actualiza inscritos.numero = número de pareja para enlazar resultados.
+ * Resultados: usuario externo, cédula o columna pareja (valor lineal = inscritos.numero, único por atleta) → partiresul.
  * Post-carga: por ronda se valida GDU (obtenerReporteAnomalias) y mesas incompletas.
  */
 declare(strict_types=1);
@@ -41,7 +42,11 @@ function importacionTorneoExternoSwalPayload(array $res, string $origen, string 
     $html .= '<tr><td>Filas bloque cédulas (datos)</td><td><strong>' . $fh . '</strong></td></tr>';
     $html .= '<tr><td>Con usuario en Mistorneos (homolog.)</td><td><strong>' . (int)($res['cedulas_con_usuario_mistorneos'] ?? max(0, $fh - $sinBd)) . '</strong></td></tr>';
     $html .= '<tr><td>Cédulas sin resolver en homologación</td><td><strong>' . $sinBd . '</strong></td></tr>';
-    $html .= '<tr><td>Mapeos usuario externo → id</td><td><strong>' . $map . '</strong> ' . ($ch ? '(col. usuario en homolog.)' : '(sin col. usuario)') . '</td></tr>';
+    $soloCp = !empty($res['homologacion_solo_cedula_pareja']);
+    $html .= '<tr><td>Mapeos usuario externo → id</td><td><strong>' . $map . '</strong> ' . ($soloCp ? '(modo cédula + pareja)' : ($ch ? '(col. usuario en homolog.)' : '(sin col. usuario)')) . '</td></tr>';
+    if ($soloCp) {
+        $html .= '<tr class="table-light"><td colspan="2" class="small">Homologación reconocida como <strong>solo cédula + pareja</strong> (sin columna id externo). Los resultados pueden ir solo con columna pareja + secuencia.</td></tr>';
+    }
     $html .= '<tr><td>Filas bloque resultados (datos)</td><td><strong>' . $fr . '</strong></td></tr>';
     $html .= '<tr><td>Columna usuario en resultados</td><td>' . ($cr ? 'Sí' : 'No') . '</td></tr>';
     $html .= '<tr><td>Filas que podían insertarse</td><td><strong>' . $listas . '</strong></td></tr>';
@@ -110,8 +115,8 @@ function importacionTorneoExternoSwalPayload(array $res, string $origen, string 
     if ($errList !== []) {
         $html .= '<p class="text-danger mb-0"><strong>SQL / detalle:</strong> ' . htmlspecialchars(implode(' | ', array_slice($errList, 0, 3))) . '</p>';
     }
-    if ($ins === 0 && $sinJug > 0 && $map === 0 && $ch) {
-        $html .= '<p class="text-warning mt-2 mb-0">El mapa usuario externo está vacío: ninguna fila de cédulas obtuvo id_usuario. Revise cédulas en BD y que la 1.ª fila del bloque tenga columnas <code>cédula</code> y <code>usuario</code>.</p>';
+    if ($ins === 0 && $sinJug > 0 && $map === 0 && $ch && empty($res['homologacion_solo_cedula_pareja'])) {
+        $html .= '<p class="text-warning mt-2 mb-0">El mapa usuario externo está vacío: ninguna fila de cédulas obtuvo id_usuario. Revise cédulas en BD y que la 1.ª fila del bloque tenga columnas <code>cédula</code> y <code>usuario</code>, o use modo <code>cédula</code> + <code>pareja</code> sin id externo.</p>';
     }
     if ($ins === 0 && $sinJug > 0 && $map > 0) {
         $html .= '<p class="text-warning mt-2 mb-0">Hay mapeos pero muchas filas sin jugador: los valores en columna <code>usuario</code> del bloque resultados deben coincidir exactamente con los del bloque cédulas (mismo número).</p>';
@@ -231,6 +236,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $noList = $res['parejas_no_encontradas'] ?? [];
         $html = '<div class="text-start small" style="max-width:520px">';
         $html .= '<p><strong>Filas de datos:</strong> ' . (int) $res['filas_datos'] . ' · <strong>Columna pareja:</strong> ' . htmlspecialchars((string) $res['columna_pareja_titulo'], ENT_QUOTES, 'UTF-8') . '</p>';
+        $html .= '<p class="text-muted small mb-2">Mismo criterio que la importación: cada valor de <strong>pareja</strong> debe coincidir con <code>inscritos.numero</code> de un atleta en el torneo (identificador lineal único, como en la carga masiva de parejas).</p>';
         $html .= '<p><strong>Encontrados:</strong> <span class="text-success">' . (int) $res['encontrados'] . '</span> · ';
         $html .= '<strong>No encontrados:</strong> <span class="text-danger">' . (int) $res['no_encontrados'] . '</span> · ';
         $html .= '<strong>Pareja vacía:</strong> ' . (int) $res['pareja_vacia'] . '</p>';
@@ -444,11 +450,11 @@ $url_import_individual = $url_panel . '#importacion-masiva';
                 </div>
                 <div class="col-12 col-lg-6">
                     <div class="alert alert-info small mb-0 h-100">
-                        <strong>Cómo funciona (sin cédula en resultados)</strong>
+                        <strong>Cómo encajan los tres pasos</strong>
                         <ol class="mb-0 ps-3 mt-2">
-                            <li><strong>Tabla homologación</strong> (solo ahí va la cédula): una columna = <em>id externo</em> (37 — el mismo que en resultados), otra = <em>cédula</em> (4906763). Con la cédula se busca en <code>usuarios</code> → <code>id_usuario</code> 7009.</li>
-                            <li>Queda el mapa: <strong>id externo 37 = id Mistorneos 7009</strong>.</li>
-                            <li><strong>Tabla resultados</strong>: columna <code>usuario</code> trae <strong>37</strong> (no hace falta cédula). El sistema hace: 37 → 7009 y guarda en <code>partiresul</code> con 7009.</li>
+                            <li><strong>Carga masiva</strong> (equipos/atletas): deja inscripciones en el torneo como en el individual.</li>
+                            <li><strong>Homologación:</strong> <em>id externo + cédula</em> (como individual) <strong>o</strong> <em>cédula + pareja</em> sin id externo: se resuelve el jugador y se escribe <code>inscritos.numero</code> = número de pareja.</li>
+                            <li><strong>Resultados:</strong> por <code>usuario</code> (id externo), <code>cédula</code> o <code>pareja</code> (= <code>inscritos.numero</code> por atleta) → <code>partiresul</code>. Partida/mesa/secuencia describen la fila de partida.</li>
                         </ol>
                     </div>
                 </div>
@@ -640,14 +646,14 @@ $url_import_individual = $url_panel . '#importacion-masiva';
             <div class="row g-3 align-items-start">
                 <div class="col-12 col-lg-6 imp-paso-texto">
                     <div class="imp-seccion">
-                        <h6>Solo en homologación va la cédula</h6>
-                        <p class="small mb-0">Cada fila: <strong>id externo</strong> (37 — el mismo que en resultados) + <strong>cédula</strong> (4906763). Con la cédula se consulta <code>usuarios</code> → <code>id_usuario</code> (7009). Así el sistema sabe: <strong>37 → 7009</strong>.</p>
+                        <h6>Identidad (igual criterio que el individual)</h6>
+                        <p class="small mb-0"><strong>Opción A:</strong> <code>usuario</code> / id externo (37) + <strong>cédula</strong> → mapa 37 → <code>id_usuario</code>. <strong>Opción B (recomendada si ya cargó equipos/atletas):</strong> solo <strong>cédula</strong> + columna <code>pareja</code> (número de equipo). Se actualiza <code>inscritos.numero</code> con ese valor para enlazar el archivo de resultados.</p>
                     </div>
                     <div class="imp-seccion">
-                        <h6>Columnas (fila 1 = títulos)</h6>
+                        <h6>Columnas homologación (fila 1 = títulos)</h6>
                         <ul class="small mb-0 ps-3">
-                            <li>Una columna: id del otro sistema (<code>usuario</code>, <code>id</code>…): 37, 81…</li>
-                            <li>Otra: <strong>cédula</strong> (solo aquí; en resultados no hace falta).</li>
+                            <li><strong>A:</strong> id externo (<code>usuario</code>, <code>id</code>…) + <strong>cédula</strong>.</li>
+                            <li><strong>B:</strong> <strong>cédula</strong> + <code>pareja</code> (sin id externo). Opcional: nombre / nacionalidad para resolver cédulas.</li>
                         </ul>
                     </div>
                 </div>
@@ -666,29 +672,29 @@ $url_import_individual = $url_panel . '#importacion-masiva';
         <div class="card-header bg-info bg-opacity-10 text-info border-info d-flex align-items-center gap-2 py-3">
             <span class="imp-paso-num bg-info text-dark">R</span>
             <div>
-                <span class="fw-bold text-dark">Guía — Resultados (solo id externo; sin cédula)</span>
-                <div class="small text-muted">Columna <code>usuario</code> = mismo id que en homologación</div>
+                <span class="fw-bold text-dark">Guía — Resultados</span>
+                <div class="small text-muted">Por <code>usuario</code> (id externo), <code>cédula</code> o <code>pareja</code> (número lineal único en <code>inscritos.numero</code>)</div>
             </div>
         </div>
         <div class="card-body">
             <div class="row g-3 align-items-start">
                 <div class="col-12 col-lg-6 imp-paso-texto">
                     <div class="imp-seccion">
-                        <h6>Sustitución</h6>
-                        <p class="small mb-0">Aquí <strong>no</strong> se usa cédula. Solo el <strong>mismo id</strong> que en la tabla de homologación (ej. <code>usuario</code> = 37). El sistema hace: <strong>37 → id_usuario 7009</strong> (según el mapa) y graba en <code>partiresul</code>.</p>
+                        <h6>Resolución de jugador por fila</h6>
+                        <p class="small mb-0">Si la homologación fue con id externo: columna <code>usuario</code> en resultados = mismo valor. Si homologó con <strong>cédula + pareja</strong> (o carga masiva de parejas): en resultados la columna <code>pareja</code> debe ser el mismo valor lineal que quedó en <code>inscritos.numero</code> por atleta (un registro, un valor). Opcional <code>cédula</code> como respaldo.</p>
                     </div>
                     <div class="imp-seccion">
                         <h6>Columnas</h6>
                         <ul class="small mb-0 ps-3">
                             <li><code>partida</code>, <code>mesa</code>, <code>secuencia</code>, <code>r1</code>/<code>r2</code> (u resultado1/2)</li>
-                            <li><code>usuario</code> = id externo (37). <em>No hace falta cédula en esta tabla.</em></li>
+                            <li>Una de: <code>usuario</code> (id externo), <code>cédula</code> o <code>pareja</code> (número de equipo).</li>
                         </ul>
                     </div>
                 </div>
                 <div class="col-12 col-lg-6">
                     <div class="imp-seccion border border-success bg-success bg-opacity-10 h-100">
                         <h6 class="text-success">Ejemplo</h6>
-                        <p class="small mb-0">Homologación: 37 + 4906763 → 7009. Resultados: <code>usuario</code> 37 → se guarda <strong>7009</strong>.</p>
+                        <p class="small mb-0">Ej. id externo: homologación 37 + cédula → 7009; resultados <code>usuario</code> 37. Ej. parejas: cada atleta con <code>inscritos.numero</code> = valor pareja (ej. 101, 102…); resultados fila <code>pareja</code> 101 → ese jugador.</p>
                     </div>
                 </div>
             </div>
@@ -710,8 +716,8 @@ $url_import_individual = $url_panel . '#importacion-masiva';
                     <div class="imp-seccion">
                         <h6>Secuencia al pulsar el botón</h6>
                         <ol class="small mb-0 ps-3">
-                            <li>Lee el archivo de <strong>homologación</strong> y construye mapas cédula → usuario y pareja → lista de usuarios.</li>
-                            <li>Lee el archivo de <strong>resultados</strong> y para cada fila asigna el <code>id_usuario</code> correcto.</li>
+                            <li>Lee el archivo de <strong>homologación</strong>: cédula → usuario (como inscripción en sitio); si hay columna pareja, sincroniza <code>inscritos.numero</code> (mismo entero que en resultados).</li>
+                            <li>Lee el archivo de <strong>resultados</strong>: por usuario externo, cédula o pareja+secuencia asigna <code>id_usuario</code> por fila.</li>
                             <li>Si marcó vaciar, borra antes los resultados previos de este torneo en <code>partiresul</code>.</li>
                             <li>Inserta cada fila con la misma lógica que el panel (por mesa y secuencia).</li>
                         </ol>
@@ -723,7 +729,7 @@ $url_import_individual = $url_panel . '#importacion-masiva';
                         <input type="hidden" name="accion" value="fase2_dual">
                         <input type="hidden" name="torneo_id" value="<?= (int)$torneo_id_sel ?>">
                         <div class="mb-3">
-                            <label class="form-label fw-bold"><span class="badge bg-success me-1">H</span> Archivo homologación (pareja + cédula)</label>
+                            <label class="form-label fw-bold"><span class="badge bg-success me-1">H</span> Archivo homologación (cédula + pareja, o id externo + cédula)</label>
                             <input type="file" name="archivo_homologacion" class="form-control" accept=".xlsx,.csv,.txt" required>
                             <div class="form-text">Mismo contenido descrito en la guía «H».</div>
                         </div>
@@ -757,7 +763,7 @@ $url_import_individual = $url_panel . '#importacion-masiva';
                 <div class="col-12 col-lg-6 imp-paso-texto">
                     <div class="imp-seccion">
                         <h6>Qué comprueba</h6>
-                        <p class="small mb-0">Lee <strong>todas las filas</strong> del archivo, aplica el mismo relleno que la importación (partida/mesa combinadas en Excel, luego pareja por mesa) y busca en <code>inscritos.numero</code>. <strong>Pareja vacía</strong> significa que, tras leer el archivo, esa celda quedó sin texto (no es lo mismo que «no encontrado en BD»).</p>
+                        <p class="small mb-0">Misma lógica que la importación: valor <code>pareja</code> → <code>inscritos.numero</code> en el torneo. Relleno partida/mesa/pareja como en la carga real. <strong>Pareja vacía</strong>: celda sin texto tras leer el archivo.</p>
                     </div>
                 </div>
                 <div class="col-12 col-lg-6 imp-paso-acciones">

@@ -569,10 +569,15 @@ final class ImportacionTorneoExternoService
     }
 
     /**
-     * Dos archivos — flujo lineal (sin matriz ni auditoría GDU en la inserción):
-     * - Archivo 1: por fila, cédula → id_usuario; inscripción en inscritos; número de pareja del archivo en inscritos.numero.
-     * - Archivo 2: por fila de resultados, una fila hacia partiresul si se resuelve identidad (externo, cédula o primer
-     *   inscrito con ese inscritos.numero). No se agrupan ni duplican filas por pareja.
+     * Dos archivos — flujo lineal (sin matriz ni auditoría GDU en la inserción), alineado a carga masiva + homologación:
+     * - Carga masiva de parejas/equipos: cada atleta lleva un valor lineal de «pareja» en inscritos.numero (identificador
+     *   único por atleta en el torneo, no una fila compartida por dos jugadores).
+     * - Archivo 1 (homologación): identidad por cédula (resolverIdUsuarioInscripcionSitio). Con columna pareja se
+     *   sincroniza inscritos.numero = número de pareja para enlazar resultados (mismo criterio que la carga masiva).
+     *   Opción id externo + cédula: mapa usuario externo → id (como torneo individual).
+     * - Archivo 2 (resultados): por columna pareja → un inscrito por torneo y numero; partida/mesa/secuencia son datos
+     *   de la partida (línea a línea en partiresul), no desambiguación entre dos filas con el mismo numero.
+     *   Alternativa: usuario/id externo o cédula.
      *
      * @return array{insertados: int, errores: list<string>, homologacion_sin_usuario: int, resultados_sin_resolver: int, cedulas_no_encontradas: list<string>}
      */
@@ -606,6 +611,7 @@ final class ImportacionTorneoExternoService
             'matriz_total_partidas_esperadas' => 0,
             'matriz_total_filas' => 0,
             'mensaje_homologacion_matriz' => '',
+            'homologacion_solo_cedula_pareja' => false,
         ];
         if ($rowsHomologacion === [] || $rowsResultados === []) {
             $stats['errores'][] = 'Faltan filas en archivo de homologación o de resultados.';
@@ -644,15 +650,28 @@ final class ImportacionTorneoExternoService
         }
         if ($iExtHom < 0 && $mapHom['cedula'] >= 0) {
             foreach ($hNormHom as $hi => $col) {
-                if ($hi !== $mapHom['cedula'] && $hi !== $mapHom['pareja']) {
-                    $iExtHom = $hi;
-                    break;
+                if ($hi === $mapHom['cedula'] || ($mapHom['pareja'] >= 0 && $hi === $mapHom['pareja'])) {
+                    continue;
                 }
+                if ($col === 'nombre' || str_contains((string) $col, 'nombre') || $col === 'n1' || str_contains((string) $col, 'atleta')) {
+                    continue;
+                }
+                if ($col === 'nac' || $col === 'nacionalidad' || str_contains((string) $col, 'nacionalidad')) {
+                    continue;
+                }
+                if ($col === 'email' || $col === 'correo' || str_contains((string) $col, 'email')
+                    || str_contains((string) $col, 'telefono') || $col === 'tel' || str_contains((string) $col, 'club')) {
+                    continue;
+                }
+                $iExtHom = $hi;
+                break;
             }
         }
+        $homologSoloCedulaPareja = ($mapHom['cedula'] >= 0 && $mapHom['pareja'] >= 0 && $iExtHom < 0);
         $homologRows = $rowsHomologacion;
         $dataStartIdx = 1;
-        if ($mapHom['cedula'] < 0 || $iExtHom < 0) {
+        /* Sin heurística id_externo|cedula si ya hay flujo cédula+pareja (evita tomar la columna pareja como «usuario»). */
+        if (!$homologSoloCedulaPareja && ($mapHom['cedula'] < 0 || $iExtHom < 0)) {
             if ($maxCols >= 2) {
                 $r0 = $rowsHomologacion[0] ?? [];
                 $r1 = $rowsHomologacion[1] ?? $r0;
@@ -685,15 +704,20 @@ final class ImportacionTorneoExternoService
                 }
             }
         }
-        if ($mapHom['cedula'] < 0 || $iExtHom < 0 || $mapHom['cedula'] === $iExtHom) {
-            $stats['errores'][] = 'Homologación: hoja 1 con al menos 2 columnas. Orden recomendado: id externo | cédula (ej. 37 y 4906763). Puede poner fila títulos usuario + cedula, o solo filas de datos.';
+        if ($mapHom['cedula'] < 0) {
+            $stats['errores'][] = 'Homologación: se requiere columna de cédula (o equivalente CI/documento).';
+            $stats['filas_bloque_cedulas'] = max(0, count($rowsHomologacion) - 1);
+            return $stats;
+        }
+        if (!$homologSoloCedulaPareja && ($iExtHom < 0 || $mapHom['cedula'] === $iExtHom)) {
+            $stats['errores'][] = 'Homologación: hoja 1 con al menos 2 columnas. Orden recomendado: id externo | cédula (ej. 37 y 4906763). Con columna «pareja», puede usar solo cédula + pareja (sin id externo). Puede poner fila títulos usuario + cedula, o solo filas de datos.';
             $stats['filas_bloque_cedulas'] = max(0, count($rowsHomologacion) - 1);
             return $stats;
         }
 
         $iNombreHom = -1;
         foreach ($hNormHom as $hi => $col) {
-            if ($hi === $mapHom['cedula'] || $hi === $iExtHom || ($mapHom['pareja'] >= 0 && $hi === $mapHom['pareja'])) {
+            if ($hi === $mapHom['cedula'] || ($iExtHom >= 0 && $hi === $iExtHom) || ($mapHom['pareja'] >= 0 && $hi === $mapHom['pareja'])) {
                 continue;
             }
             if ($col === 'nombre' || str_contains((string) $col, 'nombre') || $col === 'n1' || str_contains((string) $col, 'atleta')) {
@@ -703,7 +727,7 @@ final class ImportacionTorneoExternoService
         }
         $iNacHom = -1;
         foreach ($hNormHom as $hi => $col) {
-            if ($hi === $mapHom['cedula'] || $hi === $iExtHom) {
+            if ($hi === $mapHom['cedula'] || ($iExtHom >= 0 && $hi === $iExtHom) || ($mapHom['pareja'] >= 0 && $hi === $mapHom['pareja'])) {
                 continue;
             }
             if ($col === 'nac' || $col === 'nacionalidad' || str_contains((string) $col, 'nacionalidad')) {
@@ -721,7 +745,7 @@ final class ImportacionTorneoExternoService
         $noEncCed = [];
         for ($i = $dataStartIdx; $i < count($homologRows); $i++) {
             $row = $homologRows[$i];
-            $maxIdxHom = max($mapHom['cedula'], $iExtHom);
+            $maxIdxHom = max($mapHom['cedula'], max(0, $iExtHom));
             if ($mapHom['pareja'] >= 0) {
                 $maxIdxHom = max($maxIdxHom, $mapHom['pareja']);
             }
@@ -735,8 +759,14 @@ final class ImportacionTorneoExternoService
                 $row[] = '';
             }
             $ced = self::normalizarCedula($row[$mapHom['cedula']] ?? '');
-            $extKey = trim((string) ($row[$iExtHom] ?? ''));
-            if ($ced === '' || $extKey === '') {
+            $extKey = ($iExtHom >= 0) ? trim((string) ($row[$iExtHom] ?? '')) : '';
+            if ($homologSoloCedulaPareja) {
+                $extKey = $ced;
+            }
+            if ($ced === '') {
+                continue;
+            }
+            if (!$homologSoloCedulaPareja && $extKey === '') {
                 continue;
             }
             $nomH = $iNombreHom >= 0 ? trim((string) ($row[$iNombreHom] ?? '')) : '';
@@ -746,9 +776,15 @@ final class ImportacionTorneoExternoService
                 $filasHomologConId++;
                 $cedulaToId[$ced] = $idU;
                 $cedulaToId[preg_replace('/\D/', '', $ced)] = $idU;
-                $extUsuarioToId[$extKey] = $idU;
-                if (is_numeric($extKey)) {
-                    $extUsuarioToId[(string) (int) $extKey] = $idU;
+                if ($extKey !== '') {
+                    $extUsuarioToId[$extKey] = $idU;
+                    if (is_numeric($extKey)) {
+                        $extUsuarioToId[(string) (int) $extKey] = $idU;
+                    }
+                }
+                $digMap = preg_replace('/\D/', '', $ced);
+                if ($digMap !== '' && ($homologSoloCedulaPareja || !isset($extUsuarioToId[$digMap]))) {
+                    $extUsuarioToId[$digMap] = $idU;
                 }
             } else {
                 $noEncCed[] = $ced;
@@ -789,7 +825,8 @@ final class ImportacionTorneoExternoService
         $idxIdUsuarioHom = count($hHom) - 1;
         $stats['filas_bloque_cedulas'] = count($filasHom) - 1;
         $stats['mapeos_usuario_externo'] = count($extUsuarioToId);
-        $stats['columna_usuario_homolog'] = $iExtHom >= 0;
+        $stats['homologacion_solo_cedula_pareja'] = $homologSoloCedulaPareja;
+        $stats['columna_usuario_homolog'] = !$homologSoloCedulaPareja && $iExtHom >= 0;
         $stats['cedulas_con_usuario_mistorneos'] = $filasHomologConId;
 
         $headerRes = $rowsResultados[0];
@@ -964,11 +1001,22 @@ final class ImportacionTorneoExternoService
             $nomR = '';
             $nacR = '';
             $pkey = '';
-            /* Si existe columna Pareja: identidad solo por inscritos.numero + torneo (sin id externo ni cédula en resultados). */
+            $pNum = (int) ($row[$iPart] ?? 0);
+            $mNum = (int) ($row[$iMesa] ?? 0);
+            $sNum = $iSeq >= 0 ? (int) ($row[$iSeq] ?? 0) : 0;
+            /* Columna pareja: valor único por atleta en inscritos.numero (carga masiva / homologación); equivale pareja → id_usuario. */
             if ($iPareja >= 0) {
                 $pkey = trim((string) ($row[$iPareja] ?? ''));
                 if ($pkey !== '') {
                     $idUsuario = self::idUsuarioPorParejaSoloInscritosNumero($pdo, $torneo_id, $pkey);
+                }
+                if ($idUsuario <= 0 && $iCed >= 0) {
+                    $ced = self::normalizarCedula($row[$iCed] ?? '');
+                    if ($ced !== '') {
+                        $idUsuario = (int) ($cedulaToId[$ced] ?? $cedulaToId[preg_replace('/\D/', '', $ced)] ?? 0);
+                        $nomR = $iNombreRes >= 0 ? trim((string) ($row[$iNombreRes] ?? '')) : '';
+                        $nacR = $iNacRes >= 0 ? trim((string) ($row[$iNacRes] ?? '')) : '';
+                    }
                 }
             } else {
                 if ($iExtRes >= 0 && $extUsuarioToId !== []) {
@@ -986,9 +1034,6 @@ final class ImportacionTorneoExternoService
                     }
                 }
             }
-            $pNum = (int) ($row[$iPart] ?? 0);
-            $mNum = (int) ($row[$iMesa] ?? 0);
-            $sNum = (int) ($row[$iSeq] ?? 0);
             $ff = $iFf >= 0 ? self::parseFfValor($row[$iFf] ?? 0) : 0;
             $tarjetaFila = 0;
             $sancionFila = 0;
@@ -1076,7 +1121,7 @@ final class ImportacionTorneoExternoService
             if ($idUsuario <= 0 && $st['pkey'] !== '') {
                 $idUsuario = self::idUsuarioPorParejaSoloInscritosNumero($pdo, $torneo_id, $st['pkey']);
             }
-            if ($idUsuario <= 0 && $iPareja < 0 && $ced !== '') {
+            if ($idUsuario <= 0 && $ced !== '') {
                 $idUsuario = (int) ($cedulaToId[$ced] ?? $cedulaToId[preg_replace('/\D/', '', $ced)] ?? 0);
             }
             if ($idUsuario <= 0) {
@@ -1371,7 +1416,7 @@ final class ImportacionTorneoExternoService
     }
 
     /**
-     * Columna Pareja del Excel → solo `inscritos.numero` + `torneo_id` (primer id_usuario encontrado).
+     * Columna pareja del archivo → `inscritos.numero` + torneo (identificador lineal único por atleta, como carga masiva).
      */
     private static function idUsuarioPorParejaSoloInscritosNumero(PDO $pdo, int $torneoId, string $pkeyRaw): int
     {
@@ -1402,7 +1447,7 @@ final class ImportacionTorneoExternoService
     }
 
     /**
-     * Busca un inscrito por torneo e inscritos.numero (= número de pareja del archivo). Una fila de resultados → un insert.
+     * Un inscrito por torneo y numero (= valor lineal pareja en inscritos, único por atleta en el flujo de negocio).
      */
     private static function idUsuarioPorTorneoNumeroInscripcion(PDO $pdo, int $torneoId, int $numeroInscripcion): int
     {
@@ -1419,7 +1464,7 @@ final class ImportacionTorneoExternoService
     }
 
     /**
-     * Prueba de búsqueda: cada fila de resultados con columna «pareja» → mismo criterio que la importación
+     * Prueba de búsqueda: cada fila con columna «pareja» → mismo criterio que la importación
      * (`inscritos.numero` + torneo, no retirado). No escribe en BD.
      *
      * @param list<list<string>> $rowsResultados Primera fila = encabezados
