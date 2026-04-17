@@ -24,6 +24,19 @@ final class ImportacionTorneoExternoService
     }
 
     /**
+     * preg_replace con /u puede devolver null si el subject no es UTF-8 válido (p. ej. .xls binario leído como texto).
+     */
+    private static function pregReplaceUtfSeguro(string $s, string $pattern, string $replace): string
+    {
+        if ($s === '') {
+            return '';
+        }
+        $out = @preg_replace($pattern, $replace, $s);
+
+        return $out !== null ? $out : $s;
+    }
+
+    /**
      * Cabeceras Excel/CSV: quita BOM, espacios invisibles, acentos (español/latino) y genera clave tipo snake_case.
      * Evita que «Sanción», «Partida» o celdas con FEFF no coincidan con la detección de columnas.
      */
@@ -37,10 +50,13 @@ final class ImportacionTorneoExternoService
             $s = trim(substr($s, 3));
         }
         if ($s !== '') {
-            $s = preg_replace('/^\x{FEFF}/u', '', $s);
-            $s = preg_replace('/[\x{200B}-\x{200D}\x{FEFF}]/u', '', $s);
+            $s = self::pregReplaceUtfSeguro($s, '/^\x{FEFF}/u', '');
+            $s = self::pregReplaceUtfSeguro($s, '/[\x{200B}-\x{200D}\x{FEFF}]/u', '');
         }
         $lower = function_exists('mb_strtolower') ? mb_strtolower($s, 'UTF-8') : strtolower($s);
+        if (! is_string($lower) || $lower === '') {
+            $lower = strtolower($s);
+        }
         $ascii = strtr($lower, [
             'á' => 'a', 'à' => 'a', 'ä' => 'a', 'â' => 'a', 'ã' => 'a', 'å' => 'a',
             'é' => 'e', 'è' => 'e', 'ë' => 'e', 'ê' => 'e',
@@ -49,8 +65,8 @@ final class ImportacionTorneoExternoService
             'ú' => 'u', 'ù' => 'u', 'ü' => 'u', 'û' => 'u',
             'ñ' => 'n', 'ç' => 'c',
         ]);
-        $out = (string) preg_replace('/[^a-z0-9]+/i', '_', $ascii);
-        $out = (string) preg_replace('/_+/', '_', $out);
+        $out = self::pregReplaceUtfSeguro($ascii, '/[^a-z0-9]+/i', '_');
+        $out = self::pregReplaceUtfSeguro($out, '/_+/', '_');
 
         return trim($out, '_');
     }
@@ -162,6 +178,21 @@ final class ImportacionTorneoExternoService
     }
 
     /**
+     * Excel 97-2003 (.xls OLE); no se lee como CSV. El usuario debe exportar a .xlsx.
+     */
+    public static function esArchivoXls972003Binario(string $path): bool
+    {
+        $h = @fopen($path, 'rb');
+        if ($h === false) {
+            return false;
+        }
+        $b = fread($h, 8);
+        fclose($h);
+
+        return $b !== false && strlen($b) === 8 && strncmp($b, "\xD0\xCF\x11\xE0\xA1\xB1\x1A\xE1", 8) === 0;
+    }
+
+    /**
      * @return list<list<string>>
      */
     public static function leerExcelOCsv(string $path, string $originalName): array
@@ -176,6 +207,10 @@ final class ImportacionTorneoExternoService
         if (in_array($ext, ['csv', 'txt', 'xls'], true)) {
             $raw = @file_get_contents($path);
             if ($raw === false || $raw === '') {
+                return [];
+            }
+            /* Excel 97-2003 binario (.xls): no es texto; evita parsearlo como CSV (basura y errores UTF-8). */
+            if ($ext === 'xls' && strlen($raw) >= 8 && strncmp($raw, "\xD0\xCF\x11\xE0\xA1\xB1\x1A\xE1", 8) === 0) {
                 return [];
             }
             if (strncmp($raw, "\xEF\xBB\xBF", 3) === 0) {

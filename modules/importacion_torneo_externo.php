@@ -292,12 +292,32 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $fecha)) {
             $fecha = date('Y-m-d');
         }
+        $tmpHom = (string) $_FILES['archivo_homologacion']['tmp_name'];
+        $tmpRes = (string) $_FILES['archivo_resultados']['tmp_name'];
+        if (ImportacionTorneoExternoService::esArchivoXls972003Binario($tmpHom)) {
+            $_SESSION['import_swal'] = [
+                'icon' => 'error',
+                'title' => 'Formato no soportado',
+                'html' => '<p>El archivo de <strong>homologación</strong> es .xls binario (Excel 97–2003). Ábralo y guárdelo como <strong>.xlsx</strong> (o CSV) e importe de nuevo.</p>',
+            ];
+            header('Location: ' . $baseList . '&torneo_id=' . $torneo_id);
+            exit;
+        }
+        if (ImportacionTorneoExternoService::esArchivoXls972003Binario($tmpRes)) {
+            $_SESSION['import_swal'] = [
+                'icon' => 'error',
+                'title' => 'Formato no soportado',
+                'html' => '<p>El archivo de <strong>resultados</strong> es .xls binario (Excel 97–2003). Ábralo y guárdelo como <strong>.xlsx</strong> (o CSV) e importe de nuevo.</p>',
+            ];
+            header('Location: ' . $baseList . '&torneo_id=' . $torneo_id);
+            exit;
+        }
         $rowsH = ImportacionTorneoExternoService::leerExcelOCsv(
-            (string)$_FILES['archivo_homologacion']['tmp_name'],
+            $tmpHom,
             (string)($_FILES['archivo_homologacion']['name'] ?? 'x.xlsx')
         );
         $rowsR = ImportacionTorneoExternoService::leerExcelOCsv(
-            (string)$_FILES['archivo_resultados']['tmp_name'],
+            $tmpRes,
             (string)($_FILES['archivo_resultados']['name'] ?? 'x.xlsx')
         );
         if ($reemplazar) {
