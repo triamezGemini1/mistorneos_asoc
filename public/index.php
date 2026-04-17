@@ -460,5 +460,27 @@ if ($page === 'torneo_gestion' && ob_get_level() === 0) {
     ob_start();
 }
 
+// clubes_asociados GET: validar club_id antes del layout (header() no puede enviarse tras HTML del layout)
+if ($page === 'clubes_asociados' && ($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'GET') {
+    $cid = (int) ($_GET['club_id'] ?? 0);
+    if ($cid > 0) {
+        $u = Auth::user();
+        if (is_array($u) && ($u['role'] ?? '') === 'admin_club') {
+            require_once __DIR__ . '/../lib/ClubHelper.php';
+            $admin_club_user_id = (int) Auth::id();
+            $organizacion_id = Auth::getUserOrganizacionRef() ?? Auth::getUserOrganizacionId();
+            $club_ids = ClubHelper::getClubesByAdminClubId($admin_club_user_id);
+            if (empty($club_ids) && $organizacion_id) {
+                $club_ids = ClubHelper::getClubesByOrganizacionId((int) $organizacion_id);
+            }
+            if (!in_array($cid, $club_ids, true)) {
+                $loc = class_exists('AppHelpers') ? AppHelpers::dashboard('clubes_asociados') : 'index.php?page=clubes_asociados';
+                header('Location: ' . $loc);
+                exit;
+            }
+        }
+    }
+}
+
 // Incluir layout principal (para GET normal y páginas de visualización). $page ya está definida y saneada; el layout la usa para incluir el módulo correcto.
 include __DIR__ . "/includes/layout.php";

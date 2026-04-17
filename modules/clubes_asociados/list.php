@@ -354,13 +354,8 @@ try {
     $error = 'Error al cargar clubes: ' . $e->getMessage();
 }
 
-// ?club_id= solo para abrir el modal de edición; debe ser un club de esta lista (evita enlaces manipulados)
+// ?club_id= solo para abrir el modal (validación de acceso se hace en public/index.php antes del layout)
 $club_id_get = isset($_GET['club_id']) ? (int) $_GET['club_id'] : 0;
-if ($club_id_get > 0 && !in_array($club_id_get, $club_ids, true)) {
-    $loc = class_exists('AppHelpers') ? AppHelpers::dashboard('clubes_asociados') : 'index.php?page=clubes_asociados';
-    header('Location: ' . $loc);
-    exit;
-}
 
 // Opciones para asignar responsable: admin_club + usuarios registrados de sus clubes
 $delegado_opciones = [];
