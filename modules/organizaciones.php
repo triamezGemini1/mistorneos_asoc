@@ -359,6 +359,19 @@ if ($organizacion_id) {
         $clubes_unicos[] = $cRow;
     }
     $clubes = $clubes_unicos;
+    // Misma regla que clubes_asociados / detalle de club: solo clubes cuyo código federación coincide con la org (COALESCE cod_org/entidad).
+    // El WHERE legacy arriba (cod_org = ref OR subquery PK) podía incluir filas ajenas; al pulsar «Editar» se abría otro club en el modal.
+    $idsPermitidosOrg = OrganizacionDashboardStats::clubIdsForOrganizacion($pdo, $organizacion, $has_cod_org);
+    if (!empty($idsPermitidosOrg)) {
+        $clubes = array_values(array_filter($clubes, static function (array $cRow) use ($idsPermitidosOrg): bool {
+            $clubId = (int) ($cRow['id'] ?? 0);
+            if ($clubId <= 0) {
+                return true;
+            }
+
+            return in_array($clubId, $idsPermitidosOrg, true);
+        }));
+    }
     $stats_afiliados_sin_club = 0;
     $stats_afiliados_total = 0;
     $stats_hombres_total = 0;
