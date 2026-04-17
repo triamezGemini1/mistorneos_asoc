@@ -284,12 +284,8 @@ $club_ids = [];
 try {
     $club_ids = ClubHelper::getClubesByAdminClubId($admin_club_user_id);
     if (empty($club_ids) && $organizacion_id) {
-        // Fallback canónico: clubes por referencia de organización (cod_org/id)
-        $stFallback = DB::pdo()->prepare($has_cod_org
-            ? "SELECT id FROM clubes WHERE (cod_org = ? OR organizacion_id = (SELECT id FROM organizaciones WHERE cod_org = ? LIMIT 1)) AND estatus = 1"
-            : "SELECT id FROM clubes WHERE cod_org = ? AND estatus = 1");
-        $stFallback->execute($has_cod_org ? [$organizacion_id, $organizacion_id] : [$organizacion_id]);
-        $club_ids = array_map('intval', $stFallback->fetchAll(PDO::FETCH_COLUMN) ?: []);
+        // Misma regla que el dashboard (OrganizacionDashboardStats), sin mezclar por entidad territorial
+        $club_ids = ClubHelper::getClubesByOrganizacionId((int) $organizacion_id);
     }
     if (!empty($club_ids)) {
             $placeholders = implode(',', array_fill(0, count($club_ids), '?'));
@@ -356,6 +352,14 @@ try {
     }
 } catch (Exception $e) {
     $error = 'Error al cargar clubes: ' . $e->getMessage();
+}
+
+// ?club_id= solo para abrir el modal de edición; debe ser un club de esta lista (evita enlaces manipulados)
+$club_id_get = isset($_GET['club_id']) ? (int) $_GET['club_id'] : 0;
+if ($club_id_get > 0 && !in_array($club_id_get, $club_ids, true)) {
+    $loc = class_exists('AppHelpers') ? AppHelpers::dashboard('clubes_asociados') : 'index.php?page=clubes_asociados';
+    header('Location: ' . $loc);
+    exit;
 }
 
 // Opciones para asignar responsable: admin_club + usuarios registrados de sus clubes
@@ -740,8 +744,15 @@ if (!empty($club_ids)) {
 </div>
 
 <?php
-$club_id_param = isset($_GET['club_id']) ? (int)$_GET['club_id'] : 0;
-$mis_clubes_json = ($club_id_param > 0 && !empty($mis_clubes)) ? json_encode($mis_clubes) : '[]';
+$mis_clubes_json = '[]';
+if ($club_id_get > 0 && !empty($mis_clubes)) {
+    foreach ($mis_clubes as $c) {
+        if ((int) ($c['id'] ?? 0) === $club_id_get) {
+            $mis_clubes_json = json_encode([$c]);
+            break;
+        }
+    }
+}
 ?>
 <script>
 var baseViewImageUrl = '<?= htmlspecialchars(class_exists("AppHelpers") ? AppHelpers::url("view_image.php") : "") ?>';
