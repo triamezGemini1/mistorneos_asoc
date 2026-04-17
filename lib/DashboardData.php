@@ -283,7 +283,7 @@ class DashboardData
             if (empty($admin_clubs_list)) {
                 $sql = "SELECT u.id as admin_id, u.username as admin_username, u.nombre as admin_nombre, u.entidad,
                     u.club_id as club_principal_id, c.nombre as club_principal_nombre,
-                    (SELECT COUNT(*) FROM clubes cx WHERE cx.cod_org = (SELECT id FROM organizaciones WHERE admin_user_id = u.id LIMIT 1) AND cx.estatus = 1) as supervised_clubs_count,
+                    (SELECT COUNT(*) FROM clubes cx WHERE cx.cod_org = (SELECT COALESCE(NULLIF(o.cod_org, 0), NULLIF(o.entidad, 0)) FROM organizaciones o WHERE o.admin_user_id = u.id LIMIT 1) AND cx.estatus = 1) as supervised_clubs_count,
                     (SELECT COUNT(*) FROM usuarios ux WHERE ux.club_id = u.club_id AND ux.role = 'usuario' AND ux.status = 0) as total_users,
                     (SELECT COUNT(*) FROM usuarios ux WHERE ux.club_id = u.club_id AND ux.role = 'usuario' AND ux.status = 0 AND (ux.sexo = 'M' OR UPPER(ux.sexo) = 'M')) as hombres,
                     (SELECT COUNT(*) FROM usuarios ux WHERE ux.club_id = u.club_id AND ux.role = 'usuario' AND ux.status = 0 AND (ux.sexo = 'F' OR UPPER(ux.sexo) = 'F')) as mujeres,

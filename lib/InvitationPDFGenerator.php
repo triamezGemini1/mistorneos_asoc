@@ -141,7 +141,7 @@ class InvitationPDFGenerator {
     private static function getOrganizacionData(int $organizacion_id): ?array {
         $stmt = DB::pdo()->prepare("
             SELECT o.id, o.nombre, o.direccion, o.responsable as delegado, o.telefono, o.email,
-                   (SELECT COUNT(*) FROM clubes WHERE cod_org = o.id AND estatus = 1) as total_clubes
+                   (SELECT COUNT(*) FROM clubes WHERE cod_org = COALESCE(NULLIF(o.cod_org, 0), NULLIF(o.entidad, 0)) AND estatus = 1) as total_clubes
             FROM organizaciones o
             WHERE o.id = ? AND o.estatus = 1
         ");

@@ -27,6 +27,18 @@ class LandingDataService
         }
     }
 
+    /**
+     * Enlace club ↔ organización: solo cod_org homologado (no PK de organizaciones).
+     */
+    private function clubMatchesOrganizacionExpr(string $cAlias = 'c', string $oAlias = 'o'): string
+    {
+        if ($this->hasCodOrgColumn) {
+            return "{$cAlias}.cod_org = COALESCE(NULLIF({$oAlias}.cod_org, 0), NULLIF({$oAlias}.entidad, 0))";
+        }
+
+        return "{$cAlias}.cod_org = {$oAlias}.entidad";
+    }
+
     private function orgJoinExpr(string $tAlias = 't', string $oAlias = 'o'): string
     {
         if ($this->hasCodOrgColumn) {
@@ -288,7 +300,7 @@ class LandingDataService
     }
 
     /**
-     * Obtiene IDs de organización para el club del usuario (club.organizacion_id).
+     * Obtiene cod_org del club del usuario (club.cod_org).
      */
     public function getOrgIdPorClub(int $club_id): ?int
     {
@@ -377,7 +389,7 @@ class LandingDataService
                     COUNT(DISTINCT c.id) AS total_clubes
                 FROM entidad e
                 LEFT JOIN organizaciones o ON o.entidad = e.{$idColSafe} AND o.estatus = 1
-                LEFT JOIN clubes c ON (c.cod_org = o.id" . ($this->hasCodOrgColumn ? " OR c.cod_org = o.cod_org" : "") . ") AND c.estatus = 1
+                LEFT JOIN clubes c ON (" . $this->clubMatchesOrganizacionExpr() . ") AND c.estatus = 1
                 GROUP BY e.{$idColSafe}, e.nombre
                 ORDER BY e.nombre ASC
             ");
@@ -419,7 +431,7 @@ class LandingDataService
                     COUNT(DISTINCT c.id) as total_clubes
                 FROM entidad e
                 INNER JOIN organizaciones o ON o.entidad = e.{$idColSafe} AND o.estatus = 1
-                LEFT JOIN clubes c ON (c.cod_org = o.id" . ($this->hasCodOrgColumn ? " OR c.cod_org = o.cod_org" : "") . ") AND c.estatus = 1
+                LEFT JOIN clubes c ON (" . $this->clubMatchesOrganizacionExpr() . ") AND c.estatus = 1
                 GROUP BY e.{$idColSafe}, e.nombre
                 HAVING total_organizaciones > 0
                 ORDER BY e.nombre ASC
@@ -441,7 +453,7 @@ class LandingDataService
                     COUNT(DISTINCT o.id) AS total_organizaciones,
                     COUNT(DISTINCT c.id) AS total_clubes
                 FROM organizaciones o
-                LEFT JOIN clubes c ON (c.cod_org = o.id" . ($this->hasCodOrgColumn ? " OR c.cod_org = o.cod_org" : "") . ") AND c.estatus = 1
+                LEFT JOIN clubes c ON (" . $this->clubMatchesOrganizacionExpr() . ") AND c.estatus = 1
                 WHERE o.estatus = 1 AND o.entidad > 0
                 GROUP BY o.entidad
                 ORDER BY nombre ASC
@@ -473,7 +485,7 @@ class LandingDataService
                     o.responsable,
                     o.telefono,
                     o.email,
-                    (SELECT COUNT(*) FROM clubes c WHERE (c.cod_org = o.id" . ($this->hasCodOrgColumn ? " OR c.cod_org = o.cod_org" : "") . ") AND c.estatus = 1) as total_clubes,
+                    (SELECT COUNT(*) FROM clubes c WHERE (" . $this->clubMatchesOrganizacionExpr() . ") AND c.estatus = 1) as total_clubes,
                     (SELECT COUNT(*) FROM tournaments t
                      WHERE (t.club_responsable = o.id" . ($this->hasCodOrgColumn ? " OR t.club_responsable = o.cod_org" : "") . ") AND t.estatus = 1 AND t.fechator >= CURDATE()) as torneos_activos
                 FROM organizaciones o

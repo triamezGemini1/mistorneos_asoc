@@ -26,9 +26,9 @@ class ClubHelper {
     }
     
     /**
-     * Obtiene los clubes de una organización (esquema admin organización: clubes son de la org)
+     * Obtiene los clubes de una organización (vínculo solo por clubes.cod_org = código de federación).
      *
-     * @param int $organizacion_id ID de la organización
+     * @param int $organizacion_id ID o cod_org de la fila en organizaciones (resolución interna)
      * @return array Lista de IDs de clubes
      */
     public static function getClubesByOrganizacionId(int $organizacion_id): array {
@@ -54,7 +54,7 @@ class ClubHelper {
 
     /**
      * Obtiene los clubes gestionados por un admin_club (admin organización)
-     * Por organización: clubes donde organizacion_id = org del admin (organizaciones.admin_user_id).
+     * Por organización: clubes vía OrganizacionDashboardStats (solo clubes.cod_org).
      * Fallback legacy: clubes.admin_club_id = user (por si no tienen org aún).
      *
      * @param int $admin_club_user_id ID del usuario admin_club (usuarios.id)
@@ -82,7 +82,7 @@ class ClubHelper {
     
     /**
      * Obtiene todos los clubes que gestiona un admin_club (por organización o admin_club_id)
-     * La tabla clubes_asociados ya no se usa; se usa organizacion_id en clubes.
+     * La tabla clubes_asociados ya no se usa; se usa cod_org en clubes.
      *
      * @param int $club_id Club asignado al admin (usuarios.club_id) - para compatibilidad
      * @return array Lista de IDs de clubes
@@ -145,7 +145,7 @@ class ClubHelper {
     
     /**
      * Verifica si un club es gestionado por un admin_club (admin organización)
-     * Por organización: club.organizacion_id = org del admin; o por legacy club.admin_club_id.
+     * Por organización: clubes.cod_org = código canónico de la federación del admin; o legacy admin_club_id.
      *
      * @param int $admin_club_user_id ID del usuario admin_club
      * @param int $club_id Club a verificar
@@ -156,11 +156,18 @@ class ClubHelper {
             $pdo = DB::pdo();
             $stmt = $pdo->prepare("SELECT cod_org FROM clubes WHERE id = ? LIMIT 1");
             $stmt->execute([$club_id]);
-            $club_org_id = $stmt->fetchColumn();
-            if ($club_org_id) {
-                $stmt = $pdo->prepare("SELECT 1 FROM organizaciones WHERE id = ? AND admin_user_id = ? AND estatus = 1");
-                $stmt->execute([$club_org_id, $admin_club_user_id]);
-                if ($stmt->fetch()) return true;
+            $club_cod = (int) $stmt->fetchColumn();
+            if ($club_cod > 0) {
+                $stmt = $pdo->prepare("
+                    SELECT 1 FROM organizaciones o
+                    WHERE o.admin_user_id = ? AND o.estatus = 1
+                      AND COALESCE(NULLIF(o.cod_org, 0), NULLIF(o.entidad, 0)) = ?
+                    LIMIT 1
+                ");
+                $stmt->execute([$admin_club_user_id, $club_cod]);
+                if ($stmt->fetch()) {
+                    return true;
+                }
             }
             $stmt = $pdo->prepare("SELECT 1 FROM clubes WHERE id = ? AND admin_club_id = ?");
             $stmt->execute([$club_id, $admin_club_user_id]);
@@ -184,7 +191,7 @@ class ClubHelper {
     
     /**
      * Asociar club ya no se usa (tabla clubes_asociados eliminada).
-     * Los clubes se agrupan por organizacion_id en clubes.
+     * Los clubes se agrupan por cod_org en clubes.
      */
     public static function asociarClub(int $club_principal_id, int $club_asociado_id): bool {
         return false;

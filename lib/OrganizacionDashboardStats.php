@@ -7,7 +7,7 @@ require_once __DIR__ . '/InscritosHelper.php';
 /**
  * Estadísticas de organización alineadas con el esquema real:
  * - usuarios: entidad (geográfica) y club_id; columna opcional cod_org (afiliación).
- * - clubes: cod_org (organizaciones.cod_org) y/o entidad territorial.
+ * - clubes: solo cod_org homologado al código de federación (organizaciones.cod_org / entidad).
  * - tournaments: cod_org, club_responsable y/o entidad territorial.
  */
 final class OrganizacionDashboardStats
@@ -15,24 +15,7 @@ final class OrganizacionDashboardStats
     /** @var array{has_usuario_cod_org: bool, has_tournament_cod_org: bool}|null */
     private static ?array $columnFlags = null;
 
-    private static ?bool $clubesHasOrganizacionId = null;
-
     private static ?bool $clubesHasCodOrg = null;
-
-    private static function clubesHasOrganizacionIdColumn(PDO $pdo): bool
-    {
-        if (self::$clubesHasOrganizacionId !== null) {
-            return self::$clubesHasOrganizacionId;
-        }
-        try {
-            $pdo->query('SELECT `organizacion_id` FROM `clubes` LIMIT 0');
-            self::$clubesHasOrganizacionId = true;
-        } catch (Throwable $ignored) {
-            self::$clubesHasOrganizacionId = false;
-        }
-
-        return self::$clubesHasOrganizacionId;
-    }
 
     private static function clubesHasCodOrgColumn(PDO $pdo): bool
     {
@@ -81,30 +64,31 @@ final class OrganizacionDashboardStats
     }
 
     /**
-     * WHERE sobre clubes (alias c) + parámetros.
-     * - organizacion_id (si existe): FK legacy a organizaciones.id.
-     * - cod_org: debe ser el código canónico de federación (organizaciones.cod_org = entidad), ver sql/normalizar_modelo_organizacion_canonico.sql
-     *   No usar c.cod_org IN (id_organización, cod_org): el id interno puede coincidir con el código territorial de otra federación
-     *   y mezclaba clubes de Cojedes, Táchira, etc. con otra organización.
+     * Código de federación canónico para enlazar clubes (misma semántica que sql/normalizar_modelo_organizacion_canonico.sql).
      */
-    private static function clubScopeSqlAndParams(PDO $pdo, int $org_pk, int $org_ref): array
+    private static function canonicalOrgCodigo(array $organizacion): int
     {
-        $canonical = $org_ref > 0 ? $org_ref : $org_pk;
-        $parts = [];
-        $params = [];
-        if (self::clubesHasOrganizacionIdColumn($pdo)) {
-            $parts[] = 'c.organizacion_id = ?';
-            $params[] = $org_pk;
+        $c = (int) ($organizacion['cod_org'] ?? 0);
+        if ($c > 0) {
+            return $c;
         }
-        if (self::clubesHasCodOrgColumn($pdo)) {
-            $parts[] = 'c.cod_org = ?';
-            $params[] = $canonical;
+
+        return (int) ($organizacion['entidad'] ?? 0);
+    }
+
+    /**
+     * WHERE sobre clubes (alias c): solo clubes.cod_org = código de federación. Sin organizacion_id ni PK.
+     */
+    private static function clubScopeSqlAndParams(PDO $pdo, int $canonical_cod_org): array
+    {
+        if ($canonical_cod_org <= 0) {
+            return ['1=0', []];
         }
-        if ($parts === []) {
+        if (!self::clubesHasCodOrgColumn($pdo)) {
             return ['1=0', []];
         }
 
-        return ['c.estatus = 1 AND (' . implode(' OR ', $parts) . ')', $params];
+        return ['c.estatus = 1 AND c.cod_org = ?', [$canonical_cod_org]];
     }
 
     /**
@@ -115,15 +99,12 @@ final class OrganizacionDashboardStats
      */
     public static function clubIdsForOrganizacion(PDO $pdo, array $organizacion, bool $has_cod_org): array
     {
-        $org_pk = (int) ($organizacion['id'] ?? 0);
-        if ($org_pk <= 0) {
+        // $has_cod_org: conservado por compatibilidad de firma; el alcance de clubes usa solo clubes.cod_org.
+        $canonical = self::canonicalOrgCodigo($organizacion);
+        if ($canonical <= 0) {
             return [];
         }
-        $org_ref = (int) ($organizacion['cod_org'] ?? 0);
-        if ($org_ref <= 0) {
-            $org_ref = $org_pk;
-        }
-        [$clubWhere, $clubParams] = self::clubScopeSqlAndParams($pdo, $org_pk, $org_ref);
+        [$clubWhere, $clubParams] = self::clubScopeSqlAndParams($pdo, $canonical);
         $stmt = $pdo->prepare("SELECT DISTINCT c.id FROM clubes c WHERE {$clubWhere}");
         $stmt->execute($clubParams);
 
@@ -273,7 +254,8 @@ final class OrganizacionDashboardStats
         }
         $org_entidad = (int) ($organizacion['entidad'] ?? 0);
 
-        [$clubWhere, $clubParams] = self::clubScopeSqlAndParams($pdo, $org_pk, $org_ref);
+        $canonical = self::canonicalOrgCodigo($organizacion);
+        [$clubWhere, $clubParams] = self::clubScopeSqlAndParams($pdo, $canonical);
         $stmt = $pdo->prepare("SELECT COUNT(DISTINCT c.id) FROM clubes c WHERE {$clubWhere}");
         $stmt->execute($clubParams);
         $stats_clubes = (int) $stmt->fetchColumn();
@@ -375,7 +357,8 @@ final class OrganizacionDashboardStats
         }
         $org_entidad = (int) ($organizacion['entidad'] ?? 0);
 
-        [$clubWhere, $clubParams] = self::clubScopeSqlAndParams($pdo, $org_pk, $org_ref);
+        $canonical = self::canonicalOrgCodigo($organizacion);
+        [$clubWhere, $clubParams] = self::clubScopeSqlAndParams($pdo, $canonical);
         $uTerr = self::usuarioTerritorioSql($pdo);
         $terrParams = [$org_entidad, $org_entidad];
 
