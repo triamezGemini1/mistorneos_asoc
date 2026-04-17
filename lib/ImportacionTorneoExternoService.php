@@ -794,7 +794,7 @@ final class ImportacionTorneoExternoService
                 if ($pkey !== '') {
                     $parejaToIds[$pkey][] = $idU;
                     $idUsuarioToClavePareja[$idU] = $pkey;
-                    $numLin = self::numeroParejaArchivoAEntero($pkey);
+                    $numLin = self::parejaTextoANumeroInscripcionLineal($pkey);
                     if ($numLin > 0) {
                         self::asegurarInscritoTorneoActivo($pdo, $torneo_id, $idU, $registrado_por, $stats);
                         self::actualizarNumeroInscripcionTorneo($pdo, $torneo_id, $idU, $numLin);
@@ -951,35 +951,12 @@ final class ImportacionTorneoExternoService
             return $stats;
         }
 
-        /* Excel: partida y mesa suelen ir combinadas; filas vacías quedan como 0 y no entran en grupos de relleno de pareja. No rellenar secuencia (1,2,3 por jugador). */
+        /* Partida/mesa: relleno hacia abajo como en Excel (celdas combinadas). Pareja e id externo: sin propagar ni filtrar; cada fila usa el valor cargado en la celda. */
         if ($iPart >= 0) {
             $rowsResultados = self::rellenarHuecosFillDownColumnaDatos($rowsResultados, $iPart);
         }
         if ($iMesa >= 0) {
             $rowsResultados = self::rellenarHuecosFillDownColumnaDatos($rowsResultados, $iMesa);
-        }
-
-        if ($iPareja >= 0) {
-            $rowsResultados = self::rellenarHuecosColumnaPorPartidaMesa(
-                $rowsResultados,
-                $iPart,
-                $iMesa,
-                $iSeq,
-                $iPareja,
-                $stats,
-                'resultados_celdas_rellenadas_pareja'
-            );
-        }
-        if ($iExtRes >= 0) {
-            $rowsResultados = self::rellenarHuecosColumnaPorPartidaMesa(
-                $rowsResultados,
-                $iPart,
-                $iMesa,
-                $iSeq,
-                $iExtRes,
-                $stats,
-                'resultados_celdas_rellenadas_usuario'
-            );
         }
 
         require_once __DIR__ . '/TorneoCampoNumerico.php';
@@ -1406,44 +1383,30 @@ final class ImportacionTorneoExternoService
     }
 
     /**
-     * Valor de la columna (p. ej. pareja) pasado a entero: solo dígitos del texto, transferencia lineal.
+     * Número de inscripción desde la celda «pareja»: solo si el valor es numérico en PHP (sin extraer dígitos de prefijos/sufijos).
      */
-    private static function numeroParejaArchivoAEntero(string $clavePareja): int
+    private static function parejaTextoANumeroInscripcionLineal(string $raw): int
     {
-        $digits = preg_replace('/\D/', '', trim($clavePareja));
+        $t = trim($raw);
+        if ($t === '' || ! is_numeric($t)) {
+            return 0;
+        }
+        $n = (int) (float) $t;
 
-        return $digits !== '' ? (int) $digits : 0;
+        return $n > 0 ? $n : 0;
     }
 
     /**
-     * Columna pareja del archivo → `inscritos.numero` + torneo (identificador lineal único por atleta, como carga masiva).
+     * Columna pareja del archivo → `inscritos.numero` + torneo (mismo valor numérico que en Excel, sin transformaciones tipo «solo dígitos»).
      */
     private static function idUsuarioPorParejaSoloInscritosNumero(PDO $pdo, int $torneoId, string $pkeyRaw): int
     {
-        $pkey = trim($pkeyRaw);
-        if ($pkey === '') {
+        $num = self::parejaTextoANumeroInscripcionLineal($pkeyRaw);
+        if ($num <= 0) {
             return 0;
         }
-        $intentos = [];
-        $porDigitos = self::numeroParejaArchivoAEntero($pkey);
-        if ($porDigitos > 0) {
-            $intentos[] = $porDigitos;
-        }
-        $soloDig = preg_replace('/\D/', '', $pkey);
-        if ($soloDig !== '') {
-            $n2 = (int) $soloDig;
-            if ($n2 > 0 && ! in_array($n2, $intentos, true)) {
-                $intentos[] = $n2;
-            }
-        }
-        foreach ($intentos as $num) {
-            $id = self::idUsuarioPorTorneoNumeroInscripcion($pdo, $torneoId, $num);
-            if ($id > 0) {
-                return $id;
-            }
-        }
 
-        return 0;
+        return self::idUsuarioPorTorneoNumeroInscripcion($pdo, $torneoId, $num);
     }
 
     /**
@@ -1581,7 +1544,6 @@ final class ImportacionTorneoExternoService
         $out['columna_pareja_indice'] = $iPareja;
         $out['columna_pareja_titulo'] = trim((string) ($headerRes[$iPareja] ?? ''));
 
-        $statsRelleno = [];
         $rowsProc = $rowsResultados;
         if ($iPart >= 0) {
             $rowsProc = self::rellenarHuecosFillDownColumnaDatos($rowsProc, $iPart);
@@ -1589,18 +1551,6 @@ final class ImportacionTorneoExternoService
         if ($iMesa >= 0) {
             $rowsProc = self::rellenarHuecosFillDownColumnaDatos($rowsProc, $iMesa);
         }
-        if ($iPart >= 0 && $iMesa >= 0 && $iSeq >= 0) {
-            $rowsProc = self::rellenarHuecosColumnaPorPartidaMesa(
-                $rowsProc,
-                $iPart,
-                $iMesa,
-                $iSeq,
-                $iPareja,
-                $statsRelleno,
-                'diagnostico_pareja_relleno'
-            );
-        }
-
         $filasDatos = max(0, count($rowsProc) - 1);
         $out['filas_datos'] = $filasDatos;
         /** @var array<string, array{conteo: int, muestra_filas_excel: list<int>}> $noMap */
