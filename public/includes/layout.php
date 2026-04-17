@@ -341,7 +341,7 @@ if ($current_page === 'estadisticas_torneos') {
         $is_estructura_open = in_array($current_page, ['entidades', 'organizaciones', 'clubs', 'directorio_clubes']);
         $is_afiliaciones_open = in_array($current_page, ['admin_clubs', 'affiliate_requests']);
         $is_comunicacion_open = in_array($current_page, ['notificaciones_masivas', 'whatsapp_config', 'comments']);
-        $is_integraciones_open = in_array($current_page, ['admin_atletas_sync', 'importacion_torneo_externo']);
+        $is_integraciones_open = in_array($current_page, ['admin_atletas_sync', 'importacion_torneo_externo', 'torneo_split_ranking']);
         ?>
         <!-- 1. Inicio (acordeón: Dashboard, Calendario) -->
         <li class="mb-2">
@@ -475,6 +475,12 @@ if ($current_page === 'estadisticas_torneos') {
               <a href="<?= htmlspecialchars($dashboard_href('importacion_torneo_externo')) ?>" class="nav-link nav-sub-sub-link <?= $current_page === 'importacion_torneo_externo' ? 'active' : '' ?>">
                 <i class="fas fa-file-import me-2"></i>
                 <span>Importar torneo externo</span>
+              </a>
+            </li>
+            <li class="mb-1">
+              <a href="<?= htmlspecialchars($dashboard_href('torneo_split_ranking')) ?>" class="nav-link nav-sub-sub-link <?= $current_page === 'torneo_split_ranking' ? 'active' : '' ?>">
+                <i class="fas fa-columns me-2"></i>
+                <span>Clasificación en dos bloques</span>
               </a>
             </li>
           </ul>
