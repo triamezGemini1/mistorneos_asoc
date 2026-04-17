@@ -12,6 +12,48 @@ require_once __DIR__ . '/../../config/db.php';
 require_once __DIR__ . '/../../lib/ClubHelper.php';
 require_once __DIR__ . '/../../lib/OrganizacionDashboardStats.php';
 
+/**
+ * Normaliza una fila de club para listado / modal (mismos campos que espera editarClub() en JS).
+ *
+ * @param array<string, mixed> $c
+ * @return array<string, mixed>
+ */
+function clubes_asociados_normalize_club_row(PDO $pdo, array $c): array
+{
+    if (!isset($c['delegado_user_id'])) {
+        $c['delegado_user_id'] = null;
+    }
+    if (!isset($c['cod_org'])) {
+        $c['cod_org'] = null;
+    }
+    if (!isset($c['entidad'])) {
+        $c['entidad'] = null;
+    }
+    $co = isset($c['cod_org']) ? (int) $c['cod_org'] : 0;
+    $en = isset($c['entidad']) ? (int) $c['entidad'] : 0;
+    $c['fed_codigo_resuelto'] = $co > 0 ? $co : ($en > 0 ? $en : 0);
+    if (!isset($c['rif']) || trim((string) $c['rif']) === '') {
+        $c['rif'] = 'J000000000000';
+    }
+    if (!isset($c['permite_inscripcion_linea'])) {
+        $c['permite_inscripcion_linea'] = 0;
+    }
+    if (empty($c['delegado']) && !empty($c['delegado_user_id'])) {
+        try {
+            $stmt_del = $pdo->prepare('SELECT nombre FROM usuarios WHERE id = ?');
+            $stmt_del->execute([$c['delegado_user_id']]);
+            $nombre_del = $stmt_del->fetchColumn();
+            if ($nombre_del) {
+                $c['delegado'] = $nombre_del;
+            }
+        } catch (Exception $e) {
+            error_log('Error obteniendo nombre de delegado: ' . $e->getMessage());
+        }
+    }
+
+    return $c;
+}
+
 // Solo admin_club (admin organización) puede acceder
 Auth::requireRole(['admin_club']);
 
@@ -342,32 +384,9 @@ try {
             ");
         $stmt->execute($club_ids);
         $mis_clubes = $stmt->fetchAll(PDO::FETCH_ASSOC);
+        $pdoList = DB::pdo();
         foreach ($mis_clubes as &$c) {
-            if (!isset($c['delegado_user_id'])) $c['delegado_user_id'] = null;
-            if (!isset($c['cod_org'])) {
-                $c['cod_org'] = null;
-            }
-            if (!isset($c['entidad'])) {
-                $c['entidad'] = null;
-            }
-            $co = isset($c['cod_org']) ? (int) $c['cod_org'] : 0;
-            $en = isset($c['entidad']) ? (int) $c['entidad'] : 0;
-            $c['fed_codigo_resuelto'] = $co > 0 ? $co : ($en > 0 ? $en : 0);
-            if (!isset($c['rif']) || trim((string)$c['rif']) === '') $c['rif'] = 'J000000000000';
-            if (!isset($c['permite_inscripcion_linea'])) $c['permite_inscripcion_linea'] = 0;
-            // Si delegado está vacío pero delegado_user_id existe, obtener el nombre
-            if (empty($c['delegado']) && !empty($c['delegado_user_id'])) {
-                try {
-                    $stmt_del = $pdo->prepare("SELECT nombre FROM usuarios WHERE id = ?");
-                    $stmt_del->execute([$c['delegado_user_id']]);
-                    $nombre_del = $stmt_del->fetchColumn();
-                    if ($nombre_del) {
-                        $c['delegado'] = $nombre_del;
-                    }
-                } catch (Exception $e) {
-                    error_log("Error obteniendo nombre de delegado: " . $e->getMessage());
-                }
-            }
+            $c = clubes_asociados_normalize_club_row($pdoList, $c);
         }
         unset($c);
     }
@@ -377,6 +396,22 @@ try {
 
 // ?club_id= solo para abrir el modal (validación de acceso se hace en public/index.php antes del layout)
 $club_id_get = isset($_GET['club_id']) ? (int) $_GET['club_id'] : 0;
+
+// Payload del modal: siempre la fila real en BD para ese id + permiso de org (no depender del array del listado).
+$club_edit_modal_payload = null;
+if ($club_id_get > 0 && ClubHelper::isClubManagedByAdmin($admin_club_user_id, $club_id_get)) {
+    try {
+        $pdoModal = DB::pdo();
+        $stmtModal = $pdoModal->prepare('SELECT * FROM clubes WHERE id = ? AND estatus = 1 LIMIT 1');
+        $stmtModal->execute([$club_id_get]);
+        $rowModal = $stmtModal->fetch(PDO::FETCH_ASSOC);
+        if (is_array($rowModal) && (int) ($rowModal['id'] ?? 0) === $club_id_get) {
+            $club_edit_modal_payload = clubes_asociados_normalize_club_row($pdoModal, $rowModal);
+        }
+    } catch (Throwable $e) {
+        error_log('clubes_asociados club_edit_modal_payload: ' . $e->getMessage());
+    }
+}
 
 // Opciones para asignar responsable: admin_club + usuarios registrados de sus clubes
 $delegado_opciones = [];
@@ -425,7 +460,7 @@ if ($organizacion_cod_org && !empty($mis_clubes)) {
         <div>
             <h2><i class="fas fa-building"></i> Clubes de la organización</h2>
             <p class="text-muted mb-0">
-                Tus clubes con sus estadísticas
+                Solo clubes vinculados a tu federación (misma regla en listados, edición y búsquedas).
             </p>
             <?php if (!empty($mi_organizacion)): ?>
                 <p class="mb-0 mt-2">
@@ -817,13 +852,8 @@ if ($organizacion_cod_org && !empty($mis_clubes)) {
 
 <?php
 $mis_clubes_json = '[]';
-if ($club_id_get > 0 && !empty($mis_clubes)) {
-    foreach ($mis_clubes as $c) {
-        if ((int) ($c['id'] ?? 0) === $club_id_get) {
-            $mis_clubes_json = json_encode([$c]);
-            break;
-        }
-    }
+if ($club_edit_modal_payload !== null) {
+    $mis_clubes_json = json_encode([$club_edit_modal_payload], JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE);
 }
 ?>
 <script>
@@ -863,19 +893,23 @@ function eliminarClub(id, nombre) {
     modal.show();
 }
 
-// Auto-abrir modal de edición si se llegó con ?club_id=X (ej: desde org_detail "Editar Club")
+// Auto-abrir modal si ?club_id=X: el servidor ya inyectó la fila exacta de ese id (alcance organización).
 (function() {
     var params = new URLSearchParams(window.location.search);
     var clubId = parseInt(params.get('club_id'), 10);
-    if (clubId > 0 && typeof mis_clubes_json !== 'undefined') {
-        var clubs = JSON.parse(mis_clubes_json || '[]');
-        var club = clubs.find(function(c) { return parseInt(c.id, 10) === clubId; });
-        if (club) {
-            document.addEventListener('DOMContentLoaded', function() {
-                editarClub(club);
-                history.replaceState(null, '', window.location.pathname + '?page=clubes_asociados');
-            });
-        }
+    if (clubId <= 0 || typeof mis_clubes_json === 'undefined') return;
+    var clubs = JSON.parse(mis_clubes_json || '[]');
+    var club = null;
+    if (clubs.length === 1 && parseInt(clubs[0].id, 10) === clubId) {
+        club = clubs[0];
+    } else {
+        club = clubs.find(function(c) { return parseInt(c.id, 10) === clubId; });
+    }
+    if (club) {
+        document.addEventListener('DOMContentLoaded', function() {
+            editarClub(club);
+            history.replaceState(null, '', window.location.pathname + '?page=clubes_asociados');
+        });
     }
 })();
 </script>

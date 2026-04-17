@@ -196,7 +196,7 @@ $stats_admin_torneo = isset($stats_admin_torneo) ? (int)$stats_admin_torneo : 0;
                                             <a href="index.php?page=organizaciones&id=<?= (int)$organizacion['id'] ?>&club_id=<?= (int)$c['id'] ?>" class="btn btn-sm btn-outline-primary">
                                                 <i class="fas fa-eye me-1"></i>Ver detalle y afiliados
                                             </a>
-                                            <a href="<?= htmlspecialchars(AppHelpers::dashboard('clubes_asociados', ['club_id' => $c['id']])) ?>" class="btn btn-sm btn-outline-secondary ms-1" title="Editar club">
+                                            <a href="<?= htmlspecialchars(AppHelpers::dashboard('clubes_asociados', ['club_id' => $c['id']])) ?>" class="btn btn-sm btn-outline-secondary ms-1" title="Editar solo este club (mismo id que ves en la fila; datos de tu federación)">
                                                 <i class="fas fa-edit me-1"></i>Editar Club
                                             </a>
                                         <?php else: ?>
