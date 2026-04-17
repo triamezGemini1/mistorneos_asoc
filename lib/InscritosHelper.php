@@ -40,9 +40,11 @@ class InscritosHelper {
 
     /**
      * Condición SQL: inscrito activo (no retirado). Usar en WHERE.
-     * Compatible con columna INT (0,1,2,3,4) y ENUM: excluye solo 4 y 'retirado'.
+     * Compatible con columna INT (retirado = 4) y VARCHAR/ENUM ('retirado').
+     * CAST evita 1292 en MySQL estricto: no comparar literal 'retirado' contra INT.
+     * Con estatus NULL, CAST da NULL y NOT IN no coincide (mismo efecto práctico que el != anterior).
      */
-    const SQL_WHERE_NO_RETIRADO = "estatus != 'retirado'";
+    const SQL_WHERE_NO_RETIRADO = "(CAST(estatus AS CHAR) NOT IN ('4', 'retirado'))";
 
     /**
      * Condición SQL: inscrito activo para conteo y rondas (no retirado).
