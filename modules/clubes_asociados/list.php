@@ -310,6 +310,11 @@ try {
                 if ($stmt->rowCount() > 0) { $select_cols .= ", c.permite_inscripcion_linea"; $group_cols .= ", c.permite_inscripcion_linea"; }
                 $stmt = DB::pdo()->query("SHOW COLUMNS FROM clubes LIKE 'logo'");
                 if ($stmt->rowCount() > 0) { $select_cols .= ", c.logo"; $group_cols .= ", c.logo"; }
+                $stmt = DB::pdo()->query("SHOW COLUMNS FROM clubes LIKE 'cod_org'");
+                if ($stmt->rowCount() > 0) {
+                    $select_cols .= ", c.cod_org";
+                    $group_cols .= ", c.cod_org";
+                }
             } catch (Exception $e) {}
             $stmt = DB::pdo()->prepare("
                 SELECT 
@@ -331,6 +336,9 @@ try {
         $mis_clubes = $stmt->fetchAll(PDO::FETCH_ASSOC);
         foreach ($mis_clubes as &$c) {
             if (!isset($c['delegado_user_id'])) $c['delegado_user_id'] = null;
+            if (!isset($c['cod_org'])) {
+                $c['cod_org'] = null;
+            }
             if (!isset($c['rif']) || trim((string)$c['rif']) === '') $c['rif'] = 'J000000000000';
             if (!isset($c['permite_inscripcion_linea'])) $c['permite_inscripcion_linea'] = 0;
             // Si delegado está vacío pero delegado_user_id existe, obtener el nombre
@@ -373,6 +381,30 @@ if (!empty($club_ids)) {
         $delegado_opciones[] = ['id' => (int)$u['id'], 'nombre' => $u['nombre'], 'celular' => $u['celular'] ?? '', 'club_nombre' => $u['club_nombre'] ?? '', 'rol' => 'usuario'];
     }
 }
+
+$mi_organizacion = null;
+try {
+    $oid = Auth::getUserOrganizacionId();
+    if ($oid) {
+        $stOrg = DB::pdo()->prepare('SELECT id, nombre, cod_org, entidad FROM organizaciones WHERE id = ? AND estatus = 1 LIMIT 1');
+        $stOrg->execute([(int) $oid]);
+        $mi_organizacion = $stOrg->fetch(PDO::FETCH_ASSOC) ?: null;
+    }
+} catch (Throwable $e) {
+    $mi_organizacion = null;
+}
+
+$hay_club_cod_distinto = false;
+if ($organizacion_cod_org && !empty($mis_clubes)) {
+    foreach ($mis_clubes as $rowChk) {
+        if (isset($rowChk['cod_org']) && $rowChk['cod_org'] !== null && $rowChk['cod_org'] !== '') {
+            if ((int) $rowChk['cod_org'] !== (int) $organizacion_cod_org) {
+                $hay_club_cod_distinto = true;
+                break;
+            }
+        }
+    }
+}
 ?>
 
 <div class="container-fluid">
@@ -382,6 +414,17 @@ if (!empty($club_ids)) {
             <p class="text-muted mb-0">
                 Tus clubes con sus estadísticas
             </p>
+            <?php if (!empty($mi_organizacion)): ?>
+                <p class="mb-0 mt-2">
+                    <span class="text-muted">Federación:</span>
+                    <strong><?= htmlspecialchars(trim((string) ($mi_organizacion['nombre'] ?? ''))) ?></strong>
+                    <span class="text-muted">· código</span>
+                    <span class="badge bg-dark"><?= (int) ($organizacion_cod_org ?? 0) ?></span>
+                </p>
+                <p class="small text-muted mb-0 mt-1">
+                    La columna <strong>Club</strong> es el nombre del club local (editable). No confundir con el nombre de la federación (Capital, código <?= (int) ($organizacion_cod_org ?? 0) ?>).
+                </p>
+            <?php endif; ?>
         </div>
         <div class="d-flex gap-2 flex-wrap">
             <a href="<?= htmlspecialchars(AppHelpers::dashboard('notificaciones_masivas', ['tipo' => 'club', 'from' => 'clubes'])) ?>" class="btn btn-outline-warning">
@@ -411,6 +454,13 @@ if (!empty($club_ids)) {
         <div class="alert alert-danger alert-dismissible fade show">
             <i class="fas fa-exclamation-triangle"></i> <?= htmlspecialchars($error) ?>
             <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        </div>
+    <?php endif; ?>
+
+    <?php if ($hay_club_cod_distinto): ?>
+        <div class="alert alert-warning">
+            <i class="fas fa-exclamation-triangle me-1"></i>
+            Algún registro tiene <code>cod_org</code> distinto al código de tu federación (<?= (int) ($organizacion_cod_org ?? 0) ?>). Revisa datos o ejecuta la homologación SQL si aún no se aplicó.
         </div>
     <?php endif; ?>
 
@@ -454,6 +504,7 @@ if (!empty($club_ids)) {
                         <thead class="table-light">
                             <tr>
                                 <th><i class="fas fa-building me-2"></i>Club</th>
+                                <th class="text-center" title="Código de federación (debe coincidir con el tuyo)"><small>Cód.</small></th>
                                 <th>RIF</th>
                                 <th>Delegado</th>
                                 <th>Teléfono</th>
@@ -478,11 +529,22 @@ if (!empty($club_ids)) {
                                                 <div class="rounded d-flex align-items-center justify-content-center bg-light text-muted" style="width:40px;height:40px"><i class="fas fa-building"></i></div>
                                             <?php endif; ?>
                                             <div>
-                                                <strong><?= htmlspecialchars($club['nombre']) ?></strong>
+                                                <strong><?= htmlspecialchars(trim((string) ($club['nombre'] ?? ''))) ?></strong>
                                                 <br>
                                                 <a href="index.php?page=clubs&action=detail&id=<?= $club['id'] ?>" class="btn btn-sm btn-link p-0 text-primary" title="Ver afiliados"><small><i class="fas fa-users me-1"></i>Ver afiliados</small></a>
                                             </div>
                                         </div>
+                                    </td>
+                                    <td class="text-center">
+                                        <?php
+                                        $cc = isset($club['cod_org']) && $club['cod_org'] !== null && $club['cod_org'] !== '' ? (int) $club['cod_org'] : null;
+                                        $okCod = $organizacion_cod_org && $cc !== null && $cc === (int) $organizacion_cod_org;
+                                        ?>
+                                        <?php if ($cc !== null): ?>
+                                            <span class="badge <?= $okCod ? 'bg-success' : 'bg-warning text-dark' ?>" title="clubes.cod_org"><?= $cc ?></span>
+                                        <?php else: ?>
+                                            <span class="text-muted">—</span>
+                                        <?php endif; ?>
                                     </td>
                                     <td><code><?= htmlspecialchars($club['rif'] ?? 'J000000000000') ?></code></td>
                                     <td><?= htmlspecialchars($club['delegado'] ?? '-') ?></td>
@@ -536,6 +598,7 @@ if (!empty($club_ids)) {
                         <tfoot class="table-light">
                             <tr class="fw-bold">
                                 <td>TOTAL</td>
+                                <td></td>
                                 <td colspan="4"></td>
                                 <td class="text-center"><?= number_format(array_sum(array_column($mis_clubes, 'total_afiliados'))) ?></td>
                                 <td class="text-center"><?= number_format(array_sum(array_column($mis_clubes, 'hombres'))) ?></td>
@@ -557,6 +620,7 @@ if (!empty($club_ids)) {
                 <li>Todos los clubes que crees se mostrarán aquí con sus estadísticas</li>
                 <li>Los atletas pueden inscribirse eligiendo cualquiera de tus clubes</li>
                 <li>Puedes crear torneos asignando cualquiera de tus clubes como responsable</li>
+                <li>Si el nombre del club no corresponde (ej. otro estado), usa <strong>Editar</strong> y corrígelo; el vínculo a tu federación es el código en la columna «Cód.»</li>
             </ul>
         </div>
     </div>
