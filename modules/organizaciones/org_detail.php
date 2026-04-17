@@ -184,11 +184,11 @@ $stats_admin_torneo = isset($stats_admin_torneo) ? (int)$stats_admin_torneo : 0;
                 <div class="table-responsive">
                     <table class="table table-hover mb-0">
                         <caption class="text-muted small caption-top px-2">
-                            En los enlaces, <code>id</code> es el ID interno de esta organización y <code>club_id</code> el ID interno del club en la tabla <code>clubes</code>
-                            (pueden coincidir numéricamente por casualidad). El <strong>código de federación</strong> (p. ej. 13) es otro dato; ver arriba «Código federación».
+                            La primera columna es el <strong>ID del club</strong> (PK en <code>clubes</code>). «Editar club» abre exactamente ese id; no es el código federación (13).
                         </caption>
                         <thead class="table-light">
                             <tr>
+                                <th class="text-muted small">ID club</th>
                                 <th>Nombre</th>
                                 <th>Delegado</th>
                                 <th class="text-center">Afiliados</th>
@@ -200,6 +200,7 @@ $stats_admin_torneo = isset($stats_admin_torneo) ? (int)$stats_admin_torneo : 0;
                         <tbody>
                             <?php foreach ($clubes_paginados as $c): ?>
                                 <tr>
+                                    <td class="text-muted small font-monospace"><?= (int)($c['id'] ?? 0) ?></td>
                                     <td><strong><?= htmlspecialchars($c['nombre']) ?></strong></td>
                                     <td><?= htmlspecialchars($c['delegado'] ?? '-') ?></td>
                                     <td class="text-center"><span class="badge bg-info"><?= (int)($c['total_afiliados'] ?? 0) ?></span></td>

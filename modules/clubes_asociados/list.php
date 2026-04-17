@@ -866,18 +866,26 @@ if ($club_edit_modal_payload !== null) {
 var baseViewImageUrl = '<?= htmlspecialchars(class_exists("AppHelpers") ? AppHelpers::url("view_image.php") : "") ?>';
 /** Misma data que la tabla: la edición resuelve siempre por PK dentro de este array. */
 var MIS_CLUBES = <?= json_encode($mis_clubes, JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE) ?>;
-/** Solo entrada profunda (?club_id=) si el club no está en MIS_CLUBES. */
+/** Payload del servidor solo para ?club_id= (misma fila que SELECT por PK). No mezclar con clics del listado. */
 var mis_clubes_json = <?= $mis_clubes_json ?>;
-function obtenerClubEdicionPorId(pk) {
-    pk = parseInt(pk, 10);
-    if (!(pk > 0)) return null;
+/** Listado de esta pantalla: solo MIS_CLUBES (misma tabla que ves). */
+function editarClubPorId(id) {
+    var pk = parseInt(id, 10);
+    if (!(pk > 0) || !Array.isArray(MIS_CLUBES)) return;
     var i, row;
-    if (Array.isArray(MIS_CLUBES)) {
-        for (i = 0; i < MIS_CLUBES.length; i++) {
-            row = MIS_CLUBES[i];
-            if (parseInt(row.id, 10) === pk) return row;
+    for (i = 0; i < MIS_CLUBES.length; i++) {
+        row = MIS_CLUBES[i];
+        if (parseInt(row.id, 10) === pk) {
+            editarClub(row);
+            return;
         }
     }
+}
+/** Entrada por URL (?club_id=): primero payload del servidor; si no, fila del listado. Luego se limpia el payload. */
+function clubParaEdicionDesdeUrl(clubId) {
+    var pk = parseInt(clubId, 10);
+    if (!(pk > 0)) return null;
+    var i, row;
     try {
         var extra = JSON.parse(typeof mis_clubes_json !== 'undefined' ? mis_clubes_json : '[]');
         if (Array.isArray(extra)) {
@@ -887,13 +895,13 @@ function obtenerClubEdicionPorId(pk) {
             }
         }
     } catch (e) {}
+    if (Array.isArray(MIS_CLUBES)) {
+        for (i = 0; i < MIS_CLUBES.length; i++) {
+            row = MIS_CLUBES[i];
+            if (parseInt(row.id, 10) === pk) return row;
+        }
+    }
     return null;
-}
-/** Desde el listado: solo el id de la fila; los datos salen de MIS_CLUBES (no JSON en HTML). */
-function editarClubPorId(id) {
-    var club = obtenerClubEdicionPorId(id);
-    if (!club) return;
-    editarClub(club);
 }
 /** Abre el modal. `club` debe ser la fila con `id` = PK de `clubes`. */
 function editarClub(club) {
@@ -939,9 +947,10 @@ function eliminarClub(id, nombre) {
     var clubId = parseInt(params.get('club_id'), 10);
     if (clubId <= 0) return;
     document.addEventListener('DOMContentLoaded', function() {
-        var club = obtenerClubEdicionPorId(clubId);
+        var club = clubParaEdicionDesdeUrl(clubId);
         if (club) {
             editarClub(club);
+            mis_clubes_json = '[]';
             history.replaceState(null, '', window.location.pathname + '?page=clubes_asociados');
         }
     });
