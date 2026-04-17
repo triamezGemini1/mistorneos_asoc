@@ -10,6 +10,7 @@ if (!defined('APP_BOOTSTRAPPED')) {
 require_once __DIR__ . '/../../config/auth.php';
 require_once __DIR__ . '/../../config/db.php';
 require_once __DIR__ . '/../../lib/ClubHelper.php';
+require_once __DIR__ . '/../../lib/OrganizacionDashboardStats.php';
 
 // Solo admin_club (admin organización) puede acceder
 Auth::requireRole(['admin_club']);
@@ -315,17 +316,24 @@ try {
                     $select_cols .= ", c.cod_org";
                     $group_cols .= ", c.cod_org";
                 }
+                $stmt = DB::pdo()->query("SHOW COLUMNS FROM clubes LIKE 'entidad'");
+                if ($stmt->rowCount() > 0) {
+                    $select_cols .= ", c.entidad";
+                    $group_cols .= ", c.entidad";
+                }
             } catch (Exception $e) {}
+            $pdoFed = DB::pdo();
+            $fedExprC = OrganizacionDashboardStats::clubFederacionCodigoSqlExpr($pdoFed, 'c');
             $stmt = DB::pdo()->prepare("
                 SELECT 
                     $select_cols,
                     COUNT(DISTINCT u.id) as total_afiliados,
                     SUM(CASE WHEN u.sexo = 'M' THEN 1 ELSE 0 END) as hombres,
                     SUM(CASE WHEN u.sexo = 'F' THEN 1 ELSE 0 END) as mujeres,
-                    (SELECT COUNT(*) FROM tournaments t WHERE t.club_responsable = c.cod_org AND t.estatus = 1) as torneos_count,
+                    (SELECT COUNT(*) FROM tournaments t WHERE t.club_responsable = ({$fedExprC}) AND t.estatus = 1) as torneos_count,
                     (SELECT COUNT(*) FROM inscritos i 
                      INNER JOIN tournaments t ON i.torneo_id = t.id 
-                     WHERE t.club_responsable = c.cod_org) as inscritos_count
+                     WHERE t.club_responsable = ({$fedExprC})) as inscritos_count
                 FROM clubes c
                 LEFT JOIN usuarios u ON u.club_id = c.id AND u.role = 'usuario' AND (u.status = 'approved' OR u.status = 1)
                 WHERE c.id IN ($placeholders)
@@ -339,6 +347,12 @@ try {
             if (!isset($c['cod_org'])) {
                 $c['cod_org'] = null;
             }
+            if (!isset($c['entidad'])) {
+                $c['entidad'] = null;
+            }
+            $co = isset($c['cod_org']) ? (int) $c['cod_org'] : 0;
+            $en = isset($c['entidad']) ? (int) $c['entidad'] : 0;
+            $c['fed_codigo_resuelto'] = $co > 0 ? $co : ($en > 0 ? $en : 0);
             if (!isset($c['rif']) || trim((string)$c['rif']) === '') $c['rif'] = 'J000000000000';
             if (!isset($c['permite_inscripcion_linea'])) $c['permite_inscripcion_linea'] = 0;
             // Si delegado está vacío pero delegado_user_id existe, obtener el nombre
@@ -397,11 +411,10 @@ try {
 $hay_club_cod_distinto = false;
 if ($organizacion_cod_org && !empty($mis_clubes)) {
     foreach ($mis_clubes as $rowChk) {
-        if (isset($rowChk['cod_org']) && $rowChk['cod_org'] !== null && $rowChk['cod_org'] !== '') {
-            if ((int) $rowChk['cod_org'] !== (int) $organizacion_cod_org) {
-                $hay_club_cod_distinto = true;
-                break;
-            }
+        $fedR = (int) ($rowChk['fed_codigo_resuelto'] ?? 0);
+        if ($fedR > 0 && $fedR !== (int) $organizacion_cod_org) {
+            $hay_club_cod_distinto = true;
+            break;
         }
     }
 }
@@ -537,11 +550,12 @@ if ($organizacion_cod_org && !empty($mis_clubes)) {
                                     </td>
                                     <td class="text-center">
                                         <?php
-                                        $cc = isset($club['cod_org']) && $club['cod_org'] !== null && $club['cod_org'] !== '' ? (int) $club['cod_org'] : null;
+                                        $fedR = (int) ($club['fed_codigo_resuelto'] ?? 0);
+                                        $cc = $fedR > 0 ? $fedR : null;
                                         $okCod = $organizacion_cod_org && $cc !== null && $cc === (int) $organizacion_cod_org;
                                         ?>
                                         <?php if ($cc !== null): ?>
-                                            <span class="badge <?= $okCod ? 'bg-success' : 'bg-warning text-dark' ?>" title="clubes.cod_org"><?= $cc ?></span>
+                                            <span class="badge <?= $okCod ? 'bg-success' : 'bg-warning text-dark' ?>" title="COALESCE(cod_org, entidad)"><?= $cc ?><?php if (empty($club['cod_org']) && !empty($club['entidad'])): ?><small class="d-block">(entidad)</small><?php endif; ?></span>
                                         <?php else: ?>
                                             <span class="text-muted">—</span>
                                         <?php endif; ?>

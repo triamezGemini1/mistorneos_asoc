@@ -17,6 +17,8 @@ final class OrganizacionDashboardStats
 
     private static ?bool $clubesHasCodOrg = null;
 
+    private static ?bool $clubesHasEntidad = null;
+
     private static function clubesHasCodOrgColumn(PDO $pdo): bool
     {
         if (self::$clubesHasCodOrg !== null) {
@@ -30,6 +32,36 @@ final class OrganizacionDashboardStats
         }
 
         return self::$clubesHasCodOrg;
+    }
+
+    private static function clubesHasEntidadColumn(PDO $pdo): bool
+    {
+        if (self::$clubesHasEntidad !== null) {
+            return self::$clubesHasEntidad;
+        }
+        try {
+            $pdo->query('SELECT `entidad` FROM `clubes` LIMIT 0');
+            self::$clubesHasEntidad = true;
+        } catch (Throwable $ignored) {
+            self::$clubesHasEntidad = false;
+        }
+
+        return self::$clubesHasEntidad;
+    }
+
+    /**
+     * Código de federación efectivo del club: cod_org homologado, o entidad si cod_org quedó NULL (legacy).
+     */
+    public static function clubFederacionCodigoSqlExpr(PDO $pdo, string $alias = 'c'): string
+    {
+        if (!preg_match('/^[a-zA-Z_][a-zA-Z0-9_]*$/', $alias)) {
+            $alias = 'c';
+        }
+        if (self::clubesHasEntidadColumn($pdo)) {
+            return "COALESCE(NULLIF({$alias}.cod_org, 0), NULLIF({$alias}.entidad, 0))";
+        }
+
+        return "{$alias}.cod_org";
     }
 
     /** @return array{has_usuario_cod_org: bool, has_tournament_cod_org: bool} */
@@ -77,7 +109,7 @@ final class OrganizacionDashboardStats
     }
 
     /**
-     * WHERE sobre clubes (alias c): solo clubes.cod_org = código de federación. Sin organizacion_id ni PK.
+     * WHERE sobre clubes (alias c): código de federación = cod_org o, si viene NULL, entidad (misma regla que normalizar_modelo).
      */
     private static function clubScopeSqlAndParams(PDO $pdo, int $canonical_cod_org): array
     {
@@ -87,8 +119,9 @@ final class OrganizacionDashboardStats
         if (!self::clubesHasCodOrgColumn($pdo)) {
             return ['1=0', []];
         }
+        $expr = self::clubFederacionCodigoSqlExpr($pdo, 'c');
 
-        return ['c.estatus = 1 AND c.cod_org = ?', [$canonical_cod_org]];
+        return ["c.estatus = 1 AND ({$expr}) = ?", [$canonical_cod_org]];
     }
 
     /**
@@ -99,7 +132,7 @@ final class OrganizacionDashboardStats
      */
     public static function clubIdsForOrganizacion(PDO $pdo, array $organizacion, bool $has_cod_org): array
     {
-        // $has_cod_org: conservado por compatibilidad de firma; el alcance de clubes usa solo clubes.cod_org.
+        // $has_cod_org: conservado por compatibilidad de firma; alcance = COALESCE(cod_org, entidad) vs código canónico.
         $canonical = self::canonicalOrgCodigo($organizacion);
         if ($canonical <= 0) {
             return [];

@@ -154,17 +154,24 @@ class ClubHelper {
     public static function isClubManagedByAdmin(int $admin_club_user_id, int $club_id): bool {
         try {
             $pdo = DB::pdo();
-            $stmt = $pdo->prepare("SELECT cod_org FROM clubes WHERE id = ? LIMIT 1");
-            $stmt->execute([$club_id]);
-            $club_cod = (int) $stmt->fetchColumn();
-            if ($club_cod > 0) {
+            $club_fed = 0;
+            try {
+                $stmt = $pdo->prepare("SELECT COALESCE(NULLIF(cod_org, 0), NULLIF(entidad, 0)) FROM clubes WHERE id = ? LIMIT 1");
+                $stmt->execute([$club_id]);
+                $club_fed = (int) $stmt->fetchColumn();
+            } catch (Throwable $e) {
+                $stmt = $pdo->prepare("SELECT cod_org FROM clubes WHERE id = ? LIMIT 1");
+                $stmt->execute([$club_id]);
+                $club_fed = (int) $stmt->fetchColumn();
+            }
+            if ($club_fed > 0) {
                 $stmt = $pdo->prepare("
                     SELECT 1 FROM organizaciones o
                     WHERE o.admin_user_id = ? AND o.estatus = 1
                       AND COALESCE(NULLIF(o.cod_org, 0), NULLIF(o.entidad, 0)) = ?
                     LIMIT 1
                 ");
-                $stmt->execute([$admin_club_user_id, $club_cod]);
+                $stmt->execute([$admin_club_user_id, $club_fed]);
                 if ($stmt->fetch()) {
                     return true;
                 }
