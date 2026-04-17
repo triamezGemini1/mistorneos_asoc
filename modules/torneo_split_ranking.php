@@ -1,13 +1,14 @@
 <?php
 /**
- * Admin general — Clasificación en dos bloques (mismo torneo): grupo A marcado, grupo B resto.
+ * Admin general — Segmentación permanente: equipos marcados pasan a un nuevo torneo (TorneoSegmentacionService).
+ * Reutiliza la misma UI de listado + checkboxes que el antiguo “split virtual”.
  */
 declare(strict_types=1);
 
 require_once __DIR__ . '/../config/auth.php';
 require_once __DIR__ . '/../config/db.php';
 require_once __DIR__ . '/../lib/InscritosHelper.php';
-require_once __DIR__ . '/../lib/TorneoSplitRankingService.php';
+require_once __DIR__ . '/../lib/TorneoSegmentacionService.php';
 
 Auth::requireRole(['admin_general']);
 
@@ -26,36 +27,30 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
     $torneoId = (int) ($_POST['torneo_id'] ?? 0);
     $accion = (string) ($_POST['accion'] ?? '');
 
-    if ($accion === 'restaurar') {
-        $res = TorneoSplitRankingService::restaurarClasificacionUnica($pdo, $torneoId);
-        if (! empty($res['ok'])) {
-            $_SESSION['success'] = 'Clasificación única restaurada para el torneo seleccionado.';
-        } else {
-            $_SESSION['error'] = implode(' ', $res['errores'] ?? ['No se pudo restaurar.']);
+    if ($accion === 'segmentar') {
+        $rawIds = $_POST['equipos_segmentar'] ?? [];
+        if (! is_array($rawIds)) {
+            $rawIds = [];
         }
-        header('Location: ' . $baseUrl . ($torneoId > 0 ? '&torneo_id=' . $torneoId : ''));
-        exit;
-    }
-
-    if ($accion === 'aplicar') {
-        $grupoA = $_POST['grupo_a'] ?? [];
-        if (! is_array($grupoA)) {
-            $grupoA = [];
-        }
-        $codigos = [];
-        foreach ($grupoA as $c) {
-            $c = trim((string) $c);
-            if ($c !== '') {
-                $codigos[] = $c;
+        $idsEquipos = [];
+        foreach ($rawIds as $x) {
+            $id = (int) $x;
+            if ($id > 0) {
+                $idsEquipos[] = $id;
             }
         }
-        $res = TorneoSplitRankingService::aplicarClasificacionDosBloques($pdo, $torneoId, $codigos);
+        $idsEquipos = array_values(array_unique($idsEquipos));
+        $nombreNuevo = trim((string) ($_POST['nombre_nuevo_torneo'] ?? ''));
+
+        $res = TorneoSegmentacionService::segmentarTorneoEquipos($pdo, $torneoId, $idsEquipos, $nombreNuevo);
         if (! empty($res['ok'])) {
-            $na = (int) ($res['equipos_grupo_a'] ?? 0);
-            $nb = (int) ($res['equipos_grupo_b'] ?? 0);
-            $_SESSION['success'] = "Clasificación en dos bloques aplicada: bloque A {$na} equipo(s), bloque B {$nb} equipo(s). Posiciones y puntos de ranking recalculados.";
+            $nid = (int) ($res['id_torneo_nuevo'] ?? 0);
+            $em = (int) ($res['equipos_movidos'] ?? 0);
+            $im = (int) ($res['inscritos_movidos'] ?? 0);
+            $pm = (int) ($res['partiresul_movidos'] ?? 0);
+            $_SESSION['success'] = "Segmentación completada. Nuevo torneo id {$nid}. Equipos movidos: {$em}, inscritos: {$im}, filas de resultados: {$pm}. El torneo original se recalculó sin esos equipos.";
         } else {
-            $_SESSION['error'] = implode(' ', $res['errores'] ?? ['No se pudo aplicar el split.']);
+            $_SESSION['error'] = implode(' ', $res['errores'] ?? ['No se pudo segmentar el torneo.']);
         }
         header('Location: ' . $baseUrl . ($torneoId > 0 ? '&torneo_id=' . $torneoId : ''));
         exit;
@@ -74,8 +69,6 @@ $torneos = $stmtTorneos ? $stmtTorneos->fetchAll(PDO::FETCH_ASSOC) : [];
 
 $torneoActual = null;
 $equipos = [];
-$codigosGuardados = [];
-$setGuardados = [];
 $torneoModalidadNoAplica = false;
 
 if ($torneoIdGet > 0) {
@@ -85,17 +78,13 @@ if ($torneoIdGet > 0) {
     if ($torneoActual && ! in_array((int) ($torneoActual['modalidad'] ?? 0), [2, 3, 4], true)) {
         $torneoModalidadNoAplica = true;
     } elseif ($torneoActual) {
-        TorneoSplitRankingService::ensureTabla($pdo);
-        $codigosGuardados = TorneoSplitRankingService::obtenerCodigosGrupoA($pdo, $torneoIdGet);
-        $setGuardados = array_flip($codigosGuardados);
-
         $og = InscritosHelper::sqlExprColumnaNumerica('ganados');
         $oe = InscritosHelper::sqlExprColumnaNumerica('efectividad');
         $op = InscritosHelper::sqlExprColumnaNumerica('puntos');
         $ope = InscritosHelper::sqlExprColumnaNumerica('perdidos');
 
         $stmtEq = $pdo->prepare(
-            "SELECT codigo_equipo, COALESCE(NULLIF(TRIM(nombre_equipo), ''), codigo_equipo) AS etiqueta, posicion, ganados, efectividad, puntos
+            "SELECT id, codigo_equipo, COALESCE(NULLIF(TRIM(nombre_equipo), ''), codigo_equipo) AS etiqueta, posicion, ganados, efectividad, puntos
              FROM equipos
              WHERE id_torneo = ? AND estatus = 0 AND codigo_equipo IS NOT NULL AND codigo_equipo != ''
              ORDER BY $og DESC, $oe DESC, $op DESC, $ope ASC, codigo_equipo ASC"
@@ -122,17 +111,17 @@ $modalidadTxt = static function (int $m): string {
 
 ?>
 <div class="container-fluid py-2" style="max-width: 960px;">
-  <h1 class="h4 mb-3"><i class="fas fa-columns me-2 text-secondary"></i>Clasificación en dos bloques</h1>
+  <h1 class="h4 mb-3"><i class="fas fa-code-branch me-2 text-secondary"></i>Segmentar torneo (separar equipos)</h1>
   <p class="text-muted small mb-4">
-    Solo torneos modalidad parejas, equipos o parejas fijas (2, 3 o 4). Marque los equipos del <strong>bloque A</strong> (grupo separado);
-    el resto forma el <strong>bloque B</strong>. Se reasignan posiciones de equipo y atletas y se recalcula el ranking en cada bloque por rendimiento.
-    Use <strong>Restaurar clasificación única</strong> para volver al criterio global del torneo.
+    Torneos modalidad parejas, equipos o parejas fijas (2, 3 o 4). Marque los equipos que deben pasar a un <strong>nuevo torneo</strong>
+    (registro nuevo en la base de datos). La operación es <strong>definitiva</strong>: inscripciones y resultados de esos equipos se migran al nuevo id;
+    el torneo actual queda solo con el resto y puede recalcularse con normalidad. Indique un nombre para el torneo destino antes de confirmar.
   </p>
 
   <form method="get" action="index.php" class="row g-2 align-items-end mb-4">
     <input type="hidden" name="page" value="torneo_split_ranking">
     <div class="col-md-8">
-      <label for="torneo_id_select" class="form-label">Torneo</label>
+      <label for="torneo_id_select" class="form-label">Torneo origen</label>
       <select name="torneo_id" id="torneo_id_select" class="form-select" onchange="this.form.submit()">
         <option value="0">— Seleccione un torneo —</option>
         <?php foreach ($torneos as $t): ?>
@@ -163,17 +152,28 @@ $modalidadTxt = static function (int $m): string {
     <div class="card shadow-sm mb-3">
       <div class="card-body">
         <h2 class="h6 card-title"><?= $nombreTorneo ?></h2>
-        <p class="small text-muted mb-3">Modalidad: <?= htmlspecialchars($modalidadTxt((int) ($torneoActual['modalidad'] ?? 0)), ENT_QUOTES, 'UTF-8') ?> · Marque el bloque A (mínimo 1 equipo, no todos).</p>
+        <p class="small text-muted mb-3">
+          Modalidad: <?= htmlspecialchars($modalidadTxt((int) ($torneoActual['modalidad'] ?? 0)), ENT_QUOTES, 'UTF-8') ?>
+          · Marque los equipos a mover (mínimo 1, no todos). Los no marcados permanecen en este torneo.
+        </p>
 
-        <form method="post" action="index.php?page=torneo_split_ranking" class="mb-0">
+        <form method="post" action="index.php?page=torneo_split_ranking" class="mb-0"
+              onsubmit="return confirm('¿Segmentar de forma permanente? Se creará un nuevo torneo y los equipos marcados (con sus inscripciones y resultados) pasarán a ese id. Esta acción no se puede deshacer con un botón.');">
           <?= CSRF::input() ?>
           <input type="hidden" name="torneo_id" value="<?= (int) $tid ?>">
+
+          <div class="mb-3">
+            <label for="nombre_nuevo_torneo" class="form-label">Nombre del nuevo torneo (grupo segmentado)</label>
+            <input type="text" name="nombre_nuevo_torneo" id="nombre_nuevo_torneo" class="form-control" required
+                   maxlength="200" placeholder="Ej.: Copa B — Grupo avanzado"
+                   value="<?= htmlspecialchars(trim((string) ($torneoActual['nombre'] ?? '')) . ' — Segmento', ENT_QUOTES, 'UTF-8') ?>">
+          </div>
 
           <div class="table-responsive border rounded">
             <table class="table table-sm table-hover mb-0 align-middle">
               <thead class="table-light">
                 <tr>
-                  <th scope="col" style="width: 3rem;">A</th>
+                  <th scope="col" style="width: 3rem;" title="Mover a nuevo torneo">↗</th>
                   <th scope="col">Equipo</th>
                   <th scope="col" class="text-end">G</th>
                   <th scope="col" class="text-end">Pos. actual</th>
@@ -182,18 +182,18 @@ $modalidadTxt = static function (int $m): string {
               <tbody>
                 <?php foreach ($equipos as $ix => $eq): ?>
                   <?php
+                    $eid = (int) ($eq['id'] ?? 0);
                     $cod = trim((string) ($eq['codigo_equipo'] ?? ''));
-                    $checked = isset($setGuardados[$cod]) ? ' checked' : '';
-                    $idEq = 'split_eq_' . (int) $ix;
+                    $idEq = 'seg_eq_' . (int) $ix;
                   ?>
                   <tr>
                     <td>
-                      <input class="form-check-input" type="checkbox" name="grupo_a[]" value="<?= htmlspecialchars($cod, ENT_QUOTES, 'UTF-8') ?>" id="<?= htmlspecialchars($idEq, ENT_QUOTES, 'UTF-8') ?>"<?= $checked ?>>
+                      <input class="form-check-input" type="checkbox" name="equipos_segmentar[]" value="<?= $eid ?>" id="<?= htmlspecialchars($idEq, ENT_QUOTES, 'UTF-8') ?>">
                     </td>
                     <td>
                       <label class="form-check-label mb-0" for="<?= htmlspecialchars($idEq, ENT_QUOTES, 'UTF-8') ?>">
                         <strong><?= htmlspecialchars((string) ($eq['etiqueta'] ?? $cod), ENT_QUOTES, 'UTF-8') ?></strong>
-                        <span class="text-muted small"><?= htmlspecialchars($cod, ENT_QUOTES, 'UTF-8') ?></span>
+                        <span class="text-muted small"><?= htmlspecialchars($cod, ENT_QUOTES, 'UTF-8') ?> · id <?= $eid ?></span>
                       </label>
                     </td>
                     <td class="text-end"><?= (int) ($eq['ganados'] ?? 0) ?></td>
@@ -205,12 +205,8 @@ $modalidadTxt = static function (int $m): string {
           </div>
 
           <div class="d-flex flex-wrap gap-2 mt-3">
-            <button type="submit" name="accion" value="aplicar" class="btn btn-primary">
-              <i class="fas fa-check me-1"></i>Aplicar división y recalcular
-            </button>
-            <button type="submit" name="accion" value="restaurar" class="btn btn-outline-secondary"
-                    onclick="return confirm('¿Restaurar la clasificación única global de este torneo? Se borrará la selección de bloque A.');">
-              <i class="fas fa-undo me-1"></i>Restaurar clasificación única
+            <button type="submit" name="accion" value="segmentar" class="btn btn-primary">
+              <i class="fas fa-code-branch me-1"></i>Crear nuevo torneo y mover equipos marcados
             </button>
           </div>
         </form>

@@ -479,8 +479,8 @@ if ($current_page === 'estadisticas_torneos') {
             </li>
             <li class="mb-1">
               <a href="<?= htmlspecialchars($dashboard_href('torneo_split_ranking')) ?>" class="nav-link nav-sub-sub-link <?= $current_page === 'torneo_split_ranking' ? 'active' : '' ?>">
-                <i class="fas fa-columns me-2"></i>
-                <span>Clasificación en dos bloques</span>
+                <i class="fas fa-code-branch me-2"></i>
+                <span>Segmentar torneo (equipos)</span>
               </a>
             </li>
           </ul>
