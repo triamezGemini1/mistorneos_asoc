@@ -16,7 +16,8 @@ Auth::requireRole(['admin_club']);
 
 $current_user = Auth::user();
 $admin_club_user_id = Auth::id();
-$organizacion_id = Auth::getUserOrganizacionRef() ?? Auth::getUserOrganizacionId();
+/** @var int|null Código canónico cod_org de la federación (no PK de organizaciones) */
+$organizacion_cod_org = Auth::getUserOrganizacionCodOrg();
 $message = $_GET['success'] ?? '';
 $error = $_GET['error'] ?? '';
 $has_cod_org = false;
@@ -71,7 +72,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     }
                 }
                 
-                $org_id_val = $organizacion_id ?: null;
+                $org_id_val = $organizacion_cod_org ?: null;
                 $insert_ok = false;
                 if (!$org_id_val) {
                     $redirect_error = 'Su organización no está definida. No se puede crear un club sin entidad.';
@@ -104,7 +105,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             }
                         }
                         try {
-                            $cols = ['nombre', 'delegado', 'delegado_user_id', 'telefono', 'direccion', 'estatus', 'admin_club_id', 'organizacion_id', 'created_at'];
+                            $tiene_cod_org_fk = (bool) $pdo->query("SHOW COLUMNS FROM clubes LIKE 'cod_org'")->fetch(PDO::FETCH_ASSOC);
+                            $org_fk_col = $tiene_cod_org_fk ? 'cod_org' : 'organizacion_id';
+                            $cols = ['nombre', 'delegado', 'delegado_user_id', 'telefono', 'direccion', 'estatus', 'admin_club_id', $org_fk_col, 'created_at'];
                             $vals = ['?', '?', '?', '?', '?', '1', '?', '?', 'NOW()'];
                             $params = [$nombre, $delegado_nombre, $delegado_user_id_final, $telefono, $direccion, $admin_club_user_id, $org_id_val];
                             if ($tiene_rif_col) { array_splice($cols, 0, 0, ['rif']); array_splice($vals, 0, 0, ['?']); array_splice($params, 0, 0, [$rif]); }
@@ -283,9 +286,9 @@ $mis_clubes = [];
 $club_ids = [];
 try {
     $club_ids = ClubHelper::getClubesByAdminClubId($admin_club_user_id);
-    if (empty($club_ids) && $organizacion_id) {
-        // Misma regla que el dashboard (OrganizacionDashboardStats), sin mezclar por entidad territorial
-        $club_ids = ClubHelper::getClubesByOrganizacionId((int) $organizacion_id);
+    if (empty($club_ids) && $organizacion_cod_org) {
+        // Misma regla que el dashboard (solo clubes.cod_org = código federación)
+        $club_ids = ClubHelper::getClubesByOrganizacionId((int) $organizacion_cod_org);
     }
     if (!empty($club_ids)) {
             $placeholders = implode(',', array_fill(0, count($club_ids), '?'));
@@ -314,14 +317,10 @@ try {
                     COUNT(DISTINCT u.id) as total_afiliados,
                     SUM(CASE WHEN u.sexo = 'M' THEN 1 ELSE 0 END) as hombres,
                     SUM(CASE WHEN u.sexo = 'F' THEN 1 ELSE 0 END) as mujeres,
-                    (SELECT COUNT(*) FROM tournaments WHERE " . ($has_cod_org
-                        ? "(club_responsable = c.cod_org OR club_responsable = (SELECT cod_org FROM organizaciones WHERE id = c.cod_org LIMIT 1))"
-                        : "club_responsable = c.cod_org") . " AND estatus = 1) as torneos_count,
+                    (SELECT COUNT(*) FROM tournaments t WHERE t.club_responsable = c.cod_org AND t.estatus = 1) as torneos_count,
                     (SELECT COUNT(*) FROM inscritos i 
                      INNER JOIN tournaments t ON i.torneo_id = t.id 
-                     WHERE " . ($has_cod_org
-                        ? "(t.club_responsable = c.cod_org OR t.club_responsable = (SELECT cod_org FROM organizaciones WHERE id = c.cod_org LIMIT 1))"
-                        : "t.club_responsable = c.cod_org") . ") as inscritos_count
+                     WHERE t.club_responsable = c.cod_org) as inscritos_count
                 FROM clubes c
                 LEFT JOIN usuarios u ON u.club_id = c.id AND u.role = 'usuario' AND (u.status = 'approved' OR u.status = 1)
                 WHERE c.id IN ($placeholders)

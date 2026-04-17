@@ -332,8 +332,10 @@ class Auth {
             $stmt2 = DB::pdo()->prepare("
               SELECT o.id
               FROM clubes c
-              INNER JOIN organizaciones o ON (c.cod_org = o.id OR c.cod_org = o.cod_org)
-              WHERE c.id = ? AND o.estatus = 1
+              INNER JOIN organizaciones o
+                ON c.cod_org = COALESCE(NULLIF(o.cod_org, 0), NULLIF(o.entidad, 0))
+                AND o.estatus = 1
+              WHERE c.id = ?
               ORDER BY o.id ASC
               LIMIT 1
             ");
@@ -375,6 +377,34 @@ class Auth {
       }
       return self::getUserOrganizacionId();
     } catch (Exception $e) {
+      return null;
+    }
+  }
+
+  /**
+   * Código canónico de federación (clubes.cod_org / torneos) para el admin_club actual.
+   * Siempre desde la fila de organizaciones: COALESCE(cod_org, entidad), nunca la PK como sustituto en vínculos homologados.
+   */
+  public static function getUserOrganizacionCodOrg(): ?int {
+    $u = self::user();
+    if (!$u || $u['role'] !== 'admin_club') {
+      return null;
+    }
+    $pk = self::getUserOrganizacionId();
+    if ($pk === null || $pk <= 0) {
+      return null;
+    }
+    try {
+      if (self::hasCodOrg()) {
+        $stmt = DB::pdo()->prepare("SELECT COALESCE(NULLIF(cod_org, 0), NULLIF(entidad, 0)) FROM organizaciones WHERE id = ? AND estatus = 1 LIMIT 1");
+        $stmt->execute([$pk]);
+        $v = (int) $stmt->fetchColumn();
+
+        return $v > 0 ? $v : null;
+      }
+
+      return $pk;
+    } catch (Throwable $e) {
       return null;
     }
   }

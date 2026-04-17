@@ -468,10 +468,10 @@ if ($page === 'clubes_asociados' && ($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'G
         if (is_array($u) && ($u['role'] ?? '') === 'admin_club') {
             require_once __DIR__ . '/../lib/ClubHelper.php';
             $admin_club_user_id = (int) Auth::id();
-            $organizacion_id = Auth::getUserOrganizacionRef() ?? Auth::getUserOrganizacionId();
+            $org_cod = Auth::getUserOrganizacionCodOrg();
             $club_ids = ClubHelper::getClubesByAdminClubId($admin_club_user_id);
-            if (empty($club_ids) && $organizacion_id) {
-                $club_ids = ClubHelper::getClubesByOrganizacionId((int) $organizacion_id);
+            if (empty($club_ids) && $org_cod) {
+                $club_ids = ClubHelper::getClubesByOrganizacionId((int) $org_cod);
             }
             if (!in_array($cid, $club_ids, true)) {
                 $loc = class_exists('AppHelpers') ? AppHelpers::dashboard('clubes_asociados') : 'index.php?page=clubes_asociados';
