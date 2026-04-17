@@ -24,6 +24,144 @@ final class ImportacionTorneoExternoService
     }
 
     /**
+     * Cabeceras Excel/CSV: quita BOM, espacios invisibles, acentos (español/latino) y genera clave tipo snake_case.
+     * Evita que «Sanción», «Partida» o celdas con FEFF no coincidan con la detección de columnas.
+     */
+    private static function normalizarCeldaEncabezadoImportacion(string $raw): string
+    {
+        $s = trim((string) $raw);
+        if ($s === '') {
+            return '';
+        }
+        if (strncmp($s, "\xEF\xBB\xBF", 3) === 0) {
+            $s = trim(substr($s, 3));
+        }
+        if ($s !== '') {
+            $s = preg_replace('/^\x{FEFF}/u', '', $s);
+            $s = preg_replace('/[\x{200B}-\x{200D}\x{FEFF}]/u', '', $s);
+        }
+        $lower = function_exists('mb_strtolower') ? mb_strtolower($s, 'UTF-8') : strtolower($s);
+        $ascii = strtr($lower, [
+            'á' => 'a', 'à' => 'a', 'ä' => 'a', 'â' => 'a', 'ã' => 'a', 'å' => 'a',
+            'é' => 'e', 'è' => 'e', 'ë' => 'e', 'ê' => 'e',
+            'í' => 'i', 'ì' => 'i', 'ï' => 'i', 'î' => 'i',
+            'ó' => 'o', 'ò' => 'o', 'ö' => 'o', 'ô' => 'o', 'õ' => 'o',
+            'ú' => 'u', 'ù' => 'u', 'ü' => 'u', 'û' => 'u',
+            'ñ' => 'n', 'ç' => 'c',
+        ]);
+        $out = (string) preg_replace('/[^a-z0-9]+/i', '_', $ascii);
+        $out = (string) preg_replace('/_+/', '_', $out);
+
+        return trim($out, '_');
+    }
+
+    /**
+     * @param list<string> $fila
+     *
+     * @return list<string>
+     */
+    private static function normalizarFilaEncabezadosImportacion(array $fila): array
+    {
+        return array_map(static fn ($x) => self::normalizarCeldaEncabezadoImportacion((string) $x), $fila);
+    }
+
+    /**
+     * Coincidencia de nombre de columna: igualdad o subcadena (misma lógica que la importación de resultados).
+     *
+     * @param list<string> $hNorm
+     */
+    private static function indiceColumnaPorAliasImportacion(array $hNorm, array $names): int
+    {
+        foreach ($names as $n) {
+            $n = strtolower((string) $n);
+            foreach ($hNorm as $i => $col) {
+                if (str_contains((string) $col, $n) || $col === $n) {
+                    return $i;
+                }
+            }
+        }
+
+        return -1;
+    }
+
+    /**
+     * Partida, mesa, secuencia y dos columnas de resultado (obligatorias para partiresul).
+     *
+     * @param list<string> $hNorm
+     *
+     * @return array{iPart: int, iMesa: int, iSeq: int, iR1: int, iR2: int}
+     */
+    private static function indicesMinimosCabeceraPartiresul(array $hNorm): array
+    {
+        $find = static fn (array $h, array $names): int => self::indiceColumnaPorAliasImportacion($h, $names);
+        $iPart = self::indiceColumnaPartida($hNorm);
+        if ($iPart < 0) {
+            $iPart = $find($hNorm, ['partida', 'ronda']);
+        }
+        $iMesa = self::indiceColumnaMesa($hNorm);
+        if ($iMesa < 0) {
+            $iMesa = $find($hNorm, ['mesa']);
+        }
+        $iSeq = self::indiceColumnaSecuencia($hNorm);
+        if ($iSeq < 0) {
+            $iSeq = $find($hNorm, ['secuencia', 'seq']);
+        }
+        $iR1 = $find($hNorm, ['resultado1', 'result1', 'result_1', 'r1', 'pts1', 'pf', 'puntos_favor', 'favor']);
+        $iR2 = $find($hNorm, ['resultado2', 'result2', 'result_2', 'r2', 'pts2', 'pc', 'puntos_contra', 'contra']);
+
+        return [
+            'iPart' => $iPart,
+            'iMesa' => $iMesa,
+            'iSeq' => $iSeq,
+            'iR1' => $iR1,
+            'iR2' => $iR2,
+        ];
+    }
+
+    /**
+     * Si la fila 1 no es la cabecera (título, filas vacías), busca en las primeras filas una que tenga partida/mesa/secuencia/result1/result2.
+     *
+     * @param list<list<string>> $rows
+     *
+     * @return array{filas: list<list<string>>, cabecera_fila_excel: int}|null
+     */
+    private static function alinearFilasResultadosHastaCabeceraValida(array $rows): ?array
+    {
+        $max = min(40, count($rows));
+        for ($r = 0; $r < $max; $r++) {
+            $hNorm = self::normalizarFilaEncabezadosImportacion($rows[$r] ?? []);
+            $ix = self::indicesMinimosCabeceraPartiresul($hNorm);
+            if ($ix['iPart'] >= 0 && $ix['iMesa'] >= 0 && $ix['iSeq'] >= 0 && $ix['iR1'] >= 0 && $ix['iR2'] >= 0) {
+                return [
+                    'filas' => array_slice($rows, $r),
+                    'cabecera_fila_excel' => $r + 1,
+                ];
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * @param list<list<string>> $rows
+     */
+    private static function mensajeErrorCabeceraResultadosDetallado(array $rows): string
+    {
+        $partes = [
+            'No se encontró una fila de encabezados con partida, mesa, secuencia, resultado1/Result1 y resultado2/Result2 en las primeras 40 filas.',
+            'Si el Excel tiene título o filas vacías encima de los títulos de columna, déjelas o guarde el archivo con la cabecera en la primera fila de la tabla.',
+        ];
+        for ($m = 0; $m < min(5, count($rows)); $m++) {
+            $hn = self::normalizarFilaEncabezadosImportacion($rows[$m] ?? []);
+            $ix = self::indicesMinimosCabeceraPartiresul($hn);
+            $partes[] = 'Fila ' . ($m + 1) . ' Excel: columnas normalizadas [' . implode(', ', array_slice($hn, 0, 22))
+                . (count($hn) > 22 ? ', …' : '') . '] · partida=' . $ix['iPart'] . ' mesa=' . $ix['iMesa'] . ' secuencia=' . $ix['iSeq'] . ' r1=' . $ix['iR1'] . ' r2=' . $ix['iR2'];
+        }
+
+        return implode(' ', $partes);
+    }
+
+    /**
      * @return list<list<string>>
      */
     public static function leerExcelOCsv(string $path, string $originalName): array
@@ -200,7 +338,7 @@ final class ImportacionTorneoExternoService
             $limiteRondasTorneo = 99;
         }
 
-        $header = array_map(static fn ($h) => strtolower(preg_replace('/[^a-z0-9]+/i', '_', trim((string) $h))), $rows[0]);
+        $header = self::normalizarFilaEncabezadosImportacion($rows[0]);
         $idx = static function (array $h, array $names): int {
             foreach ($names as $n) {
                 $n = strtolower($n);
@@ -623,11 +761,7 @@ final class ImportacionTorneoExternoService
         for ($k = 0; $k < min(5, count($rowsHomologacion)); $k++) {
             $maxCols = max($maxCols, count($rowsHomologacion[$k] ?? []));
         }
-        $hNormHom = array_map(static function ($x) {
-            $s = strtolower(trim((string)$x));
-            $s = str_replace(['á', 'é', 'í', 'ó', 'ú', 'ñ', 'ü'], ['a', 'e', 'i', 'o', 'u', 'n', 'u'], $s);
-            return strtolower(preg_replace('/[^a-z0-9]+/i', '_', $s));
-        }, $h0raw);
+        $hNormHom = self::normalizarFilaEncabezadosImportacion($h0raw);
         $mapHom = self::mapearIndices($h0raw, ['pareja' => ['pareja', 'id_pareja', 'parejas'], 'cedula' => ['cedula', 'cedula1', 'ci', 'documento', 'c_dula']]);
         if ($mapHom['cedula'] < 0) {
             foreach ($hNormHom as $hi => $col) {
@@ -829,33 +963,26 @@ final class ImportacionTorneoExternoService
         $stats['columna_usuario_homolog'] = !$homologSoloCedulaPareja && $iExtHom >= 0;
         $stats['cedulas_con_usuario_mistorneos'] = $filasHomologConId;
 
+        $alinearRes = self::alinearFilasResultadosHastaCabeceraValida($rowsResultados);
+        if ($alinearRes === null) {
+            $stats['errores'][] = self::mensajeErrorCabeceraResultadosDetallado($rowsResultados);
+            $stats['columna_usuario_resultados'] = false;
+
+            return $stats;
+        }
+        $rowsResultados = $alinearRes['filas'];
+        $stats['resultados_fila_cabecera_excel'] = $alinearRes['cabecera_fila_excel'];
+        $stats['filas_bloque_resultados'] = max(0, count($rowsResultados) - 1);
+
         $headerRes = $rowsResultados[0];
-        $hNorm = array_map(static fn ($x) => strtolower(preg_replace('/[^a-z0-9]+/i', '_', trim((string)$x))), $headerRes);
-        $find = static function (array $h, array $names): int {
-            foreach ($names as $n) {
-                $n = strtolower($n);
-                foreach ($h as $i => $col) {
-                    if (str_contains((string)$col, $n) || $col === $n) {
-                        return $i;
-                    }
-                }
-            }
-            return -1;
-        };
-        $iPart = self::indiceColumnaPartida($hNorm);
-        if ($iPart < 0) {
-            $iPart = $find($hNorm, ['partida', 'ronda']);
-        }
-        $iMesa = self::indiceColumnaMesa($hNorm);
-        if ($iMesa < 0) {
-            $iMesa = $find($hNorm, ['mesa']);
-        }
-        $iSeq = self::indiceColumnaSecuencia($hNorm);
-        if ($iSeq < 0) {
-            $iSeq = $find($hNorm, ['secuencia', 'seq']);
-        }
-        $iR1 = $find($hNorm, ['resultado1', 'result1', 'result_1', 'r1', 'pts1', 'pf', 'puntos_favor', 'favor']);
-        $iR2 = $find($hNorm, ['resultado2', 'result2', 'result_2', 'r2', 'pts2', 'pc', 'puntos_contra', 'contra']);
+        $hNorm = self::normalizarFilaEncabezadosImportacion($headerRes);
+        $ixMin = self::indicesMinimosCabeceraPartiresul($hNorm);
+        $iPart = $ixMin['iPart'];
+        $iMesa = $ixMin['iMesa'];
+        $iSeq = $ixMin['iSeq'];
+        $iR1 = $ixMin['iR1'];
+        $iR2 = $ixMin['iR2'];
+        $find = static fn (array $h, array $names): int => self::indiceColumnaPorAliasImportacion($h, $names);
         $iFf = $find($hNorm, ['ff', 'forfait']);
         $iTarRes = self::indiceColumnaImport($hNorm, ['tarjeta', 'amarilla', 'roja'], ['tarjeta_amarilla', 'tarjeta_roja', 'marca_tarjeta']);
         if ($iTarRes < 0) {
@@ -933,11 +1060,6 @@ final class ImportacionTorneoExternoService
                 $iExtRes = $ri;
                 break;
             }
-        }
-        if ($iPart < 0 || $iMesa < 0 || $iSeq < 0 || $iR1 < 0 || $iR2 < 0) {
-            $stats['errores'][] = 'Resultados: faltan partida, mesa, secuencia, r1/resultado1 o r2/resultado2.';
-            $stats['columna_usuario_resultados'] = $iExtRes >= 0;
-            return $stats;
         }
         $stats['columna_usuario_resultados'] = $iExtRes >= 0;
         $puedePorExt = $iExtRes >= 0 && $extUsuarioToId !== [];
@@ -1209,7 +1331,7 @@ final class ImportacionTorneoExternoService
      */
     private static function headerFilaDefineResultadosPartiresul(array $filaTitulos): bool
     {
-        $h = array_map(static fn ($x) => strtolower(preg_replace('/[^a-z0-9]+/i', '_', trim((string) $x))), $filaTitulos);
+        $h = self::normalizarFilaEncabezadosImportacion($filaTitulos);
 
         return self::indiceColumnaPartida($h) >= 0
             && self::indiceColumnaMesa($h) >= 0
@@ -1495,7 +1617,7 @@ final class ImportacionTorneoExternoService
         }
 
         $headerRes = $rowsResultados[0];
-        $hNorm = array_map(static fn ($x) => strtolower(preg_replace('/[^a-z0-9]+/i', '_', trim((string) $x))), $headerRes);
+        $hNorm = self::normalizarFilaEncabezadosImportacion($headerRes);
         $find = static function (array $h, array $names): int {
             foreach ($names as $n) {
                 $n = strtolower($n);
@@ -2013,7 +2135,7 @@ final class ImportacionTorneoExternoService
      */
     private static function mapearIndices(array $header, array $keys): array
     {
-        $h = array_map(static fn ($x) => strtolower(preg_replace('/[^a-z0-9]+/i', '_', trim((string)$x))), $header);
+        $h = self::normalizarFilaEncabezadosImportacion($header);
         $out = ['pareja' => -1, 'cedula' => -1];
         foreach ($keys as $name => $aliases) {
             foreach ($aliases as $a) {
@@ -2129,7 +2251,7 @@ final class ImportacionTorneoExternoService
         $out['organizacion_default'] = $orgDef;
         $out['entidad_default'] = $entDef;
 
-        $header = array_map(static fn ($h) => strtolower(preg_replace('/[^a-z0-9]+/i', '_', trim((string) $h))), $rows[0]);
+        $header = self::normalizarFilaEncabezadosImportacion($rows[0]);
         $find = static function (array $h, array $names): int {
             foreach ($names as $n) {
                 $n = strtolower($n);
