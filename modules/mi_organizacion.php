@@ -27,12 +27,6 @@ try {
     $has_cod_org = false;
 }
 $org_ref_expr = $has_cod_org ? "COALESCE(NULLIF(o.cod_org, 0), o.id)" : "o.id";
-$org_club_match_expr = $has_cod_org
-    ? "(c.cod_org = ? OR c.cod_org = (SELECT id FROM organizaciones WHERE cod_org = ? LIMIT 1))"
-    : "c.cod_org = ?";
-$org_torneo_match_expr = $has_cod_org
-    ? "(club_responsable = ? OR club_responsable = (SELECT id FROM organizaciones WHERE cod_org = ? LIMIT 1))"
-    : "club_responsable = ?";
 
 // Obtener la organización del usuario
 $organizacion = null;
@@ -388,11 +382,10 @@ if ($is_admin_general) {
     if (!$organizacion_id && $action_get !== 'new') {
         $dashColsLista = OrganizacionDashboardStats::columnFlags(DB::pdo());
         $has_t_org_lista = $dashColsLista['has_tournament_cod_org'];
+        $clubMatchMi = OrganizacionDashboardStats::sqlClubMismaFederacionQueOrg(DB::pdo(), 'c', 'o');
         $sub_clubes_lista = "(SELECT COUNT(DISTINCT c.id) FROM clubes c WHERE c.estatus = 1 "
             . "AND (COALESCE(o.entidad,0) = 0 OR COALESCE(c.entidad,0) = COALESCE(o.entidad,0)) "
-            . "AND (c.cod_org = o.id "
-            . ($has_cod_org ? "OR c.cod_org = COALESCE(NULLIF(o.cod_org, 0), o.id) " : "")
-            . "OR (COALESCE(o.entidad,0) > 0 AND COALESCE(c.entidad,0) = COALESCE(o.entidad,0)))";
+            . "AND ({$clubMatchMi}))";
         if ($has_t_org_lista) {
             $sub_torneos_lista = "(SELECT COUNT(DISTINCT t.id) FROM tournaments t WHERE t.estatus = 1 "
                 . "AND (COALESCE(o.entidad,0) = 0 OR COALESCE(t.entidad,0) = COALESCE(o.entidad,0)) "

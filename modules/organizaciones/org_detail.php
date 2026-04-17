@@ -67,6 +67,16 @@ $stats_admin_torneo = isset($stats_admin_torneo) ? (int)$stats_admin_torneo : 0;
                         <img src="<?= htmlspecialchars($logo_url) ?>" alt="<?= htmlspecialchars($organizacion['nombre']) ?>" class="rounded me-3 flex-shrink-0" style="width: 80px; height: 80px; object-fit: cover;">
                         <div class="flex-grow-1">
                             <h4 class="mb-1"><?= htmlspecialchars($organizacion['nombre']) ?></h4>
+                            <?php
+                            $org_cod_display = (int) ($organizacion['cod_org'] ?? 0);
+                            ?>
+                            <p class="small text-muted mb-2">
+                                <span title="Clave numérica de la fila en la tabla organizaciones (por eso la URL lleva id=<?= (int) ($organizacion['id'] ?? 0) ?>)">ID organización (interno): <?= (int) ($organizacion['id'] ?? 0) ?></span>
+                                <?php if ($org_cod_display > 0): ?>
+                                    <span class="mx-1">·</span>
+                                    <span title="Código de federación homologado (clubes/torneos); no es el mismo número que el ID de la fila">Código federación: <strong><?= $org_cod_display ?></strong></span>
+                                <?php endif; ?>
+                            </p>
                             <?php if (!empty($organizacion['entidad_nombre'])): ?>
                                 <p class="text-muted mb-2">
                                     <i class="fas fa-map-marker-alt me-1"></i><?= htmlspecialchars($organizacion['entidad_nombre']) ?>
@@ -173,6 +183,10 @@ $stats_admin_torneo = isset($stats_admin_torneo) ? (int)$stats_admin_torneo : 0;
             <?php else: ?>
                 <div class="table-responsive">
                     <table class="table table-hover mb-0">
+                        <caption class="text-muted small caption-top px-2">
+                            En los enlaces, <code>id</code> es el ID interno de esta organización y <code>club_id</code> el ID interno del club en la tabla <code>clubes</code>
+                            (pueden coincidir numéricamente por casualidad). El <strong>código de federación</strong> (p. ej. 13) es otro dato; ver arriba «Código federación».
+                        </caption>
                         <thead class="table-light">
                             <tr>
                                 <th>Nombre</th>
@@ -193,7 +207,7 @@ $stats_admin_torneo = isset($stats_admin_torneo) ? (int)$stats_admin_torneo : 0;
                                     <td class="text-center"><span class="badge bg-danger"><?= (int)($c['mujeres'] ?? 0) ?></span></td>
                                     <td>
                                         <?php if ((int)($c['id'] ?? 0) > 0): ?>
-                                            <a href="index.php?page=organizaciones&id=<?= (int)$organizacion['id'] ?>&club_id=<?= (int)$c['id'] ?>" class="btn btn-sm btn-outline-primary">
+                                            <a href="index.php?page=organizaciones&id=<?= (int)$organizacion['id'] ?>&club_id=<?= (int)$c['id'] ?>" class="btn btn-sm btn-outline-primary" title="Club en base de datos: id interno <?= (int)$c['id'] ?> (distinto del código de federación de la org)">
                                                 <i class="fas fa-eye me-1"></i>Ver detalle y afiliados
                                             </a>
                                             <a href="<?= htmlspecialchars(AppHelpers::dashboard('clubes_asociados', ['club_id' => $c['id']])) ?>" class="btn btn-sm btn-outline-secondary ms-1" title="Editar solo este club (mismo id que ves en la fila; datos de tu federación)">

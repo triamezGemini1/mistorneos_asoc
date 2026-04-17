@@ -125,6 +125,45 @@ final class OrganizacionDashboardStats
     }
 
     /**
+     * Código de federación canónico de una fila organizaciones (para comparar con clubes sin confundir PK con cod_org).
+     */
+    public static function federacionCodigoDesdeOrganizacion(array $organizacion): int
+    {
+        return self::canonicalOrgCodigo($organizacion);
+    }
+
+    /**
+     * WHERE sobre clubes (alias c) + parámetros: misma federación que la fila organización dada.
+     * No usa c.cod_org = o.id (colisión: PK org 11 vs cod_org club Cojedes 11).
+     *
+     * @return array{0: string, 1: list<mixed>}
+     */
+    public static function clubScopeWhereForOrganizacion(PDO $pdo, array $organizacion): array
+    {
+        $canonical = self::canonicalOrgCodigo($organizacion);
+
+        return self::clubScopeSqlAndParams($pdo, $canonical);
+    }
+
+    /**
+     * Fragmento SQL: club (alias) y organización (alias) son la misma federación.
+     * Compara COALESCE(cod_org, entidad) en ambos lados.
+     */
+    public static function sqlClubMismaFederacionQueOrg(PDO $pdo, string $clubAlias, string $orgAlias): string
+    {
+        if (! preg_match('/^[a-zA-Z_][a-zA-Z0-9_]*$/', $clubAlias)) {
+            $clubAlias = 'c';
+        }
+        if (! preg_match('/^[a-zA-Z_][a-zA-Z0-9_]*$/', $orgAlias)) {
+            $orgAlias = 'o';
+        }
+        $cFed = self::clubFederacionCodigoSqlExpr($pdo, $clubAlias);
+        $oCan = "COALESCE(NULLIF({$orgAlias}.cod_org, 0), NULLIF({$orgAlias}.entidad, 0))";
+
+        return "({$cFed}) = ({$oCan})";
+    }
+
+    /**
      * IDs de clubes activos vinculados a la organización (misma lógica que el dashboard).
      *
      * @param array<string, mixed> $organizacion Fila de organizaciones (id, cod_org, entidad)

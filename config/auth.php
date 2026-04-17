@@ -467,10 +467,14 @@ class Auth {
     $club_id = isset($u['club_id']) ? (int)$u['club_id'] : 0;
     if ($club_id <= 0) return false;
     try {
-      $stmt = DB::pdo()->prepare(self::hasCodOrg()
-        ? "SELECT 1 FROM clubes WHERE id = ? AND (cod_org = ? OR cod_org = (SELECT id FROM organizaciones WHERE cod_org = ? LIMIT 1)) AND estatus = 1 LIMIT 1"
-        : "SELECT 1 FROM clubes WHERE id = ? AND cod_org = ? AND estatus = 1 LIMIT 1");
-      $stmt->execute(self::hasCodOrg() ? [$club_id, $org_id, $org_id] : [$club_id, $org_id]);
+      $pdo = DB::pdo();
+      require_once __DIR__ . '/../lib/OrganizacionDashboardStats.php';
+      $match = OrganizacionDashboardStats::sqlClubMismaFederacionQueOrg($pdo, 'c', 'o');
+      $stmt = $pdo->prepare(
+        'SELECT 1 FROM clubes c WHERE c.id = ? AND c.estatus = 1 '
+        . 'AND EXISTS (SELECT 1 FROM organizaciones o WHERE (o.id = ? OR o.cod_org = ?) AND o.estatus = 1 AND (' . $match . ')) LIMIT 1'
+      );
+      $stmt->execute([$club_id, $org_id, $org_id]);
       return $stmt->fetch() !== false;
     } catch (Exception $e) {
       return false;
