@@ -482,7 +482,7 @@ $url_import_individual = $url_panel . '#importacion-masiva';
                         <strong>Cómo encajan los tres pasos</strong>
                         <ol class="mb-0 ps-3 mt-2">
                             <li><strong>Carga masiva</strong> (equipos/atletas): deja inscripciones en el torneo como en el individual.</li>
-                            <li><strong>Homologación:</strong> <em>id externo + cédula</em> (como individual) <strong>o</strong> <em>cédula + pareja</em> sin id externo: se resuelve el jugador y se escribe <code>inscritos.numero</code> = número de pareja.</li>
+                            <li><strong>Homologación:</strong> <em>id externo + cédula</em> <strong>o</strong> <em>cédula + pareja</em> (sin id externo). Solo filas cuya cédula ya exista como usuario en Mistorneos entran al mapa; el resto solo se contabiliza. Solo se actualiza <code>inscritos.numero</code> (pareja), sin altas automáticas de usuario ni inscripción.</li>
                             <li><strong>Resultados:</strong> por <code>usuario</code> (id externo), <code>cédula</code> o <code>pareja</code> (= <code>inscritos.numero</code> por atleta) → <code>partiresul</code>. Partida/mesa/secuencia describen la fila de partida.</li>
                         </ol>
                     </div>

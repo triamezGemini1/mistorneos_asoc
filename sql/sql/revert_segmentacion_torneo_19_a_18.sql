@@ -10,10 +10,10 @@ UPDATE inscritos SET torneo_id = 18 WHERE torneo_id = 19;
 UPDATE partiresul SET id_torneo = 18 WHERE id_torneo = 19;
 
 -- Si alguna tabla no existe en su BD, comente la línea que falle.
-UPDATE mesas_asignacion SET tournament_id = 18 WHERE tournament_id = 19;
-UPDATE historial_parejas SET torneo_id = 18 WHERE torneo_id = 19;
+-- UPDATE mesas_asignacion SET tournament_id = 18 WHERE tournament_id = 19;
+-- UPDATE historial_parejas SET torneo_id = 18 WHERE torneo_id = 19;
 
 -- Torneo 19 vacío: puede eliminar el registro duplicado (descomente si corresponde):
--- DELETE FROM tournaments WHERE id = 19 LIMIT 1;
+ DELETE FROM tournaments WHERE id = 19 LIMIT 1;
 
 COMMIT;

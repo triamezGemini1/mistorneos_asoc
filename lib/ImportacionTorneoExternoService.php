@@ -745,8 +745,9 @@ final class ImportacionTorneoExternoService
      * Dos archivos — flujo lineal (sin matriz ni auditoría GDU en la inserción), alineado a carga masiva + homologación:
      * - Carga masiva de parejas/equipos: cada atleta lleva un valor lineal de «pareja» en inscritos.numero (identificador
      *   único por atleta en el torneo, no una fila compartida por dos jugadores).
-     * - Archivo 1 (homologación): identidad por cédula (resolverIdUsuarioInscripcionSitio). Con columna pareja se
-     *   sincroniza inscritos.numero = número de pareja para enlazar resultados (mismo criterio que la carga masiva).
+     * - Archivo 1 (homologación): identidad por cédula solo si el usuario ya existe en Mistorneos (no altas automáticas
+     *   ni inscripciones nuevas desde el archivo). Con columna pareja se actualiza solo inscritos.numero para enlazar
+     *   resultados en partiresul.
      *   Opción id externo + cédula: mapa usuario externo → id (como torneo individual).
      * - Archivo 2 (resultados): por columna pareja → un inscrito por torneo y numero; partida/mesa/secuencia son datos
      *   de la partida (línea a línea en partiresul), no desambiguación entre dos filas con el mismo numero.
@@ -940,7 +941,7 @@ final class ImportacionTorneoExternoService
             }
             $nomH = $iNombreHom >= 0 ? trim((string) ($row[$iNombreHom] ?? '')) : '';
             $nacH = $iNacHom >= 0 ? trim((string) ($row[$iNacHom] ?? '')) : '';
-            $idU = self::resolverIdUsuarioInscripcionSitio($pdo, $torneo_id, $ced, $nomH, $nacH, $registrado_por, $stats);
+            $idU = self::resolverIdUsuarioInscripcionSitio($pdo, $torneo_id, $ced, $nomH, $nacH, $registrado_por, $stats, true);
             if ($idU > 0) {
                 $filasHomologConId++;
                 $cedulaToId[$ced] = $idU;
@@ -965,7 +966,6 @@ final class ImportacionTorneoExternoService
                     $idUsuarioToClavePareja[$idU] = $pkey;
                     $numLin = self::parejaTextoANumeroInscripcionLineal($pkey);
                     if ($numLin > 0) {
-                        self::asegurarInscritoTorneoActivo($pdo, $torneo_id, $idU, $registrado_por, $stats);
                         self::actualizarNumeroInscripcionTorneo($pdo, $torneo_id, $idU, $numLin);
                         $stats['inscripciones_numero_pareja_sincronizadas'] = (int) ($stats['inscripciones_numero_pareja_sincronizadas'] ?? 0) + 1;
                     }
@@ -1238,7 +1238,8 @@ final class ImportacionTorneoExternoService
                 (string) ($meta['nom'] ?? ''),
                 (string) ($meta['nac'] ?? ''),
                 $registrado_por,
-                $stats
+                $stats,
+                true
             );
             if ($idR > 0) {
                 $cedulaToId[$cedK] = $idR;
@@ -1893,6 +1894,8 @@ final class ImportacionTorneoExternoService
      * Mapeador de identidad alineado con inscripción en sitio: usuarios → BD externa de personas → alta mínima con datos del archivo.
      *
      * @param array<string, int|bool> $statsAcum referencia opcional para acumular contadores (p. ej. usuarios_creados_import)
+     * @param bool $soloUsuarioExistente Si es true (homologación externa en dos archivos): solo busca en usuarios locales,
+     *                                   no crea usuario ni inscripción; cédulas sin coincidencia → 0 (solo se contabilizan arriba).
      */
     private static function resolverIdUsuarioInscripcionSitio(
         PDO $pdo,
@@ -1901,12 +1904,23 @@ final class ImportacionTorneoExternoService
         string $nombrePreferido,
         string $nacPreferido,
         int $registradoPor,
-        ?array &$statsAcum = null
+        ?array &$statsAcum = null,
+        bool $soloUsuarioExistente = false
     ): int {
         require_once __DIR__ . '/BusquedaJugadorInscripcionService.php';
         require_once __DIR__ . '/UsuarioInscripcionSitioHelper.php';
 
         $dig = BusquedaJugadorInscripcionService::cedulaSoloDigitos($cedRaw);
+        if ($soloUsuarioExistente) {
+            if ($dig === '') {
+                return 0;
+            }
+            $nac = BusquedaJugadorInscripcionService::normalizarNacionalidad($nacPreferido !== '' ? $nacPreferido : 'V');
+            $u = BusquedaJugadorInscripcionService::buscarUsuarioPorCedula($pdo, $nac, $dig);
+
+            return $u !== null ? (int) ($u['id'] ?? 0) : 0;
+        }
+
         if ($dig === '') {
             return 0;
         }
