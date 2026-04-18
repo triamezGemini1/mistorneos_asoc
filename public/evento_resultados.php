@@ -63,7 +63,7 @@ if (!$torneo_data || !TournamentScopeHelper::canAccessResultsPublicly($torneo_da
 $modalidad = (int)($torneo_data['modalidad'] ?? 1);
 $es_equipos = ($modalidad === 3);
 $modalidades = [1 => 'Individual', 2 => 'Parejas', 3 => 'Equipos', 4 => 'Parejas fijas'];
-$genero_evt = ResultadosReporteData::generoFiltroEfectivo($torneo_data, $genero_get);
+$genero_evt = ResultadosReporteData::generoFiltroDesdeParametro($genero_get);
 $gen_q = 'genero=' . urlencode($genero_evt);
 
 $rounds_info = ResultadosPublicHelper::getRoundsInfo($pdo, $torneo_id);

@@ -29,26 +29,49 @@ final class ResultadosReporteData
     }
 
     /**
-     * Género aplicado al listado de clasificación: respeta tournaments.tipo (1=M, 2=F, 3=mixto) si existe la columna.
+     * M o F elegido para el reporte (p. ej. GET genero). No usa datos del torneo (p. ej. tournaments.tipo):
+     * la pertenencia de cada fila al grupo es por el sexo del participante en esa inscripción
+     * (filas construidas desde inscritos + usuarios / partiresul), no por la configuración del torneo.
      */
-    public static function generoFiltroEfectivo(array $torneo, ?string $generoGet): string
+    public static function generoFiltroDesdeParametro(?string $generoGet): string
     {
-        $t = isset($torneo['tipo']) ? (int) $torneo['tipo'] : 0;
-        if ($t === 1) {
-            return 'M';
-        }
-        if ($t === 2) {
-            return 'F';
-        }
         $n = self::normalizarGeneroQuery($generoGet);
 
         return $n ?? 'M';
     }
 
-    /** M o F desde fila usuario/inscrito (usuarios.sexo). */
+    /** @deprecated Usar {@see generoFiltroDesdeParametro}; el parámetro torneo ya no se usa */
+    public static function generoFiltroEfectivo(array $torneo, ?string $generoGet): string
+    {
+        return self::generoFiltroDesdeParametro($generoGet);
+    }
+
+    /**
+     * M o F del participante en esa inscripción: si existen columnas en la fila procedentes de `inscritos`
+     * (p. ej. snapshot), tienen prioridad; si no, `usuarios.sexo` en el JOIN habitual inscritos → usuarios.
+     */
     public static function sexoUsuarioFila(array $row): string
     {
-        $s = strtoupper(trim((string) ($row['sexo'] ?? '')));
+        foreach (['sexo_inscripcion', 'sexo_inscrito', 'genero_inscripcion'] as $k) {
+            if (! array_key_exists($k, $row)) {
+                continue;
+            }
+            $raw = trim((string) ($row[$k] ?? ''));
+            if ($raw === '') {
+                continue;
+            }
+            $m = self::sexoParticipanteDesdeTexto($raw);
+            if ($m !== '') {
+                return $m;
+            }
+        }
+
+        return self::sexoParticipanteDesdeTexto((string) ($row['sexo'] ?? ''));
+    }
+
+    private static function sexoParticipanteDesdeTexto(string $raw): string
+    {
+        $s = strtoupper(trim($raw));
         if ($s === '' || $s === 'O') {
             return '';
         }
@@ -312,7 +335,7 @@ final class ResultadosReporteData
         unset($p);
 
         $modalidad = (int) ($torneo['modalidad'] ?? 0);
-        $gen = self::generoFiltroEfectivo($torneo, $generoPreferencia);
+        $gen = self::generoFiltroDesdeParametro($generoPreferencia);
         $participantes = self::filtrarFilasClasificacionPorGenero($participantes, $gen, $modalidad);
         $participantes = self::ordenarFilasComoPosicionesTorneo($participantes);
         $participantes = self::reenumerarPosicionMostrada($participantes);

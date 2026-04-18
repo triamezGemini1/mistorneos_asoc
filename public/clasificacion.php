@@ -56,7 +56,7 @@ try {
     ");
     $stmt->execute([$torneo_id]);
     $clasificacion = $stmt->fetchAll(PDO::FETCH_ASSOC);
-    $genero_ranking = ResultadosReporteData::generoFiltroEfectivo($torneo, $genero_get);
+    $genero_ranking = ResultadosReporteData::generoFiltroDesdeParametro($genero_get);
     $modalidadTor = (int) ($torneo['modalidad'] ?? 0);
     $clasificacion = ResultadosReporteData::filtrarFilasClasificacionPorGenero($clasificacion, $genero_ranking, $modalidadTor);
     usort($clasificacion, static function (array $a, array $b): int {

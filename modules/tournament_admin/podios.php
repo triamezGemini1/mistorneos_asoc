@@ -102,7 +102,7 @@ try {
     $stmt = $pdo->prepare($sql);
     $stmt->execute([$torneo_id, $torneo_id]);
     $posiciones = $stmt->fetchAll(PDO::FETCH_ASSOC);
-    $genero_podio = ResultadosReporteData::generoFiltroEfectivo($torneo, $_GET['genero'] ?? null);
+    $genero_podio = ResultadosReporteData::generoFiltroDesdeParametro($_GET['genero'] ?? null);
     $modalidad_pod = (int) ($torneo['modalidad'] ?? 0);
     $posiciones = ResultadosReporteData::filtrarFilasClasificacionPorGenero($posiciones, $genero_podio, $modalidad_pod);
     $posiciones = ResultadosReporteData::ordenarFilasComoPosicionesTorneo($posiciones);

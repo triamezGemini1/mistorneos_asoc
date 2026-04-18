@@ -3355,7 +3355,7 @@ function obtenerDatosPosiciones($torneo_id, $genero_get = null) {
     $stmt->execute([$torneo_id, $torneo_id, $torneo_id]);
     $posiciones = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-    $genero_ranking = \ResultadosReporteData::generoFiltroEfectivo($torneo, is_string($genero_get) ? $genero_get : null);
+    $genero_ranking = \ResultadosReporteData::generoFiltroDesdeParametro(is_string($genero_get) ? $genero_get : null);
     $modalidadTorneo = (int) ($torneo['modalidad'] ?? 0);
     $posiciones = \ResultadosReporteData::filtrarFilasClasificacionPorGenero($posiciones, $genero_ranking, $modalidadTorneo);
     $posiciones = \ResultadosReporteData::ordenarFilasComoPosicionesTorneo($posiciones);

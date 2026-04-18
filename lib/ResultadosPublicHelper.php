@@ -123,7 +123,7 @@ class ResultadosPublicHelper
         $stmtT = $pdo->prepare('SELECT * FROM tournaments WHERE id = ? LIMIT 1');
         $stmtT->execute([$torneo_id]);
         $torneoRow = $stmtT->fetch(PDO::FETCH_ASSOC) ?: [];
-        $gen = ResultadosReporteData::generoFiltroEfectivo($torneoRow, $generoGet);
+        $gen = ResultadosReporteData::generoFiltroDesdeParametro($generoGet);
         $modalidad = (int) ($torneoRow['modalidad'] ?? 0);
         $filas = ResultadosReporteData::filtrarFilasClasificacionPorGenero($filas, $gen, $modalidad);
         usort($filas, static function (array $a, array $b): int {

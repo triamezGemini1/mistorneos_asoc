@@ -73,7 +73,7 @@ final class ResultadosReportesPrintHtml
             $esParejasRep = in_array((int)($torneo['modalidad'] ?? 0), [2, 4], true);
             $colJugadorRep = $esParejasRep ? 'Pareja' : 'Jugador';
             $h1p = $tipo === 'posiciones' ? 'Tabla de posiciones — ' : 'Resultados general — ';
-            $gl = ResultadosReporteData::generoFiltroEfectivo($torneo, $generoGet);
+            $gl = ResultadosReporteData::generoFiltroDesdeParametro($generoGet);
             $genLabel = $gl === 'F' ? 'Femenino' : 'Masculino';
             echo '<h1>' . $h1p . $nombreTorneo . '</h1><div class="meta">' . $fechaTor . ' · ' . $fechaGen . ' · Clasificación: ' . $esc($genLabel) . '</div>';
             echo '<table class="rep-table"><thead><tr><th>Pos</th><th>' . $esc($colJugadorRep) . '</th><th>Club</th><th>Equipo</th><th>G</th><th>P</th><th>Ef.</th><th>Pts</th><th>Rnk</th><th>GFF</th><th>Sanc.</th><th>Tarj.</th></tr></thead><tbody>';
@@ -130,7 +130,7 @@ final class ResultadosReportesPrintHtml
             $equipos = $data['equipos'];
             $rondas = $data['rondas'];
             $esEquipos = (int)($torneo['modalidad'] ?? 0) === 3;
-            $glC = ResultadosReporteData::generoFiltroEfectivo($torneo, $generoGet);
+            $glC = ResultadosReporteData::generoFiltroDesdeParametro($generoGet);
             $genLabelC = $glC === 'F' ? 'Femenino' : 'Masculino';
             echo '<h1>Reporte consolidado — ' . $nombreTorneo . '</h1><div class="meta">Fecha torneo: ' . $fechaTor . ' · Generado: ' . $fechaGen . ' · Clasificación: ' . $esc($genLabelC) . '</div>';
             if (!empty($rondas)) {
