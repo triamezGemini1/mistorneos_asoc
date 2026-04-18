@@ -25,6 +25,7 @@ if ($tipo !== 'todos') {
 }
 
 $pdo = DB::pdo();
+$generoGet = isset($_GET['genero']) ? (string) $_GET['genero'] : null;
 $esc = static function ($s) {
     return htmlspecialchars((string)$s, ENT_QUOTES | ENT_HTML5, 'UTF-8');
 };
@@ -97,10 +98,10 @@ if ($tipo === 'todos') {
             echo '<div class="salto-reporte"></div>';
         }
         $primero = false;
-        echo ResultadosReportesPrintHtml::renderBody($pdo, (int)$torneo_id, $torneo, $subTipo, $esc);
+        echo ResultadosReportesPrintHtml::renderBody($pdo, (int)$torneo_id, $torneo, $subTipo, $esc, $generoGet);
     }
 } else {
-    echo ResultadosReportesPrintHtml::renderBody($pdo, (int)$torneo_id, $torneo, $tipo, $esc);
+    echo ResultadosReportesPrintHtml::renderBody($pdo, (int)$torneo_id, $torneo, $tipo, $esc, $generoGet);
 }
 ?>
 </body>

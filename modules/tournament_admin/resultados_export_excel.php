@@ -28,7 +28,8 @@ if (!$torneo) {
     exit('Torneo no encontrado');
 }
 
-$data = ResultadosReporteData::cargar($pdo, $torneoId, $torneo);
+$generoGet = isset($_GET['genero']) ? (string) $_GET['genero'] : null;
+$data = ResultadosReporteData::cargar($pdo, $torneoId, $torneo, $generoGet);
 $esEquipos = (int)($torneo['modalidad'] ?? 0) === 3;
 $topN = max(1, (int)($torneo['pareclub'] ?? 8));
 $dataClub = obtenerTopJugadoresPorClub($pdo, $torneoId, $topN);

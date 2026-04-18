@@ -2448,7 +2448,7 @@ try {
             }
             verificarPermisosTorneo($torneo_id, $user_id, $is_admin_general);
             $view_file = __DIR__ . '/gestion_torneos/posiciones.php';
-            $view_data = obtenerDatosPosiciones($torneo_id);
+            $view_data = obtenerDatosPosiciones($torneo_id, $_GET['genero'] ?? null);
             break;
 
         case 'galeria_fotos':
@@ -3259,7 +3259,7 @@ function obtenerDatosRondas($torneo_id) {
  * Tarjeta: se toma la de mayor severidad en el torneo desde partiresul (MAX), con
  * fallback a inscritos.tarjeta; valores 0=ninguna, 1=amarilla, 3=roja, 4=negra.
  */
-function obtenerDatosPosiciones($torneo_id) {
+function obtenerDatosPosiciones($torneo_id, $genero_get = null) {
     require_once __DIR__ . '/../lib/ResultadosReporteData.php';
     $pdo = DB::pdo();
     
@@ -3354,6 +3354,12 @@ function obtenerDatosPosiciones($torneo_id) {
     $stmt = $pdo->prepare($sql);
     $stmt->execute([$torneo_id, $torneo_id, $torneo_id]);
     $posiciones = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+    $genero_ranking = \ResultadosReporteData::generoFiltroEfectivo($torneo, is_string($genero_get) ? $genero_get : null);
+    $modalidadTorneo = (int) ($torneo['modalidad'] ?? 0);
+    $posiciones = \ResultadosReporteData::filtrarFilasClasificacionPorGenero($posiciones, $genero_ranking, $modalidadTorneo);
+    $posiciones = \ResultadosReporteData::ordenarFilasComoPosicionesTorneo($posiciones);
+    $posiciones = \ResultadosReporteData::reenumerarPosicionMostrada($posiciones);
     
     // Asegurar que todos los jugadores tengan el nombre del equipo si tienen codigo_equipo
     foreach ($posiciones as &$pos) {
@@ -3364,7 +3370,6 @@ function obtenerDatosPosiciones($torneo_id) {
     }
     unset($pos);
 
-    $modalidadTorneo = (int)($torneo['modalidad'] ?? 0);
     if (in_array($modalidadTorneo, [2, 4], true)) {
         $posiciones = \ResultadosReporteData::colapsarFilasPorPareja($posiciones, $pdo, $torneo_id);
     }
@@ -3372,7 +3377,8 @@ function obtenerDatosPosiciones($torneo_id) {
     return [
         'torneo' => $torneo,
         'posiciones' => $posiciones,
-        'es_modalidad_equipos' => $es_modalidad_equipos
+        'es_modalidad_equipos' => $es_modalidad_equipos,
+        'genero_ranking' => $genero_ranking,
     ];
 }
 

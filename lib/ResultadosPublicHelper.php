@@ -56,15 +56,37 @@ class ResultadosPublicHelper
     }
 
     /**
-     * Posiciones generales (clasificación individual)
+     * Posiciones generales (clasificación). Filtra por género para no mezclar M/F (genero: M|F vía GET).
+     *
+     * @return list<array<string, mixed>>
      */
-    public static function getPosiciones(PDO $pdo, int $torneo_id, int $limit = 500, int $offset = 0): array
+    public static function getPosiciones(PDO $pdo, int $torneo_id, int $limit = 500, int $offset = 0, ?string $generoGet = null): array
+    {
+        $filas = self::obtenerFilasPosicionesPublicoSinLimite($pdo, $torneo_id);
+        $filas = self::aplicarFiltroGeneroPosicionesPublico($pdo, $torneo_id, $filas, $generoGet);
+        return array_slice($filas, max(0, $offset), max(1, $limit));
+    }
+
+    public static function getPosicionesCount(PDO $pdo, int $torneo_id, ?string $generoGet = null): int
+    {
+        $filas = self::obtenerFilasPosicionesPublicoSinLimite($pdo, $torneo_id);
+        $filas = self::aplicarFiltroGeneroPosicionesPublico($pdo, $torneo_id, $filas, $generoGet);
+
+        return count($filas);
+    }
+
+    /**
+     * @return list<array<string, mixed>>
+     */
+    private static function obtenerFilasPosicionesPublicoSinLimite(PDO $pdo, int $torneo_id): array
     {
         RankingTorneoRecalc::actualizarEstadisticasYRanking($torneo_id);
         try {
             $tienePartiresul = false;
             $st = $pdo->query("SHOW TABLES LIKE 'partiresul'");
-            if ($st && $st->rowCount() > 0) $tienePartiresul = true;
+            if ($st && $st->rowCount() > 0) {
+                $tienePartiresul = true;
+            }
 
             $gffSub = PartiresulEstatusSql::sqlSubqueryCountGffPorUsuarioTorneo();
             $wRegBye = PartiresulEstatusSql::whereRegistradoUno('pr_bye');
@@ -77,31 +99,48 @@ class ResultadosPublicHelper
             }
             $sql .= " FROM inscritos i LEFT JOIN usuarios u ON i.id_usuario = u.id LEFT JOIN clubes c ON i.id_club = c.id
                 WHERE i.torneo_id = ? AND (i.estatus IS NULL OR (i.estatus != 4 AND i.estatus != 'retirado'))
-                ORDER BY i.ptosrnk DESC, i.efectividad DESC, i.ganados DESC, i.puntos DESC
-                LIMIT " . (int)$limit . " OFFSET " . (int)$offset;
+                ORDER BY i.ptosrnk DESC, i.efectividad DESC, i.ganados DESC, i.puntos DESC";
             $stmt = $pdo->prepare($sql);
-            // Solo 2 placeholders con partiresul: subconsulta bye (id_torneo) + WHERE i.torneo_id
             $stmt->execute($tienePartiresul ? [$torneo_id, $torneo_id] : [$torneo_id]);
-            return $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+            return $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
         } catch (Exception $e) {
-            error_log("ResultadosPublicHelper getPosiciones: " . $e->getMessage());
+            error_log('ResultadosPublicHelper obtenerFilasPosicionesPublicoSinLimite: ' . $e->getMessage());
+
             return [];
         }
     }
 
-    public static function getPosicionesCount(PDO $pdo, int $torneo_id): int
+    /**
+     * @param list<array<string, mixed>> $filas
+     * @return list<array<string, mixed>>
+     */
+    private static function aplicarFiltroGeneroPosicionesPublico(PDO $pdo, int $torneo_id, array $filas, ?string $generoGet): array
     {
-        RankingTorneoRecalc::actualizarEstadisticasYRanking($torneo_id);
-        try {
-            $stmt = $pdo->prepare("
-                SELECT COUNT(*) FROM inscritos 
-                WHERE torneo_id = ? AND (estatus IS NULL OR (estatus != 4 AND estatus != 'retirado'))
-            ");
-            $stmt->execute([$torneo_id]);
-            return (int)$stmt->fetchColumn();
-        } catch (Exception $e) {
-            return 0;
+        if ($filas === []) {
+            return [];
         }
+        $stmtT = $pdo->prepare('SELECT * FROM tournaments WHERE id = ? LIMIT 1');
+        $stmtT->execute([$torneo_id]);
+        $torneoRow = $stmtT->fetch(PDO::FETCH_ASSOC) ?: [];
+        $gen = ResultadosReporteData::generoFiltroEfectivo($torneoRow, $generoGet);
+        $modalidad = (int) ($torneoRow['modalidad'] ?? 0);
+        $filas = ResultadosReporteData::filtrarFilasClasificacionPorGenero($filas, $gen, $modalidad);
+        usort($filas, static function (array $a, array $b): int {
+            $x = (int) ($b['ptosrnk'] ?? 0) <=> (int) ($a['ptosrnk'] ?? 0);
+            if ($x !== 0) {
+                return $x;
+            }
+            $x2 = (int) ($b['efectividad'] ?? 0) <=> (int) ($a['efectividad'] ?? 0);
+            if ($x2 !== 0) {
+                return $x2;
+            }
+
+            return (int) ($b['ganados'] ?? 0) <=> (int) ($a['ganados'] ?? 0);
+        });
+        $filas = ResultadosReporteData::reenumerarPosicionMostrada($filas);
+
+        return $filas;
     }
 
     /**

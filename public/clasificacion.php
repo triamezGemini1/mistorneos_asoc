@@ -11,9 +11,11 @@
 require_once __DIR__ . '/../config/bootstrap.php';
 require_once __DIR__ . '/../config/db_config.php';
 require_once __DIR__ . '/../lib/app_helpers.php';
+require_once __DIR__ . '/../lib/ResultadosReporteData.php';
 
 $torneo_id = isset($_GET['torneo_id']) ? (int)$_GET['torneo_id'] : 0;
 $highlight_user = isset($_GET['highlight_user']) ? (int)$_GET['highlight_user'] : 0;
+$genero_get = isset($_GET['genero']) ? (string) $_GET['genero'] : null;
 if ($torneo_id <= 0) {
     header('Location: ' . (rtrim(AppHelpers::getPublicUrl(), '/') . '/landing-spa.php'));
     exit;
@@ -24,7 +26,7 @@ $torneo = null;
 $clasificacion = [];
 
 try {
-    $stmt = $pdo->prepare("SELECT id, nombre, fechator, lugar FROM tournaments WHERE id = ? AND estatus = 1");
+    $stmt = $pdo->prepare('SELECT * FROM tournaments WHERE id = ? AND estatus = 1');
     $stmt->execute([$torneo_id]);
     $torneo = $stmt->fetch(PDO::FETCH_ASSOC);
     if (!$torneo) {
@@ -41,7 +43,9 @@ try {
             i.efectividad,
             i.puntos,
             i.ptosrnk,
+            i.codigo_equipo,
             COALESCE(u.nombre, u.username) as nombre_jugador,
+            u.sexo,
             c.nombre as club_nombre
         FROM inscritos i
         LEFT JOIN usuarios u ON i.id_usuario = u.id
@@ -52,9 +56,26 @@ try {
     ");
     $stmt->execute([$torneo_id]);
     $clasificacion = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    $genero_ranking = ResultadosReporteData::generoFiltroEfectivo($torneo, $genero_get);
+    $modalidadTor = (int) ($torneo['modalidad'] ?? 0);
+    $clasificacion = ResultadosReporteData::filtrarFilasClasificacionPorGenero($clasificacion, $genero_ranking, $modalidadTor);
+    usort($clasificacion, static function (array $a, array $b): int {
+        $x = (int) ($b['ptosrnk'] ?? 0) <=> (int) ($a['ptosrnk'] ?? 0);
+        if ($x !== 0) {
+            return $x;
+        }
+        $x2 = (int) ($b['efectividad'] ?? 0) <=> (int) ($a['efectividad'] ?? 0);
+        if ($x2 !== 0) {
+            return $x2;
+        }
+
+        return (int) ($b['ganados'] ?? 0) <=> (int) ($a['ganados'] ?? 0);
+    });
+    $clasificacion = ResultadosReporteData::reenumerarPosicionMostrada($clasificacion);
 } catch (Throwable $e) {
     error_log('clasificacion.php: ' . $e->getMessage());
 }
+$genero_ranking = $genero_ranking ?? 'M';
 
 $base_public = rtrim(AppHelpers::getPublicUrl(), '/');
 $url_retorno = $base_public . '/perfil_jugador.php?torneo_id=' . $torneo_id;
@@ -135,6 +156,10 @@ $torneo_nombre = $torneo['nombre'] ?? 'Torneo';
 
         <h1><i class="fas fa-trophy" style="color: #38bdf8;"></i> Clasificación</h1>
         <p class="sub"><?= htmlspecialchars($torneo_nombre) ?></p>
+        <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;">
+            <a href="clasificacion.php?torneo_id=<?= (int) $torneo_id ?>&amp;genero=M" style="padding:8px 14px;border-radius:10px;text-decoration:none;font-size:0.9rem;<?= $genero_ranking === 'M' ? 'background:#2563eb;color:#fff;' : 'background:#1e293b;color:#94a3b8;border:1px solid rgba(255,255,255,0.12);' ?>">Masculino</a>
+            <a href="clasificacion.php?torneo_id=<?= (int) $torneo_id ?>&amp;genero=F" style="padding:8px 14px;border-radius:10px;text-decoration:none;font-size:0.9rem;<?= $genero_ranking === 'F' ? 'background:#2563eb;color:#fff;' : 'background:#1e293b;color:#94a3b8;border:1px solid rgba(255,255,255,0.12);' ?>">Femenino</a>
+        </div>
 
         <div class="table-wrap">
             <?php if (empty($clasificacion)): ?>

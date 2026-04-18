@@ -11,6 +11,7 @@ require_once __DIR__ . '/../lib/app_helpers.php';
 require_once __DIR__ . '/../lib/UrlHelper.php';
 require_once __DIR__ . '/../lib/TournamentScopeHelper.php';
 require_once __DIR__ . '/../lib/ResultadosPublicHelper.php';
+require_once __DIR__ . '/../lib/ResultadosReporteData.php';
 require_once __DIR__ . '/../lib/LandingDataService.php';
 
 $pdo = DB::pdo();
@@ -30,6 +31,7 @@ $org_join = $has_cod_org
 $torneo_id = isset($_GET['torneo_id']) ? (int)$_GET['torneo_id'] : 0;
 $vista = $_GET['vista'] ?? 'general';
 $pagina = isset($_GET['p']) ? max(1, (int)$_GET['p']) : 1;
+$genero_get = isset($_GET['genero']) ? (string) $_GET['genero'] : null;
 $per_page = 50;
 
 if ($torneo_id <= 0) {
@@ -61,6 +63,8 @@ if (!$torneo_data || !TournamentScopeHelper::canAccessResultsPublicly($torneo_da
 $modalidad = (int)($torneo_data['modalidad'] ?? 1);
 $es_equipos = ($modalidad === 3);
 $modalidades = [1 => 'Individual', 2 => 'Parejas', 3 => 'Equipos', 4 => 'Parejas fijas'];
+$genero_evt = ResultadosReporteData::generoFiltroEfectivo($torneo_data, $genero_get);
+$gen_q = 'genero=' . urlencode($genero_evt);
 
 $rounds_info = ResultadosPublicHelper::getRoundsInfo($pdo, $torneo_id);
 $landingService = new LandingDataService($pdo);
@@ -69,9 +73,9 @@ $podio_acta = $landingService->getPodioPorTorneo($torneo_id);
 $posiciones = [];
 $total_posiciones = 0;
 if ($vista === 'general') {
-    $total_posiciones = ResultadosPublicHelper::getPosicionesCount($pdo, $torneo_id);
+    $total_posiciones = ResultadosPublicHelper::getPosicionesCount($pdo, $torneo_id, $genero_get);
     $offset = ($pagina - 1) * $per_page;
-    $posiciones = ResultadosPublicHelper::getPosiciones($pdo, $torneo_id, $per_page, $offset);
+    $posiciones = ResultadosPublicHelper::getPosiciones($pdo, $torneo_id, $per_page, $offset, $genero_get);
 }
 
 $clubes_data = [];
@@ -266,7 +270,7 @@ $url_base = 'evento_resultados.php?torneo_id=' . $torneo_id;
             <ul class="nav nav-pills nav-vistas flex-wrap gap-2">
                 <li class="nav-item">
                     <a class="nav-link <?= $vista === 'general' ? 'active' : '' ?>"
-                       href="<?= $url_base ?>&vista=general">
+                       href="<?= $url_base ?>&vista=general&<?= $gen_q ?>">
                         <i class="fas fa-list-ol me-1"></i>Clasificación general
                     </a>
                 </li>
@@ -303,7 +307,11 @@ $url_base = 'evento_resultados.php?torneo_id=' . $torneo_id;
         <div class="p-4">
             <?php if ($vista === 'general'): ?>
                 <!-- Clasificación general -->
-                <h5 class="mb-4"><i class="fas fa-trophy text-warning me-2"></i>Clasificación individual</h5>
+                <h5 class="mb-2"><i class="fas fa-trophy text-warning me-2"></i>Clasificación individual</h5>
+                <div class="btn-group btn-group-sm mb-4" role="group" aria-label="Género">
+                    <a href="<?= $url_base ?>&vista=general&genero=M" class="btn <?= $genero_evt === 'M' ? 'btn-primary' : 'btn-outline-primary' ?>">Masculino</a>
+                    <a href="<?= $url_base ?>&vista=general&genero=F" class="btn <?= $genero_evt === 'F' ? 'btn-primary' : 'btn-outline-primary' ?>">Femenino</a>
+                </div>
                 <?php if (empty($posiciones)): ?>
                     <p class="text-muted">Aún no hay resultados disponibles.</p>
                 <?php else: ?>
@@ -362,7 +370,7 @@ $url_base = 'evento_resultados.php?torneo_id=' . $torneo_id;
                         <ul class="pagination pagination-sm justify-content-center">
                             <?php for ($i = 1; $i <= min($total_pages, 10); $i++): ?>
                                 <li class="page-item <?= $i === $pagina ? 'active' : '' ?>">
-                                    <a class="page-link" href="<?= $url_base ?>&vista=general&p=<?= $i ?>"><?= $i ?></a>
+                                    <a class="page-link" href="<?= $url_base ?>&vista=general&p=<?= $i ?>&<?= $gen_q ?>"><?= $i ?></a>
                                 </li>
                             <?php endfor; ?>
                         </ul>

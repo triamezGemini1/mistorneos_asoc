@@ -6,6 +6,7 @@ $script_actual = basename($_SERVER['PHP_SELF'] ?? '');
 $use_standalone = in_array($script_actual, ['admin_torneo.php', 'panel_torneo.php']);
 $base_url = $use_standalone ? $script_actual : 'index.php?page=torneo_gestion';
 $es_parejas_posiciones = in_array((int)($torneo['modalidad'] ?? 0), [2, 4], true);
+$genero_ranking = $genero_ranking ?? 'M';
 ?>
 
 <?php if (!$use_standalone): ?>
@@ -51,19 +52,19 @@ $es_parejas_posiciones = in_array((int)($torneo['modalidad'] ?? 0), [2, 4], true
                 $u = static function (string $a, array $x = []) use ($tid) {
                     return AppHelpers::url('index.php', array_merge(['page' => 'torneo_gestion', 'action' => $a, 'torneo_id' => $tid], $x));
                 }; ?>
-            <a href="<?php echo htmlspecialchars(AppHelpers::url('export_resultados_pdf.php', ['torneo_id' => $tid, 'tipo' => 'posiciones'])); ?>" target="_blank" rel="noopener" class="btn btn-danger text-dark fw-bold border border-dark">
+            <a href="<?php echo htmlspecialchars(AppHelpers::url('export_resultados_pdf.php', ['torneo_id' => $tid, 'tipo' => 'posiciones', 'genero' => $genero_ranking])); ?>" target="_blank" rel="noopener" class="btn btn-danger text-dark fw-bold border border-dark">
                 <i class="fas fa-file-pdf mr-1"></i> PDF posiciones
             </a>
-            <a href="<?php echo htmlspecialchars($u('resultados_reportes_print', ['tipo' => 'posiciones'])); ?>" target="_blank" rel="noopener" class="btn btn-warning text-dark fw-bold border border-dark">
+            <a href="<?php echo htmlspecialchars($u('resultados_reportes_print', array_merge(['tipo' => 'posiciones'], ['genero' => $genero_ranking]))); ?>" target="_blank" rel="noopener" class="btn btn-warning text-dark fw-bold border border-dark">
                 <i class="fas fa-print mr-1"></i> Imprimir / vista
             </a>
-            <a href="<?php echo htmlspecialchars($u('resultados_reportes')); ?>" class="btn btn-outline-secondary fw-bold">
+            <a href="<?php echo htmlspecialchars($u('resultados_reportes', ['genero' => $genero_ranking])); ?>" class="btn btn-outline-secondary fw-bold">
                 <i class="fas fa-file-alt mr-1"></i> Todos los reportes
             </a>
-            <a href="<?php echo htmlspecialchars(AppHelpers::url('export_resultados_pdf.php', ['torneo_id' => $tid, 'tipo' => 'todos'])); ?>" target="_blank" rel="noopener" class="btn btn-outline-danger fw-bold border border-dark" title="Un solo PDF con clasificación, clubes y consolidado">
+            <a href="<?php echo htmlspecialchars(AppHelpers::url('export_resultados_pdf.php', ['torneo_id' => $tid, 'tipo' => 'todos', 'genero' => $genero_ranking])); ?>" target="_blank" rel="noopener" class="btn btn-outline-danger fw-bold border border-dark" title="Un solo PDF con clasificación, clubes y consolidado">
                 <i class="fas fa-file-pdf mr-1"></i> PDF (todos)
             </a>
-            <a href="<?php echo htmlspecialchars($u('resultados_reportes_print', ['tipo' => 'todos'])); ?>" target="_blank" rel="noopener" class="btn btn-outline-info fw-bold border border-dark" title="Vista imprimible con todos los bloques">
+            <a href="<?php echo htmlspecialchars($u('resultados_reportes_print', array_merge(['tipo' => 'todos'], ['genero' => $genero_ranking]))); ?>" target="_blank" rel="noopener" class="btn btn-outline-info fw-bold border border-dark" title="Vista imprimible con todos los bloques">
                 <i class="fas fa-print mr-1"></i> Imprimir todos
             </a>
             <?php endif; ?>
@@ -85,11 +86,11 @@ $es_parejas_posiciones = in_array((int)($torneo['modalidad'] ?? 0), [2, 4], true
         $u2 = static function (string $a, array $x = []) use ($tid) {
             return AppHelpers::url('index.php', array_merge(['page' => 'torneo_gestion', 'action' => $a, 'torneo_id' => $tid], $x));
         }; ?>
-    <a href="<?php echo htmlspecialchars(AppHelpers::url('export_resultados_pdf.php', ['torneo_id' => $tid, 'tipo' => 'posiciones'])); ?>" target="_blank" rel="noopener" class="btn btn-sm btn-danger text-dark fw-bold border border-dark">PDF</a>
-    <a href="<?php echo htmlspecialchars($u2('resultados_reportes_print', ['tipo' => 'posiciones'])); ?>" target="_blank" rel="noopener" class="btn btn-sm btn-warning text-dark fw-bold">Imprimir</a>
-    <a href="<?php echo htmlspecialchars($u2('resultados_reportes')); ?>" class="btn btn-sm btn-outline-secondary fw-bold">Reportes</a>
-    <a href="<?php echo htmlspecialchars(AppHelpers::url('export_resultados_pdf.php', ['torneo_id' => $tid, 'tipo' => 'todos'])); ?>" target="_blank" rel="noopener" class="btn btn-sm btn-outline-danger fw-bold border border-dark" title="Un solo PDF con todos los bloques">PDF todos</a>
-    <a href="<?php echo htmlspecialchars($u2('resultados_reportes_print', ['tipo' => 'todos'])); ?>" target="_blank" rel="noopener" class="btn btn-sm btn-outline-info fw-bold border border-dark" title="Vista imprimible con todos los bloques">Impr. todos</a>
+    <a href="<?php echo htmlspecialchars(AppHelpers::url('export_resultados_pdf.php', ['torneo_id' => $tid, 'tipo' => 'posiciones', 'genero' => $genero_ranking])); ?>" target="_blank" rel="noopener" class="btn btn-sm btn-danger text-dark fw-bold border border-dark">PDF</a>
+    <a href="<?php echo htmlspecialchars($u2('resultados_reportes_print', array_merge(['tipo' => 'posiciones'], ['genero' => $genero_ranking]))); ?>" target="_blank" rel="noopener" class="btn btn-sm btn-warning text-dark fw-bold">Imprimir</a>
+    <a href="<?php echo htmlspecialchars($u2('resultados_reportes', ['genero' => $genero_ranking])); ?>" class="btn btn-sm btn-outline-secondary fw-bold">Reportes</a>
+    <a href="<?php echo htmlspecialchars(AppHelpers::url('export_resultados_pdf.php', ['torneo_id' => $tid, 'tipo' => 'todos', 'genero' => $genero_ranking])); ?>" target="_blank" rel="noopener" class="btn btn-sm btn-outline-danger fw-bold border border-dark" title="Un solo PDF con todos los bloques">PDF todos</a>
+    <a href="<?php echo htmlspecialchars($u2('resultados_reportes_print', array_merge(['tipo' => 'todos'], ['genero' => $genero_ranking]))); ?>" target="_blank" rel="noopener" class="btn btn-sm btn-outline-info fw-bold border border-dark" title="Vista imprimible con todos los bloques">Impr. todos</a>
     <?php endif; ?>
 </div>
 <?php endif; ?>
@@ -101,6 +102,18 @@ $es_parejas_posiciones = in_array((int)($torneo['modalidad'] ?? 0), [2, 4], true
                     <h5 class="mb-0"><?php echo $es_parejas_posiciones ? 'Clasificación General de Parejas' : 'Clasificación General'; ?></h5>
                 </div>
                 <div class="card-body">
+                    <?php
+                    $urlPosGenero = static function (string $g) use ($base_url, $use_standalone, $torneo): string {
+                        $p = ['action' => 'posiciones', 'torneo_id' => (int) ($torneo['id'] ?? 0), 'genero' => $g];
+
+                        return $base_url . ($use_standalone ? '?' : '&') . http_build_query($p);
+                    };
+                    ?>
+                    <div class="mb-3 btn-group flex-wrap" role="group" aria-label="Clasificación por género">
+                        <a href="<?php echo htmlspecialchars($urlPosGenero('M')); ?>" class="btn btn-sm <?php echo $genero_ranking === 'M' ? 'btn-primary' : 'btn-outline-primary'; ?>">Masculino</a>
+                        <a href="<?php echo htmlspecialchars($urlPosGenero('F')); ?>" class="btn btn-sm <?php echo $genero_ranking === 'F' ? 'btn-primary' : 'btn-outline-primary'; ?>">Femenino</a>
+                    </div>
+                    <p class="small text-muted mb-3">Ranking mostrado solo para el género seleccionado (posiciones reenumeradas dentro del grupo).</p>
                     <?php if (empty($posiciones)): ?>
                         <div class="alert alert-info">
                             <i class="fas fa-info-circle mr-2"></i>

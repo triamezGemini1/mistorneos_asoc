@@ -6,6 +6,7 @@
 
 require_once __DIR__ . '/../../lib/app_helpers.php';
 require_once __DIR__ . '/../../lib/PartiresulEstatusSql.php';
+require_once __DIR__ . '/../../lib/ResultadosReporteData.php';
 
 $wRegPr1Pod = \PartiresulEstatusSql::whereRegistradoUno('pr1');
 $wFf0Pr1Pod = \PartiresulEstatusSql::whereFfCero('pr1');
@@ -101,7 +102,12 @@ try {
     $stmt = $pdo->prepare($sql);
     $stmt->execute([$torneo_id, $torneo_id]);
     $posiciones = $stmt->fetchAll(PDO::FETCH_ASSOC);
-    
+    $genero_podio = ResultadosReporteData::generoFiltroEfectivo($torneo, $_GET['genero'] ?? null);
+    $modalidad_pod = (int) ($torneo['modalidad'] ?? 0);
+    $posiciones = ResultadosReporteData::filtrarFilasClasificacionPorGenero($posiciones, $genero_podio, $modalidad_pod);
+    $posiciones = ResultadosReporteData::ordenarFilasComoPosicionesTorneo($posiciones);
+    $posiciones = ResultadosReporteData::reenumerarPosicionMostrada($posiciones);
+
     // Procesar todos los resultados
     foreach ($posiciones as $pos) {
         $posicion_actual = (int)($pos['posicion'] ?? 0);
@@ -233,6 +239,18 @@ $base_url = $use_standalone ? $script_actual : 'index.php?page=torneo_gestion';
             
             <!-- Espacio vacío a la derecha para balance -->
             <div class="flex-shrink-0" style="width: 300px;"></div>
+        </div>
+        <div class="flex flex-wrap justify-center gap-2 mt-4">
+            <?php
+            $gPod = $genero_podio ?? 'M';
+            $qPod = static function (string $g) use ($base_url, $use_standalone, $torneo_id): string {
+                $p = ['action' => 'podios', 'torneo_id' => (int) $torneo_id, 'genero' => $g];
+
+                return $base_url . ($use_standalone ? '?' : '&') . http_build_query($p);
+            };
+            ?>
+            <a href="<?= htmlspecialchars($qPod('M')) ?>" class="px-4 py-2 rounded-lg font-semibold <?= $gPod === 'M' ? 'bg-purple-800 text-white' : 'bg-gray-200 text-gray-700' ?>">Masculino</a>
+            <a href="<?= htmlspecialchars($qPod('F')) ?>" class="px-4 py-2 rounded-lg font-semibold <?= $gPod === 'F' ? 'bg-purple-800 text-white' : 'bg-gray-200 text-gray-700' ?>">Femenino</a>
         </div>
     </div>
     

@@ -6,6 +6,7 @@ require_once __DIR__ . '/../../lib/app_helpers.php';
 
 $torneo_id = (int)($torneo_id ?? 0);
 $esEquipos = (int)($torneo['modalidad'] ?? 0) === 3;
+$generoRep = (isset($_GET['genero']) && $_GET['genero'] === 'F') ? 'F' : 'M';
 
 $tg = static function (string $action, array $extra = []) use ($torneo_id): string {
     return AppHelpers::url('index.php', array_merge([
@@ -15,21 +16,23 @@ $tg = static function (string $action, array $extra = []) use ($torneo_id): stri
     ], $extra));
 };
 
-$urlPdf = static function (string $tipo) use ($torneo_id): string {
+$urlPdf = static function (string $tipo) use ($torneo_id, $generoRep): string {
     return AppHelpers::url('index.php', [
         'page' => 'torneo_gestion',
         'action' => 'export_resultados_pdf',
         'torneo_id' => $torneo_id,
         'tipo' => $tipo,
+        'genero' => $generoRep,
     ]);
 };
 $urlExcel = AppHelpers::url('index.php', [
     'page' => 'torneo_gestion',
     'action' => 'export_resultados_excel',
     'torneo_id' => $torneo_id,
+    'genero' => $generoRep,
 ]);
-$urlPrint = static function (string $tipo) use ($tg): string {
-    return $tg('resultados_reportes_print', ['tipo' => $tipo]);
+$urlPrint = static function (string $tipo) use ($tg, $generoRep): string {
+    return $tg('resultados_reportes_print', ['tipo' => $tipo, 'genero' => $generoRep]);
 };
 $urlPanel = $tg('panel');
 

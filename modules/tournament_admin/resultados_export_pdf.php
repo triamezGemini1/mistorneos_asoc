@@ -52,6 +52,7 @@ $esc = static function ($s): string {
 $nombreTorneo = $esc($torneo['nombre'] ?? 'Torneo');
 $fechaGen = date('d/m/Y H:i');
 $fechaTor = $esc($torneo['fechator'] ?? '');
+$generoGet = isset($_GET['genero']) ? (string) $_GET['genero'] : null;
 
 $css = '
     @page { size: letter portrait; margin: 12mm; }
@@ -79,10 +80,10 @@ if ($tipo === 'todos') {
             echo '<div class="salto-reporte"></div>';
         }
         $primero = false;
-        echo ResultadosReportesPrintHtml::renderBody($pdo, $torneoId, $torneo, $subTipo, $esc);
+        echo ResultadosReportesPrintHtml::renderBody($pdo, $torneoId, $torneo, $subTipo, $esc, $generoGet);
     }
 } else {
-    echo ResultadosReportesPrintHtml::renderBody($pdo, $torneoId, $torneo, $tipo, $esc);
+    echo ResultadosReportesPrintHtml::renderBody($pdo, $torneoId, $torneo, $tipo, $esc, $generoGet);
 }
 
 echo '</body></html>';
