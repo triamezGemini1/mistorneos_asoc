@@ -51,10 +51,14 @@ class MesaAsignacionEquiposService
         }
 
         // Partir en lotes (4 a 7 equipos para manejar remanentes correctamente)
-        $lotes = $this->partirEquiposEnLotes($equipos);
-        
-        // Lista maestra por rango + ranking de equipo; llenado secuencial de mesas 1..N
-        $mesasArray = $this->construirMesasDesdeLotesHomologos($lotes);
+        try {
+            $lotes = $this->partirEquiposEnLotes($equipos);
+            // Lista maestra por rango + ranking de equipo; llenado secuencial de mesas 1..N
+            // (puede lanzar RuntimeException: mesa incompleta, duplicado de equipo, asignación imposible, etc.)
+            $mesasArray = $this->construirMesasDesdeLotesHomologos($lotes);
+        } catch (Throwable $e) {
+            return ['success' => false, 'message' => $e->getMessage()];
+        }
 
         if (empty($mesasArray)) {
             return ['success' => false, 'message' => 'Error al generar la distribución de mesas.'];
@@ -62,7 +66,7 @@ class MesaAsignacionEquiposService
 
         try {
             $this->guardarAsignacionRonda($torneo_id, $proxima_ronda, $mesasArray);
-        } catch (Exception $e) {
+        } catch (Throwable $e) {
             return ['success' => false, 'message' => $e->getMessage()];
         }
 
@@ -110,7 +114,11 @@ class MesaAsignacionEquiposService
             $mesas[] = $mesa;
         }
 
-        $this->guardarAsignacionRonda($torneo_id, 1, $mesas);
+        try {
+            $this->guardarAsignacionRonda($torneo_id, 1, $mesas);
+        } catch (Throwable $e) {
+            return ['success' => false, 'message' => $e->getMessage()];
+        }
 
         return [
             'success' => true,

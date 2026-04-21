@@ -292,40 +292,79 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $org_entidad = $entidad;
 
                     $hasCodOrg = false;
+                    $hasTipoOrg = false;
                     try {
                         $hasCodOrg = (bool)$pdo->query("SHOW COLUMNS FROM organizaciones LIKE 'cod_org'")->fetch(PDO::FETCH_ASSOC);
                     } catch (Throwable $ignored) {
                         $hasCodOrg = false;
                     }
+                    try {
+                        $hasTipoOrg = (bool)$pdo->query("SHOW COLUMNS FROM organizaciones LIKE 'tipo_org'")->fetch(PDO::FETCH_ASSOC);
+                    } catch (Throwable $ignored) {
+                        $hasTipoOrg = false;
+                    }
                     if ($hasCodOrg) {
-                        $stmt = $pdo->prepare("
-                            INSERT INTO organizaciones (nombre, direccion, responsable, telefono, email, entidad, cod_org, admin_user_id, estatus, created_at, updated_at)
-                            VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, NOW(), NOW())
-                        ");
-                        $stmt->execute([
-                            $org_nombre,
-                            $org_direccion,
-                            $org_responsable,
-                            $org_telefono,
-                            $org_email,
-                            $org_entidad,
-                            $org_entidad,
-                            $admin_user_id
-                        ]);
+                        if ($hasTipoOrg) {
+                            $stmt = $pdo->prepare("
+                                INSERT INTO organizaciones (nombre, direccion, responsable, telefono, email, entidad, tipo_org, cod_org, admin_user_id, estatus, created_at, updated_at)
+                                VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?, 1, NOW(), NOW())
+                            ");
+                            $stmt->execute([
+                                $org_nombre,
+                                $org_direccion,
+                                $org_responsable,
+                                $org_telefono,
+                                $org_email,
+                                $org_entidad,
+                                $org_entidad,
+                                $admin_user_id
+                            ]);
+                        } else {
+                            $stmt = $pdo->prepare("
+                                INSERT INTO organizaciones (nombre, direccion, responsable, telefono, email, entidad, cod_org, admin_user_id, estatus, created_at, updated_at)
+                                VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, NOW(), NOW())
+                            ");
+                            $stmt->execute([
+                                $org_nombre,
+                                $org_direccion,
+                                $org_responsable,
+                                $org_telefono,
+                                $org_email,
+                                $org_entidad,
+                                $org_entidad,
+                                $admin_user_id
+                            ]);
+                        }
                     } else {
-                        $stmt = $pdo->prepare("
-                            INSERT INTO organizaciones (nombre, direccion, responsable, telefono, email, entidad, admin_user_id, estatus, created_at, updated_at)
-                            VALUES (?, ?, ?, ?, ?, ?, ?, 1, NOW(), NOW())
-                        ");
-                        $stmt->execute([
-                            $org_nombre,
-                            $org_direccion,
-                            $org_responsable,
-                            $org_telefono,
-                            $org_email,
-                            $org_entidad,
-                            $admin_user_id
-                        ]);
+                        if ($hasTipoOrg) {
+                            $stmt = $pdo->prepare("
+                                INSERT INTO organizaciones (nombre, direccion, responsable, telefono, email, entidad, tipo_org, admin_user_id, estatus, created_at, updated_at)
+                                VALUES (?, ?, ?, ?, ?, ?, 1, ?, 1, NOW(), NOW())
+                            ");
+                            $stmt->execute([
+                                $org_nombre,
+                                $org_direccion,
+                                $org_responsable,
+                                $org_telefono,
+                                $org_email,
+                                $org_entidad,
+                                $admin_user_id
+                            ]);
+                        } else {
+                            $stmt = $pdo->prepare("
+                                INSERT INTO organizaciones (nombre, direccion, responsable, telefono, email, entidad, admin_user_id, estatus, created_at, updated_at)
+                                VALUES (?, ?, ?, ?, ?, ?, ?, 1, NOW(), NOW())
+                            ");
+                            $stmt->execute([
+                                $org_nombre,
+                                $org_direccion,
+                                $org_responsable,
+                                $org_telefono,
+                                $org_email,
+                                $org_entidad,
+                                $admin_user_id
+                            ]);
+                        }
                     }
                     $nota = "Organización: " . ($solicitud['club_nombre'] ?? 'N/A');
                 }

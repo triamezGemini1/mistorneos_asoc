@@ -358,29 +358,58 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $entidad_int = (int) $entidad_codigo;
                     try {
                         $hasCodOrg = false;
+                        $hasTipoOrg = false;
                         try {
                             $hasCodOrg = (bool)$pdo->query("SHOW COLUMNS FROM organizaciones LIKE 'cod_org'")->fetch(PDO::FETCH_ASSOC);
                         } catch (Throwable $ignored) {
                             $hasCodOrg = false;
                         }
+                        try {
+                            $hasTipoOrg = (bool)$pdo->query("SHOW COLUMNS FROM organizaciones LIKE 'tipo_org'")->fetch(PDO::FETCH_ASSOC);
+                        } catch (Throwable $ignored) {
+                            $hasTipoOrg = false;
+                        }
                         if ($hasCodOrg) {
-                            $ins = $pdo->prepare("INSERT INTO organizaciones (nombre, entidad, cod_org, admin_user_id, estatus, created_at, updated_at) VALUES (?, ?, ?, NULL, 1, NOW(), NOW())");
-                            $ins->execute([$entidad_nombre, $entidad_int, $entidad_int]);
+                            if ($hasTipoOrg) {
+                                $ins = $pdo->prepare("INSERT INTO organizaciones (nombre, entidad, tipo_org, cod_org, admin_user_id, estatus, created_at, updated_at) VALUES (?, ?, 0, ?, NULL, 1, NOW(), NOW())");
+                                $ins->execute([$entidad_nombre, $entidad_int, $entidad_int]);
+                            } else {
+                                $ins = $pdo->prepare("INSERT INTO organizaciones (nombre, entidad, cod_org, admin_user_id, estatus, created_at, updated_at) VALUES (?, ?, ?, NULL, 1, NOW(), NOW())");
+                                $ins->execute([$entidad_nombre, $entidad_int, $entidad_int]);
+                            }
                         } else {
-                            $ins = $pdo->prepare("INSERT INTO organizaciones (nombre, entidad, admin_user_id, estatus, created_at, updated_at) VALUES (?, ?, NULL, 1, NOW(), NOW())");
-                            $ins->execute([$entidad_nombre, $entidad_int]);
+                            if ($hasTipoOrg) {
+                                $ins = $pdo->prepare("INSERT INTO organizaciones (nombre, entidad, tipo_org, admin_user_id, estatus, created_at, updated_at) VALUES (?, ?, 0, NULL, 1, NOW(), NOW())");
+                                $ins->execute([$entidad_nombre, $entidad_int]);
+                            } else {
+                                $ins = $pdo->prepare("INSERT INTO organizaciones (nombre, entidad, admin_user_id, estatus, created_at, updated_at) VALUES (?, ?, NULL, 1, NOW(), NOW())");
+                                $ins->execute([$entidad_nombre, $entidad_int]);
+                            }
                         }
                         $organizacion_id_post = (int) $pdo->lastInsertId();
                     } catch (Exception $e) {
                         if (!isset($hasCodOrg)) {
                             $hasCodOrg = false;
                         }
+                        if (!isset($hasTipoOrg)) {
+                            $hasTipoOrg = false;
+                        }
                         if ($hasCodOrg) {
-                            $ins = $pdo->prepare("INSERT INTO organizaciones (nombre, entidad, cod_org, admin_user_id, estatus) VALUES (?, ?, ?, 0, 1)");
-                            $ins->execute([$entidad_nombre, $entidad_int, $entidad_int]);
+                            if ($hasTipoOrg) {
+                                $ins = $pdo->prepare("INSERT INTO organizaciones (nombre, entidad, tipo_org, cod_org, admin_user_id, estatus) VALUES (?, ?, 0, ?, 0, 1)");
+                                $ins->execute([$entidad_nombre, $entidad_int, $entidad_int]);
+                            } else {
+                                $ins = $pdo->prepare("INSERT INTO organizaciones (nombre, entidad, cod_org, admin_user_id, estatus) VALUES (?, ?, ?, 0, 1)");
+                                $ins->execute([$entidad_nombre, $entidad_int, $entidad_int]);
+                            }
                         } else {
-                            $ins = $pdo->prepare("INSERT INTO organizaciones (nombre, entidad, admin_user_id, estatus) VALUES (?, ?, 0, 1)");
-                            $ins->execute([$entidad_nombre, $entidad_int]);
+                            if ($hasTipoOrg) {
+                                $ins = $pdo->prepare("INSERT INTO organizaciones (nombre, entidad, tipo_org, admin_user_id, estatus) VALUES (?, ?, 0, 0, 1)");
+                                $ins->execute([$entidad_nombre, $entidad_int]);
+                            } else {
+                                $ins = $pdo->prepare("INSERT INTO organizaciones (nombre, entidad, admin_user_id, estatus) VALUES (?, ?, 0, 1)");
+                                $ins->execute([$entidad_nombre, $entidad_int]);
+                            }
                         }
                         $organizacion_id_post = (int) $pdo->lastInsertId();
                     }
