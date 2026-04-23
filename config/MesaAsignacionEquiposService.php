@@ -24,6 +24,8 @@ class MesaAsignacionEquiposService
 {
     private $pdo;
     private $proxima_ronda_cache;
+    /** @var int Torneo en curso (generación de ronda) para consultar historial partiresul. */
+    private $torneo_id_cache = 0;
 
     const JUGADORES_POR_MESA = 4;
 
@@ -38,6 +40,7 @@ class MesaAsignacionEquiposService
     public function generarAsignacionRonda($torneo_id, $proxima_ronda, $total_rondas, $estrategia)
     {
         $this->proxima_ronda_cache = $proxima_ronda;
+        $this->torneo_id_cache = (int) $torneo_id;
 
         if ($proxima_ronda == 1) {
             return $this->generarRonda1($torneo_id, $estrategia);
@@ -78,12 +81,19 @@ class MesaAsignacionEquiposService
     }
 
     /**
-     * Generación de Ronda 1 (Mantiene lógica original de segmentos)
+     * Generación de Ronda 1 (homologada con individual en el reparto por mesas):
+     * 1) ordenar por asociación, equipo, id_usuario
+     * 2) asignar mesas por 4 ciclos consecutivos mesa 1..N
+     * En equipos no existe BYE: el total de jugadores debe ser múltiplo de 4.
      */
     private function generarRonda1($torneo_id, $estrategia)
     {
-        // Miembros del equipo: tabla equipos + inscritos (codigo_equipo), sin tabla puente equipo_jugadores
-        $sql = "SELECT u.id AS id_usuario, e.id AS id_equipo, e.nombre_equipo AS nombre_equipo
+        // Miembros del equipo: tabla equipos + inscritos (codigo_equipo), con asociación (id_club).
+        $sql = "SELECT
+                    u.id AS id_usuario,
+                    e.id AS id_equipo,
+                    e.id_club AS id_asociacion,
+                    e.nombre_equipo AS nombre_equipo
                 FROM equipos e
                 INNER JOIN inscritos i ON i.torneo_id = e.id_torneo
                     AND i.codigo_equipo = e.codigo_equipo
@@ -92,26 +102,39 @@ class MesaAsignacionEquiposService
                 WHERE e.id_torneo = ?
                   AND e.estatus = 0
                   AND e.codigo_equipo IS NOT NULL AND e.codigo_equipo != ''
-                ORDER BY e.id ASC, u.id ASC";
+                ORDER BY
+                    COALESCE(e.id_club, 0) ASC,
+                    e.id ASC,
+                    u.id ASC";
         
         $stmt = $this->pdo->prepare($sql);
         $stmt->execute([$torneo_id]);
         $jugadores = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-        if (empty($jugadores)) return ['success' => false, 'message' => 'No hay jugadores'];
+        if (empty($jugadores)) {
+            return ['success' => false, 'message' => 'No hay jugadores'];
+        }
 
         $totalJugadores = count($jugadores);
-        $n = $totalJugadores / 4;
-        $mesas = [];
-
-        for ($i = 0; $i < $n; $i++) {
-            $mesa = [
-                $jugadores[$i],
-                $jugadores[$i + $n],
-                $jugadores[$i + 2 * $n],
-                $jugadores[$i + 3 * $n]
+        if ($totalJugadores % self::JUGADORES_POR_MESA !== 0) {
+            return [
+                'success' => false,
+                'message' => 'En torneos por equipos el número de jugadores debe ser múltiplo de 4 (no hay BYE). Actualmente hay ' . $totalJugadores . ' jugadores.',
             ];
-            $mesas[] = $mesa;
+        }
+
+        $numMesas = (int) ($totalJugadores / self::JUGADORES_POR_MESA);
+        if ($numMesas < 1) {
+            return ['success' => false, 'message' => 'No hay suficientes jugadores para formar al menos 1 mesa (mínimo 4).'];
+        }
+
+        // 4 ciclos consecutivos: en cada ciclo se recorre mesa 1..N.
+        $mesas = array_fill(0, $numMesas, []);
+        $idx = 0;
+        for ($ciclo = 0; $ciclo < self::JUGADORES_POR_MESA; $ciclo++) {
+            for ($m = 0; $m < $numMesas; $m++) {
+                $mesas[$m][] = $jugadores[$idx++];
+            }
         }
 
         try {
@@ -131,11 +154,19 @@ class MesaAsignacionEquiposService
      * MOTOR PRINCIPAL: por cada bloque, lista maestra (rango 1→4 agrupado; dentro de cada rango por ranking de equipo)
      * y asignación secuencial a mesas 1..N (N = k equipos), colocando cada atleta en la primera mesa con hueco sin conflicto de equipo.
      * Bloques de 4 equipos: 4 mesas. Bloque 5–7 equipos: N = k mesas.
+     *
+     * Tras asignar los 4 jugadores a cada mesa, solo se reubican dentro de la misma mesa (permutaciones)
+     * para intentar reducir repeticiones de pareja de compañero respecto a rondas anteriores. No se mueven
+     * jugadores entre mesas. Si ninguna permutación mejora, se deja el orden por rango + rotación habitual.
      */
     private function construirMesasDesdeLotesHomologos(array $lotes): array
     {
         $mesas = [];
         $ronda = $this->proxima_ronda_cache;
+        $torneoId = (int) $this->torneo_id_cache;
+        $histCompanero = ($ronda > 1 && $torneoId > 0)
+            ? $this->obtenerHistorialParesCompanero($torneoId, $ronda)
+            : [];
 
         foreach ($lotes as $lote) {
             $lote = array_values($lote);
@@ -155,7 +186,7 @@ class MesaAsignacionEquiposService
                         'Asignación inválida: dos jugadores del mismo equipo en una mesa (revisar rangos o plantillas).'
                     );
                 }
-                $rotados = $this->rotarParejas($jugadoresMesa, $ronda);
+                $rotados = $this->elegirOrdenIntraMesaMenosCompaneroRepetido($jugadoresMesa, $ronda, $histCompanero);
                 if ($this->mesaTieneEquipoDuplicado($rotados)) {
                     throw new RuntimeException('Rotación de parejas generó duplicado de equipo en mesa.');
                 }
@@ -164,6 +195,174 @@ class MesaAsignacionEquiposService
         }
 
         return $mesas;
+    }
+
+    /**
+     * Pares de compañeros (misma pareja de dominó) ya usados en partidas anteriores (mesa &gt; 0).
+     * Coherente con {@see rotarParejas}: según paridad de la ronda guardada en partiresul.
+     *
+     * @return array<string, true> clave "a-b" con a &lt; b
+     */
+    private function obtenerHistorialParesCompanero(int $torneoId, int $partidaNueva): array
+    {
+        if ($torneoId <= 0 || $partidaNueva <= 1) {
+            return [];
+        }
+        $stmt = $this->pdo->prepare(
+            'SELECT partida, mesa, id_usuario FROM partiresul
+             WHERE id_torneo = ? AND partida < ? AND mesa > 0
+             ORDER BY partida ASC, mesa ASC, secuencia ASC'
+        );
+        $stmt->execute([$torneoId, $partidaNueva]);
+        $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+        if ($rows === []) {
+            return [];
+        }
+        $porGrupo = [];
+        foreach ($rows as $row) {
+            $k = (int) $row['partida'] . ':' . (int) $row['mesa'];
+            if (!isset($porGrupo[$k])) {
+                $porGrupo[$k] = ['partida' => (int) $row['partida'], 'uids' => []];
+            }
+            $porGrupo[$k]['uids'][] = (int) $row['id_usuario'];
+        }
+        $pares = [];
+        foreach ($porGrupo as $grupo) {
+            $uids = $grupo['uids'];
+            $p = (int) $grupo['partida'];
+            if (count($uids) !== 4) {
+                continue;
+            }
+            if ($p % 2 === 0) {
+                $par1 = [$uids[0], $uids[1]];
+                $par2 = [$uids[2], $uids[3]];
+            } else {
+                $par1 = [$uids[0], $uids[2]];
+                $par2 = [$uids[1], $uids[3]];
+            }
+            foreach ([$par1, $par2] as $par) {
+                $a = (int) $par[0];
+                $b = (int) $par[1];
+                if ($a <= 0 || $b <= 0 || $a === $b) {
+                    continue;
+                }
+                if ($a > $b) {
+                    $t = $a;
+                    $a = $b;
+                    $b = $t;
+                }
+                $pares["{$a}-{$b}"] = true;
+            }
+        }
+
+        return $pares;
+    }
+
+    /**
+     * @return array<int, array{0:int,1:int,2:int,3:int}>
+     */
+    private function permutacionesIndices4(): array
+    {
+        $out = [];
+        for ($a = 0; $a < 4; $a++) {
+            for ($b = 0; $b < 4; $b++) {
+                if ($b === $a) {
+                    continue;
+                }
+                for ($c = 0; $c < 4; $c++) {
+                    if ($c === $a || $c === $b) {
+                        continue;
+                    }
+                    for ($d = 0; $d < 4; $d++) {
+                        if ($d === $a || $d === $b || $d === $c) {
+                            continue;
+                        }
+                        $out[] = [$a, $b, $c, $d];
+                    }
+                }
+            }
+        }
+
+        return $out;
+    }
+
+    /**
+     * Cuenta cuántas de las dos parejas de compañero (tras rotar) ya jugaron juntas antes.
+     */
+    private function contarCompanerosRepetidosVsHistorial(array $mesaRotada, int $ronda, array $histCompanero): int
+    {
+        if ($histCompanero === []) {
+            return 0;
+        }
+        $uids = [];
+        foreach ($mesaRotada as $j) {
+            $uids[] = (int) ($j['id_usuario'] ?? 0);
+        }
+        if ($ronda % 2 === 0) {
+            $pares = [[$uids[0], $uids[1]], [$uids[2], $uids[3]]];
+        } else {
+            $pares = [[$uids[0], $uids[2]], [$uids[1], $uids[3]]];
+        }
+        $cnt = 0;
+        foreach ($pares as $par) {
+            $a = $par[0];
+            $b = $par[1];
+            if ($a <= 0 || $b <= 0) {
+                continue;
+            }
+            if ($a > $b) {
+                $t = $a;
+                $a = $b;
+                $b = $t;
+            }
+            if (isset($histCompanero["{$a}-{$b}"])) {
+                ++$cnt;
+            }
+        }
+
+        return $cnt;
+    }
+
+    /**
+     * Prueba permutaciones del orden previo a rotarParejas; elige la que minimiza compañeros repetidos.
+     * Si ninguna mejora el orden por rango (identidad), se mantiene ese.
+     *
+     * @param array<int, array<string, mixed>> $jugadoresPorRango
+     * @return array<int, array<string, mixed>>
+     */
+    private function elegirOrdenIntraMesaMenosCompaneroRepetido(array $jugadoresPorRango, int $ronda, array $histCompanero): array
+    {
+        $defecto = $this->rotarParejas($jugadoresPorRango, $ronda);
+        if ($histCompanero === []) {
+            return $defecto;
+        }
+        $mejor = $defecto;
+        $mejorCnt = $this->contarCompanerosRepetidosVsHistorial($mejor, $ronda, $histCompanero);
+        if ($mejorCnt === 0) {
+            return $mejor;
+        }
+        foreach ($this->permutacionesIndices4() as $perm) {
+            $reorden = [
+                $jugadoresPorRango[$perm[0]],
+                $jugadoresPorRango[$perm[1]],
+                $jugadoresPorRango[$perm[2]],
+                $jugadoresPorRango[$perm[3]],
+            ];
+            if ($this->mesaTieneEquipoDuplicado($reorden)) {
+                continue;
+            }
+            $rot = $this->rotarParejas($reorden, $ronda);
+            if ($this->mesaTieneEquipoDuplicado($rot)) {
+                continue;
+            }
+            $c = $this->contarCompanerosRepetidosVsHistorial($rot, $ronda, $histCompanero);
+            if ($c < $mejorCnt) {
+                $mejorCnt = $c;
+                $mejor = $rot;
+            }
+        }
+
+        return $mejor;
     }
 
     /**
@@ -285,7 +484,11 @@ class MesaAsignacionEquiposService
     }
 
     /**
-     * Cortes de 4 equipos; si el remanente es 5–7, un único bloque final (N mesas = k equipos en ese bloque).
+     * Partición en bloques para ronda 2+:
+     * - Avanza de 4 en 4 equipos mientras el remanente sea &gt; 7.
+     * - Si el remanente es entre 4 y 7 (inclusive), forma un solo bloque final con esos equipos
+     *   (caso típico: total de equipos no múltiplo de 4; el último grupo tiene 5, 6 o 7 equipos).
+     * - Si al inicio hay menos de 4 equipos, un único bloque con los que haya (caso degenerado).
      */
     private function partirEquiposEnLotes(array $equipos): array
     {
@@ -295,6 +498,10 @@ class MesaAsignacionEquiposService
 
         while ($i < $total) {
             $restante = $total - $i;
+            if ($restante < 4) {
+                $lotes[] = array_slice($equipos, $i);
+                break;
+            }
             if ($restante >= 4 && $restante <= 7) {
                 $lotes[] = array_slice($equipos, $i);
                 break;
