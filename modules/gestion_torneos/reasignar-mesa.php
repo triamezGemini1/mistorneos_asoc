@@ -283,9 +283,9 @@ $esParejasFijas = ((int)($torneo['modalidad'] ?? 0) === 4);
                                             <i class="fas fa-list-check mr-2"></i>Opciones de Reasignación
                                         </h5>
                                         <?php if ($esParejasFijas): ?>
-                                            <div class="alert alert-info py-2">
-                                                <i class="fas fa-link mr-1"></i>
-                                                Parejas Fijas: los jugadores del mismo <strong>código de pareja</strong> se mueven en bloque.
+                                            <div class="alert alert-warning py-2">
+                                                <i class="fas fa-ban mr-1"></i>
+                                                La reasignación de mesa no está disponible para modalidad <strong>Parejas Fijas</strong>.
                                             </div>
                                         <?php endif; ?>
 
@@ -320,24 +320,11 @@ $esParejasFijas = ((int)($torneo['modalidad'] ?? 0) === 4);
                                                 </label>
                                             <?php endif; ?>
 
-                                            <!-- Opción 5 -->
-                                            <label class="opcion-reasignacion d-block mb-2">
-                                                <input type="radio" name="opcion_reasignacion" value="5" required class="mr-2">
-                                                <span class="font-weight-bold">Opción 5: Intercambio Completo de Parejas (1↔3, 2↔4)</span>
-                                                <small class="d-block text-muted">Intercambia completamente las parejas: Pareja A completa con Pareja B completa</small>
-                                            </label>
-
-                                            <!-- Opción 6 -->
-                                            <label class="opcion-reasignacion d-block mb-2">
-                                                <input type="radio" name="opcion_reasignacion" value="6" required class="mr-2">
-                                                <span class="font-weight-bold">Opción 6: Intercambio Cruzado (1↔4, 2↔3)</span>
-                                                <small class="d-block text-muted">Intercambio cruzado: posición 1 con 4, posición 2 con 3</small>
-                                            </label>
                                         </div>
 
                                         <!-- Botones -->
                                         <div class="mt-4">
-                                            <button type="submit" class="btn btn-primary btn-lg btn-block">
+                                            <button type="submit" class="btn btn-primary btn-lg btn-block" <?php echo $esParejasFijas ? 'disabled' : ''; ?>>
                                                 <i class="fas fa-check mr-2"></i>Ejecutar Reasignación
                                             </button>
                                             <a href="<?php echo $base_url . ($use_standalone ? '?' : '&'); ?>action=registrar_resultados&torneo_id=<?php echo $torneo['id']; ?>&ronda=<?php echo $ronda; ?>&mesa=<?php echo $mesaActual; ?>"
@@ -361,7 +348,8 @@ $esParejasFijas = ((int)($torneo['modalidad'] ?? 0) === 4);
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11" defer></script>
     <script>
         function cambiarRonda(torneoId, nuevaRonda) {
-            window.location.href = '<?php echo $base_url . ($use_standalone ? "?" : "&"); ?>action=reasignar_mesa&torneo_id=' + torneoId + '&ronda=' + nuevaRonda + '&mesa=1';
+            var mesaNum = <?php echo (int)($mesaActual ?? $mesa ?? 1); ?>;
+            window.location.href = '<?php echo $base_url . ($use_standalone ? "?" : "&"); ?>action=reasignar_mesa&torneo_id=' + torneoId + '&ronda=' + nuevaRonda + '&mesa=' + mesaNum;
         }
         
         async function reasignarMesaConfirmar(event) {

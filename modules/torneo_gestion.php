@@ -6791,7 +6791,9 @@ function obtenerDatosReasignarMesa($torneo_id, $ronda, $mesa) {
         'todasLasMesas' => $todasLasMesas,
         'todasLasRondas' => $todasLasRondas,
         'mesaAnterior' => $mesaAnterior,
-        'mesaSiguiente' => $mesaSiguiente
+        'mesaSiguiente' => $mesaSiguiente,
+        'mesaActual' => (int) $mesa,
+        'ronda' => (int) $ronda,
     ];
 }
 
@@ -6811,7 +6813,7 @@ function ejecutarReasignacion($torneo_id, $ronda, $mesa, $user_id, $is_admin_gen
         
         $opcion = (int)($_POST['opcion_reasignacion'] ?? 0);
         
-        if (!in_array($opcion, [1, 2, 3, 4, 5, 6])) {
+        if (!in_array($opcion, [1, 2, 3, 4], true)) {
             throw new Exception('OpciÃ³n de reasignaciÃ³n no vÃ¡lida');
         }
         
@@ -6820,8 +6822,8 @@ function ejecutarReasignacion($torneo_id, $ronda, $mesa, $user_id, $is_admin_gen
         $stmtTorneo->execute([$torneo_id]);
         $modalidad = (int)($stmtTorneo->fetchColumn() ?: 0);
         $esParejasFijas = ($modalidad === 4);
-        if ($esParejasFijas && !in_array($opcion, [5, 6], true)) {
-            throw new Exception('En Parejas Fijas solo se permiten movimientos en bloque de pareja (opciones 5 o 6).');
+        if ($esParejasFijas) {
+            throw new Exception('La reasignación de mesa no está disponible para modalidad Parejas Fijas.');
         }
         
         // Obtener jugadores actuales de la mesa
@@ -6835,32 +6837,27 @@ function ejecutarReasignacion($torneo_id, $ronda, $mesa, $user_id, $is_admin_gen
             throw new Exception('La mesa debe tener exactamente 4 jugadores');
         }
         
-        // Crear mapa de secuencias actuales
+        // Crear mapa de secuencias actuales (claves 1-4 como enteros)
         $mapaActual = [];
         foreach ($jugadores as $jugador) {
-            $mapaActual[$jugador['secuencia']] = $jugador;
+            $mapaActual[(int) $jugador['secuencia']] = $jugador;
         }
         
         // Definir cambios segÃºn la opciÃ³n
         $cambios = [];
+        // Un solo par [a,b] aplica un intercambio; no duplicar [b,a] (anula el efecto).
         switch ($opcion) {
             case 1: // 1 con 3
-                $cambios = [[1, 3], [3, 1]];
+                $cambios = [[1, 3]];
                 break;
             case 2: // 1 con 4
-                $cambios = [[1, 4], [4, 1]];
+                $cambios = [[1, 4]];
                 break;
             case 3: // 2 con 3
-                $cambios = [[2, 3], [3, 2]];
+                $cambios = [[2, 3]];
                 break;
             case 4: // 2 con 4
-                $cambios = [[2, 4], [4, 2]];
-                break;
-            case 5: // 1 con 3 y 2 con 4 (intercambio completo de parejas)
-                $cambios = [[1, 3], [3, 1], [2, 4], [4, 2]];
-                break;
-            case 6: // 1 con 4 y 2 con 3 (intercambio cruzado)
-                $cambios = [[1, 4], [4, 1], [2, 3], [3, 2]];
+                $cambios = [[2, 4]];
                 break;
         }
         
@@ -6881,16 +6878,39 @@ function ejecutarReasignacion($torneo_id, $ronda, $mesa, $user_id, $is_admin_gen
                 $mapaFinal[$secuenciaOrigen] = $mapaFinal[$secuenciaDestino];
                 $mapaFinal[$secuenciaDestino] = $temp;
             }
-            
-            // Actualizar cada jugador a su nueva secuencia
-            foreach ($mapaFinal as $nuevaSecuencia => $idUsuario) {
-                $stmt = $pdo->prepare("UPDATE partiresul 
-                                      SET secuencia = ? 
-                                      WHERE id_torneo = ? 
-                                        AND partida = ? 
-                                        AND mesa = ? 
-                                        AND id_usuario = ?");
-                $stmt->execute([$nuevaSecuencia, $torneo_id, $ronda, $mesa, $idUsuario]);
+
+            // id_fila => nueva secuencia (1–4). No actualizar secuencia “en directo”: el UNIQUE
+            // (id_torneo, partida, mesa, secuencia) chocaría al pisar 1→4 mientras 4 sigue ocupado.
+            $porIdNuevaSeq = [];
+            foreach ($jugadores as $jugador) {
+                $rowId = (int) $jugador['id'];
+                $uid = (int) $jugador['id_usuario'];
+                $nuevaSeq = null;
+                foreach ($mapaFinal as $seq => $mapUid) {
+                    if ((int) $mapUid === $uid) {
+                        $nuevaSeq = (int) $seq;
+                        break;
+                    }
+                }
+                if ($nuevaSeq === null || $nuevaSeq < 1 || $nuevaSeq > 4) {
+                    throw new Exception('No se pudo calcular la nueva secuencia para un jugador.');
+                }
+                $porIdNuevaSeq[$rowId] = $nuevaSeq;
+            }
+            if (count(array_unique($porIdNuevaSeq)) !== 4) {
+                throw new Exception('Asignación de secuencias inconsistente.');
+            }
+
+            $stById = $pdo->prepare('UPDATE partiresul SET secuencia = ? WHERE id = ?');
+            // Fase 1: sacar de 1–4 para liberar el UNIQUE (11–14 no se usan en mesas reales).
+            $tempVals = [11, 12, 13, 14];
+            $i = 0;
+            foreach ($jugadores as $jugador) {
+                $stById->execute([$tempVals[$i++], (int) $jugador['id']]);
+            }
+            // Fase 2: secuencias definitivas
+            foreach ($porIdNuevaSeq as $rowId => $nuevaSeq) {
+                $stById->execute([$nuevaSeq, $rowId]);
             }
             
             $pdo->commit();

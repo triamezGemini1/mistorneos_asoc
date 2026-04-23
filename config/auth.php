@@ -4,6 +4,24 @@ require_once __DIR__ . '/db.php';
 
 class Auth {
   private static $has_cod_org_column = null;
+  private static $role_aliases = [
+    'admin gral' => 'admin_general',
+    'admin_gral' => 'admin_general',
+    'admingral' => 'admin_general',
+    'admin general' => 'admin_general',
+  ];
+
+  private static function normalizeRole(?string $role): string {
+    $value = trim((string)$role);
+    if ($value === '') {
+      return '';
+    }
+    $lower = strtolower($value);
+    if (isset(self::$role_aliases[$lower])) {
+      return self::$role_aliases[$lower];
+    }
+    return $lower;
+  }
 
   private static function hasCodOrg(): bool {
     if (self::$has_cod_org_column !== null) {
@@ -22,11 +40,12 @@ class Auth {
     
     $user = Security::authenticateUser($username, $password);
     if ($user) {
+      $roleNormalized = self::normalizeRole($user['role'] ?? '');
       $_SESSION['user'] = [
         'id' => $user['id'],
         'username' => $user['username'],
-        'role' => $user['role'],
-        'role_original' => $user['role'],
+        'role' => $roleNormalized,
+        'role_original' => $roleNormalized,
         'email' => $user['email'],
         'uuid' => $user['uuid'],
         'photo_path' => $user['photo_path'],
@@ -89,8 +108,11 @@ class Auth {
     if (!$u || !is_array($u)) {
       return $u;
     }
+    $u['role'] = self::normalizeRole((string)($u['role'] ?? ''));
     if (!isset($u['role_original']) || $u['role_original'] === '') {
       $u['role_original'] = $u['role'] ?? '';
+    } else {
+      $u['role_original'] = self::normalizeRole((string)$u['role_original']);
     }
     // Switch de rol: solo permitido cuando el rol original es admin_general
     if (($u['role_original'] ?? '') === 'admin_general' && isset($_SESSION['role_switch_mode'])) {

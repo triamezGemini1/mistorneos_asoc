@@ -35,15 +35,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
 
     if ($torneo_id <= 0 || $ronda <= 0 || $mesa <= 0) {
         $error_message = 'Debe especificar torneo, ronda y mesa.';
-    } elseif (!in_array($opcion, [1, 2, 3, 4, 5, 6], true)) {
+    } elseif (!in_array($opcion, [1, 2, 3, 4], true)) {
         $error_message = 'Opción de reasignación no válida.';
     } else {
         try {
             $stModalidad = $pdo->prepare("SELECT modalidad FROM tournaments WHERE id = ?");
             $stModalidad->execute([$torneo_id]);
             $modalidad = (int)($stModalidad->fetchColumn() ?: 0);
-            if ($modalidad === 4 && !in_array($opcion, [5, 6], true)) {
-                throw new Exception('En Parejas Fijas solo se permiten movimientos en bloque de pareja (opciones 5 o 6).');
+            if ($modalidad === 4) {
+                throw new Exception('La reasignación de mesa no está disponible para modalidad Parejas Fijas.');
             }
 
             $st = $pdo->prepare("SELECT * FROM partiresul WHERE id_torneo = ? AND partida = ? AND mesa = ?" . ($entidad_id > 0 ? ' AND entidad_id = ?' : '') . " ORDER BY secuencia ASC");
@@ -59,14 +59,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
                 $mapaActual[(int)$j['secuencia']] = $j;
             }
 
+            // Un solo par por intercambio; duplicar [b,a] anula el efecto de [a,b].
             $cambios = [];
             switch ($opcion) {
-                case 1: $cambios = [[1, 3], [3, 1]]; break;
-                case 2: $cambios = [[1, 4], [4, 1]]; break;
-                case 3: $cambios = [[2, 3], [3, 2]]; break;
-                case 4: $cambios = [[2, 4], [4, 2]]; break;
-                case 5: $cambios = [[1, 3], [3, 1], [2, 4], [4, 2]]; break;
-                case 6: $cambios = [[1, 4], [4, 1], [2, 3], [3, 2]]; break;
+                case 1: $cambios = [[1, 3]]; break;
+                case 2: $cambios = [[1, 4]]; break;
+                case 3: $cambios = [[2, 3]]; break;
+                case 4: $cambios = [[2, 4]]; break;
             }
 
             $mapaFinal = [];
@@ -81,11 +80,36 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
                 $mapaFinal[$d] = $t;
             }
 
+            $porIdNuevaSeq = [];
+            foreach ($jugadores as $j) {
+                $rowId = (int) $j['id'];
+                $uid = (int) $j['id_usuario'];
+                $nuevaSeq = null;
+                foreach ($mapaFinal as $seq => $mapUid) {
+                    if ((int) $mapUid === $uid) {
+                        $nuevaSeq = (int) $seq;
+                        break;
+                    }
+                }
+                if ($nuevaSeq === null || $nuevaSeq < 1 || $nuevaSeq > 4) {
+                    throw new Exception('No se pudo calcular la nueva secuencia.');
+                }
+                $porIdNuevaSeq[$rowId] = $nuevaSeq;
+            }
+            if (count(array_unique($porIdNuevaSeq)) !== 4) {
+                throw new Exception('Asignación de secuencias inconsistente.');
+            }
+
             $pdo->beginTransaction();
             try {
-                foreach ($mapaFinal as $nuevaSecuencia => $idUsuario) {
-                    $up = $pdo->prepare("UPDATE partiresul SET secuencia = ? WHERE id_torneo = ? AND partida = ? AND mesa = ? AND id_usuario = ?" . ($entidad_id > 0 ? ' AND entidad_id = ?' : ''));
-                    $up->execute(array_merge([$nuevaSecuencia, $torneo_id, $ronda, $mesa, $idUsuario], $ent_bind));
+                $stById = $pdo->prepare('UPDATE partiresul SET secuencia = ? WHERE id = ?');
+                $tempVals = [11, 12, 13, 14];
+                $i = 0;
+                foreach ($jugadores as $j) {
+                    $stById->execute([$tempVals[$i++], (int) $j['id']]);
+                }
+                foreach ($porIdNuevaSeq as $rowId => $nuevaSeq) {
+                    $stById->execute([$nuevaSeq, $rowId]);
                 }
                 $pdo->commit();
             } catch (Throwable $e) {
@@ -226,8 +250,8 @@ if ($torneo_id <= 0 || $ronda <= 0 || $mesa <= 0) {
                     <div class="col-lg-6">
                         <h6 class="mb-3"><i class="fas fa-list-check me-2"></i>Opciones de reasignación</h6>
                         <?php if ($esParejasFijas): ?>
-                        <div class="alert alert-info py-2">
-                            Parejas Fijas: los jugadores con el mismo código de pareja se mueven en bloque.
+                        <div class="alert alert-warning py-2">
+                            La reasignación de mesa no está disponible para modalidad Parejas Fijas.
                         </div>
                         <?php endif; ?>
                         <div class="mb-2">
@@ -237,10 +261,8 @@ if ($torneo_id <= 0 || $ronda <= 0 || $mesa <= 0) {
                             <label class="opcion-reasignacion d-block"><input type="radio" name="opcion_reasignacion" value="3" class="me-2"> Opción 3: Intercambiar posición 2 con 3</label>
                             <label class="opcion-reasignacion d-block"><input type="radio" name="opcion_reasignacion" value="4" class="me-2"> Opción 4: Intercambiar posición 2 con 4</label>
                             <?php endif; ?>
-                            <label class="opcion-reasignacion d-block"><input type="radio" name="opcion_reasignacion" value="5" class="me-2"> Opción 5: Intercambio completo de parejas (1↔3, 2↔4)</label>
-                            <label class="opcion-reasignacion d-block"><input type="radio" name="opcion_reasignacion" value="6" class="me-2"> Opción 6: Intercambio cruzado (1↔4, 2↔3)</label>
                         </div>
-                        <button type="submit" class="btn btn-primary"><i class="fas fa-check me-1"></i>Ejecutar reasignación</button>
+                        <button type="submit" class="btn btn-primary" <?= $esParejasFijas ? 'disabled' : '' ?>><i class="fas fa-check me-1"></i>Ejecutar reasignación</button>
                     </div>
                 </div>
             </form>
