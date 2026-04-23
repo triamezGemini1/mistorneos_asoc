@@ -38,6 +38,19 @@ if ($contextGenero === '') {
 }
 $contextClass = $contextGenero === 'F' ? 'context-femenino' : 'context-masculino';
 $contextLabel = $contextGenero === 'F' ? 'Femenino' : 'Masculino';
+
+/** Límite superior de ronda para el diálogo “Corrección directa” (rondas existentes o plan del torneo). */
+$rr_max_ronda_correccion = max(1, (int) ($ronda ?? 1));
+foreach ($todasLasRondas ?? [] as $_rr) {
+    $pv = (int) ($_rr['partida'] ?? 0);
+    if ($pv > $rr_max_ronda_correccion) {
+        $rr_max_ronda_correccion = $pv;
+    }
+}
+$rr_rondas_plan = (int) ($torneo['rondas'] ?? 0);
+if ($rr_rondas_plan > $rr_max_ronda_correccion) {
+    $rr_max_ronda_correccion = $rr_rondas_plan;
+}
 ?>
 
 <style>
@@ -1442,6 +1455,13 @@ $contextLabel = $contextGenero === 'F' ? 'Femenino' : 'Masculino';
                                             class="btn btn-secondary btn-sm">
                                         <i class="fas fa-flag"></i> Mano desierta
                                     </button>
+                                    <button type="button"
+                                            id="btn-correccion-directa"
+                                            onclick="abrirCorreccionDirecta()"
+                                            class="btn btn-outline-primary btn-sm"
+                                            title="Ir a otra ronda y mesa para corregir ingresos">
+                                        <i class="fas fa-edit"></i> Corrección directa
+                                    </button>
                                     
                                     <button type="submit" 
                                             id="btn-guardar"
@@ -1461,6 +1481,79 @@ $contextLabel = $contextGenero === 'F' ? 'Femenino' : 'Masculino';
 
 <script>
 const ES_TORNEO_PAREJAS = <?php echo $esTorneoParejas ? 'true' : 'false'; ?>;
+const RR_TORNEO_ID_COR = <?php echo (int) ($torneo['id'] ?? 0); ?>;
+const RR_MAX_RONDA_COR = <?php echo (int) $rr_max_ronda_correccion; ?>;
+const RR_RONDA_ACTUAL_COR = <?php echo (int) ($ronda ?? 0); ?>;
+const RR_MESA_ACTUAL_COR = <?php echo (int) ($mesaActual ?? 0); ?>;
+const RR_URL_BASE_COR = <?php echo json_encode($base_url . $action_param, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT); ?>;
+
+/**
+ * Corrección directa: solicita ronda y mesa y navega al mismo formulario de ingresos.
+ */
+async function abrirCorreccionDirecta() {
+    const defR = RR_RONDA_ACTUAL_COR > 0 ? String(RR_RONDA_ACTUAL_COR) : '1';
+    const defM = RR_MESA_ACTUAL_COR > 0 ? String(RR_MESA_ACTUAL_COR) : '1';
+
+    if (typeof Swal === 'undefined') {
+        const r = parseInt(window.prompt('Ronda a corregir:', defR) || '0', 10);
+        const m = parseInt(window.prompt('Mesa a corregir:', defM) || '0', 10);
+        if (!r || r < 1 || !m || m < 1) {
+            return;
+        }
+        window.location.href = RR_URL_BASE_COR + 'action=registrar_resultados&torneo_id=' + RR_TORNEO_ID_COR + '&ronda=' + r + '&mesa=' + m;
+        return;
+    }
+
+    const { value, isConfirmed } = await Swal.fire({
+        title: 'Corrección directa',
+        html:
+            '<p class="text-muted small text-left mb-2">Indique la <strong>ronda</strong> y la <strong>mesa</strong> que desea corregir. Se abrirá el mismo formulario de ingresos.</p>' +
+            '<div class="form-group text-left mb-2">' +
+            '<label for="swal-cor-ronda" class="d-block small font-weight-bold">Ronda</label>' +
+            '<input id="swal-cor-ronda" type="number" class="form-control" min="1" max="' + RR_MAX_RONDA_COR + '" value="' + defR + '">' +
+            '</div>' +
+            '<div class="form-group text-left mb-0">' +
+            '<label for="swal-cor-mesa" class="d-block small font-weight-bold">Mesa</label>' +
+            '<input id="swal-cor-mesa" type="number" class="form-control" min="1" value="' + defM + '">' +
+            '</div>',
+        focusConfirm: false,
+        showCancelButton: true,
+        confirmButtonText: 'Ir',
+        cancelButtonText: 'Cancelar',
+        confirmButtonColor: '#667eea',
+        cancelButtonColor: '#6c757d',
+        didOpen: () => {
+            const el = document.getElementById('swal-cor-ronda');
+            if (el) {
+                el.focus();
+                el.select();
+            }
+        },
+        preConfirm: () => {
+            const elR = document.getElementById('swal-cor-ronda');
+            const elM = document.getElementById('swal-cor-mesa');
+            const r = parseInt(elR && elR.value ? String(elR.value).trim() : '0', 10);
+            const m = parseInt(elM && elM.value ? String(elM.value).trim() : '0', 10);
+            if (!r || r < 1) {
+                Swal.showValidationMessage('Indique una ronda válida (mayor o igual a 1).');
+                return false;
+            }
+            if (RR_MAX_RONDA_COR > 0 && r > RR_MAX_RONDA_COR) {
+                Swal.showValidationMessage('La ronda no puede ser mayor a ' + RR_MAX_RONDA_COR + '.');
+                return false;
+            }
+            if (!m || m < 1) {
+                Swal.showValidationMessage('Indique una mesa válida (mayor o igual a 1).');
+                return false;
+            }
+            return { r: r, m: m };
+        }
+    });
+
+    if (isConfirmed && value && value.r && value.m) {
+        window.location.href = RR_URL_BASE_COR + 'action=registrar_resultados&torneo_id=' + RR_TORNEO_ID_COR + '&ronda=' + value.r + '&mesa=' + value.m;
+    }
+}
 
 function sincronizarTarjetaOcultaPareja(leaderIdx, followerIdx) {
     if (!ES_TORNEO_PAREJAS) return;
