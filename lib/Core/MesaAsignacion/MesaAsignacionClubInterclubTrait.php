@@ -88,9 +88,8 @@ trait MesaAsignacionClubInterclubTrait
     }
 
     /**
-     * Reordena las parejas (objetos con club) en round-robin por club ascendente.
-     * Evita el bloque [todas las parejas del club A][todas las de B]… que hace que el greedy
-     * consuma solo A–B y al final queden solo parejas de C sin club rival (fallo “máx. 2 por mesa”).
+     * Reordena las parejas en round-robin: primero los clubes con **más parejas** (más jugadores),
+     * desempate por id de club ascendente. Evita bloques [todo A][todo B]… que rompen el emparejamiento greedy.
      *
      * @param list<array{p0: array<string,mixed>, p1: array<string,mixed>, club:int}> $listaPares
      * @return list<array{p0: array<string,mixed>, p1: array<string,mixed>, club:int}>
@@ -106,9 +105,17 @@ trait MesaAsignacionClubInterclubTrait
             $cid = (int) ($par['club'] ?? 0);
             $colas[$cid][] = $par;
         }
-        ksort($colas, SORT_NUMERIC);
         /** @var list<int> $ordenClubes */
         $ordenClubes = array_map('intval', array_keys($colas));
+        usort($ordenClubes, static function (int $a, int $b) use ($colas): int {
+            $na = count($colas[$a] ?? []);
+            $nb = count($colas[$b] ?? []);
+            if ($na !== $nb) {
+                return $nb <=> $na;
+            }
+
+            return $a <=> $b;
+        });
         $out = [];
         $hay = true;
         while ($hay) {
@@ -185,6 +192,53 @@ trait MesaAsignacionClubInterclubTrait
         }
 
         return [$nuevaLista, $excluidos];
+    }
+
+    /**
+     * Con exactamente dos clubes (id > 0) en el pool que jugará R1, exige que cada uno tenga
+     * exactamente {@see MesaRepository::obtenerPareclubTorneo} jugadores si el torneo tiene pareclub > 0.
+     *
+     * @param list<array<string, mixed>> $jugadoresActivos inscritos confirmados tras quitar n mod 4 por club
+     * @return string|null mensaje de error o null si OK / no aplica
+     */
+    private function validarDosClubesVsPareclubTorneo(int $torneoId, array $jugadoresActivos): ?string
+    {
+        $pareclub = $this->repo->obtenerPareclubTorneo($torneoId);
+        if ($pareclub <= 0) {
+            return null;
+        }
+        /** @var array<int, array{n: int, nombre: string}> $porClub */
+        $porClub = [];
+        foreach ($jugadoresActivos as $j) {
+            $cid = $this->clubIdEfectivoJugador($j);
+            if ($cid <= 0) {
+                continue;
+            }
+            if (! isset($porClub[$cid])) {
+                $porClub[$cid] = [
+                    'n' => 0,
+                    'nombre' => trim((string) ($j['club_nombre'] ?? '')),
+                ];
+            }
+            $porClub[$cid]['n']++;
+        }
+        if (count($porClub) !== 2) {
+            return null;
+        }
+        $partes = [];
+        foreach ($porClub as $cid => $info) {
+            $n = (int) $info['n'];
+            $nom = $info['nombre'] !== '' ? $info['nombre'] : ('Club #' . $cid);
+            if ($n !== $pareclub) {
+                $partes[] = "{$nom}: {$n} jugadores en mesa (el torneo exige exactamente {$pareclub} por club en «Jugadores por club»)";
+            }
+        }
+        if ($partes === []) {
+            return null;
+        }
+
+        return 'Interclub con dos clubes: revise la inscripción antes de generar la ronda 1. '
+            . implode('; ', $partes) . '. Corrija cantidades o el campo «Jugadores por club» (pareclub) del torneo.';
     }
 
     /** Comparación estable por clasificación dentro del torneo. */

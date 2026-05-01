@@ -95,6 +95,16 @@ trait MesaAsignacionRoundsTrait
             $jugadores = $inscritos;
         }
 
+        if ($esInterclub) {
+            $errPlantillaDosClubes = $this->validarDosClubesVsPareclubTorneo((int) $torneoId, $jugadores);
+            if ($errPlantillaDosClubes !== null) {
+                return [
+                    'success' => false,
+                    'message' => $errPlantillaDosClubes,
+                ];
+            }
+        }
+
         $mesasArray = [];
         $jugadoresBye = [];
         /** @var list<array<string, mixed>> Jugadores en parejas que no entran a mesa (solo dos clubes); no retiro, no partida/BYE. */
@@ -164,7 +174,9 @@ trait MesaAsignacionRoundsTrait
         if (! $this->todasLasMesasCumplenLimiteClub($mesasArray)) {
             return [
                 'success' => false,
-                'message' => 'No se pudo organizar la primera ronda cumpliendo como máximo 2 jugadores del mismo club con id asignado por mesa (sin club no cuenta en ese tope). Compruebe que existan al menos dos clubes con id distinto entre los inscritos en mesa, o que los jugadores tengan club_id correcto en BD.',
+                'message' => 'No se pudo cerrar la primera ronda interclub respetando «máximo 2 jugadores del mismo club con id > 0 por mesa» (quienes van sin club en BD no entran en ese tope). '
+                    . 'Revise: (1) cada inscrito tenga club_id o id_club correcto; (2) con solo dos clubes, que ambos cumplan «Jugadores por club» (pareclub) del torneo —el sistema valida eso antes de asignar; '
+                    . '(3) con tres o más clubes y total múltiplo de 4, la asignación alterna clubes priorizando el que más parejas aporta.',
             ];
         }
         $jugadoresBye = $byePool;

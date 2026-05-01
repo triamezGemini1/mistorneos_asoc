@@ -105,6 +105,19 @@ final class MesaRepository
         return $out;
     }
 
+    /** Valor «Jugadores por club» del torneo (tournaments.pareclub); 0 = sin cupo fijo en BD. */
+    public function obtenerPareclubTorneo(int $torneoId): int
+    {
+        if ($torneoId <= 0) {
+            return 0;
+        }
+        $stmt = $this->pdo->prepare('SELECT pareclub FROM tournaments WHERE id = ? LIMIT 1');
+        $stmt->execute([$torneoId]);
+        $v = $stmt->fetchColumn();
+
+        return max(0, (int) $v);
+    }
+
     /**
      * @return list<array<string, mixed>>
      */
