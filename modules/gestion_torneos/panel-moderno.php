@@ -1039,6 +1039,20 @@ async function confirmarCierreTorneo(event) {
         });
     }
 
+    function fetchJsonImportMasivaOrThrow(r) {
+        return fetchJsonResponse(r).then(function(data) {
+            if (!r.ok || (data && data.success === false)) {
+                throw new Error((data && data.error) ? String(data.error) : ('Error del servidor (HTTP ' + r.status + ')'));
+            }
+            return data;
+        });
+    }
+
+    function hideImportMasivaLoading() {
+        var el = document.getElementById('importMasivaLoading');
+        if (el) { el.classList.add('d-none'); }
+    }
+
     document.getElementById('importMasivaFile').addEventListener('change', function(e) {
         const file = e.target.files[0];
         if (!file) return;
@@ -1049,10 +1063,8 @@ async function confirmarCierreTorneo(event) {
             fd.append('archivo', file);
             fd.append('csrf_token', getCsrfToken());
             fetch(apiPublicUrl('api/tournament_import_parse.php'), { method: 'POST', body: fd, credentials: 'same-origin' })
-                .then(fetchJsonResponse)
+                .then(fetchJsonImportMasivaOrThrow)
                 .then(function(data) {
-                    document.getElementById('importMasivaLoading').classList.add('d-none');
-                    if (!data.success) { alert(data.error || 'Error al leer el archivo'); return; }
                     importMasivaHeaders = data.headers || [];
                     importMasivaRows = data.rows || [];
                     if (importMasivaHeaders.length === 0 || importMasivaRows.length === 0) {
@@ -1062,21 +1074,28 @@ async function confirmarCierreTorneo(event) {
                     applyParsedData();
                 })
                 .catch(function(err) {
-                    document.getElementById('importMasivaLoading').classList.add('d-none');
                     alert(err && err.message ? err.message : 'Error de conexión al procesar el archivo.');
-                });
+                })
+                .finally(hideImportMasivaLoading);
         } else {
             var reader = new FileReader();
+            reader.onerror = function() {
+                hideImportMasivaLoading();
+                alert('No se pudo leer el archivo.');
+            };
             reader.onload = function(ev) {
-                var buffer = ev.target.result;
-                var text = detectEncodingAndDecode(buffer);
-                text = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
-                var parsed = parseCSV(text);
-                document.getElementById('importMasivaLoading').classList.add('d-none');
-                if (parsed.length < 2) { alert('El archivo debe tener al menos cabecera y una fila.'); return; }
-                importMasivaHeaders = parsed[0];
-                importMasivaRows = parsed.slice(1);
-                applyParsedData();
+                try {
+                    var buffer = ev.target.result;
+                    var text = detectEncodingAndDecode(buffer);
+                    text = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+                    var parsed = parseCSV(text);
+                    if (parsed.length < 2) { alert('El archivo debe tener al menos cabecera y una fila.'); return; }
+                    importMasivaHeaders = parsed[0];
+                    importMasivaRows = parsed.slice(1);
+                    applyParsedData();
+                } finally {
+                    hideImportMasivaLoading();
+                }
             };
             reader.readAsArrayBuffer(file);
         }
@@ -1165,10 +1184,8 @@ async function confirmarCierreTorneo(event) {
         fd.append('csrf_token', getCsrfToken());
         document.getElementById('importMasivaLoading').classList.remove('d-none');
         fetch(apiPublicUrl('api/tournament_import_masivo.php'), { method: 'POST', body: fd, credentials: 'same-origin' })
-            .then(fetchJsonResponse)
+            .then(fetchJsonImportMasivaOrThrow)
             .then(function(data) {
-                document.getElementById('importMasivaLoading').classList.add('d-none');
-                if (!data.success) { alert(data.error || 'Error al validar'); return; }
                 importMasivaValidacion = data.validacion || [];
                 const tbody = document.getElementById('importMasivaTbody');
                 if (tbody) {
@@ -1181,9 +1198,9 @@ async function confirmarCierreTorneo(event) {
                 }
             })
             .catch(function(err) {
-                document.getElementById('importMasivaLoading').classList.add('d-none');
                 alert(err && err.message ? err.message : 'Error de conexión');
-            });
+            })
+            .finally(hideImportMasivaLoading);
     });
 
     document.getElementById('btnImportMasivaProcesar').addEventListener('click', function() {
@@ -1196,10 +1213,8 @@ async function confirmarCierreTorneo(event) {
         fd.append('csrf_token', getCsrfToken());
         document.getElementById('importMasivaLoading').classList.remove('d-none');
         fetch(apiPublicUrl('api/tournament_import_masivo.php'), { method: 'POST', body: fd, credentials: 'same-origin' })
-            .then(fetchJsonResponse)
+            .then(fetchJsonImportMasivaOrThrow)
             .then(function(data) {
-                document.getElementById('importMasivaLoading').classList.add('d-none');
-                if (!data.success) { alert(data.error || 'Error'); return; }
                 const tieneErrores = data.errores && data.errores.length > 0;
                 const html = '<p>Procesados: <strong>' + (data.procesados || 0) + '</strong></p><p>Nuevos (creados e inscritos): <strong>' + (data.nuevos || 0) + '</strong></p><p>Omitidos (ya inscritos): <strong>' + (data.omitidos || 0) + '</strong></p><p>Usuarios actualizados (nombre/sexo): <strong>' + (data.usuarios_actualizados || 0) + '</strong></p>' +
                     (tieneErrores ? '<p class="text-danger">Errores: ' + data.errores.length + '</p>' : '');
@@ -1228,9 +1243,9 @@ async function confirmarCierreTorneo(event) {
                 });
             })
             .catch(function(err) {
-                document.getElementById('importMasivaLoading').classList.add('d-none');
                 alert(err && err.message ? err.message : 'Error de conexión');
-            });
+            })
+            .finally(hideImportMasivaLoading);
     });
 
     if (window.location.hash === '#importacion-masiva') {
