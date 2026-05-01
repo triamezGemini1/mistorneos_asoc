@@ -1,10 +1,16 @@
 <?php
 /**
  * Lee variables mínimas de sesión desde .env antes de bootstrap (usado por session_start_early).
- * @return array{gc:int, cookie:int, name:string}
+ * @return array{gc:int, cookie:int, name:string, cookie_domain:string, regenerate_after:int}
  */
 function session_read_lifetime_from_env(): array {
-    $defaults = ['gc' => 28800, 'cookie' => 28800, 'name' => 'mistorneos_session']; // 8 h por defecto
+    $defaults = [
+        'gc' => 28800,
+        'cookie' => 28800,
+        'name' => 'mistorneos_session',
+        'cookie_domain' => '',
+        'regenerate_after' => 28800,
+    ]; // 8 h por defecto
     $envFile = dirname(__DIR__) . '/.env';
     if (!is_readable($envFile)) {
         return $defaults;
@@ -12,6 +18,9 @@ function session_read_lifetime_from_env(): array {
     $gc = 0;
     $cookie = 0;
     $sessionName = '';
+    $cookieDomain = '';
+    $regenerateAfter = max(3600, $defaults['gc']);
+    $regenerateFromEnv = false;
     $appEnv = '';
     foreach (file($envFile, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES) as $line) {
         $line = trim($line);
@@ -37,6 +46,13 @@ function session_read_lifetime_from_env(): array {
         if (preg_match('/^SESSION_COOKIE_LIFETIME\s*=\s*(\d+)/', $line, $m)) {
             $cookie = max(0, (int) $m[1]);
         }
+        if (preg_match('/^SESSION_COOKIE_DOMAIN\s*=\s*(.*?)\s*$/', $line, $m)) {
+            $cookieDomain = trim((string) $m[1], " \t\"'");
+        }
+        if (preg_match('/^SESSION_REGENERATE_AFTER_SECONDS\s*=\s*(\d+)/', $line, $m)) {
+            $regenerateAfter = max(0, (int) $m[1]);
+            $regenerateFromEnv = true;
+        }
     }
     if ($gc <= 0) {
         $gc = $defaults['gc'];
@@ -54,5 +70,15 @@ function session_read_lifetime_from_env(): array {
             $sessionName = $defaults['name'];
         }
     }
-    return ['gc' => $gc, 'cookie' => $cookie, 'name' => $sessionName];
+    if (!$regenerateFromEnv) {
+        $regenerateAfter = max(3600, $gc); // alinear con GC (antes: 1800 s rompía sesión en XHR/subcarpeta)
+    }
+
+    return [
+        'gc' => $gc,
+        'cookie' => $cookie,
+        'name' => $sessionName,
+        'cookie_domain' => $cookieDomain,
+        'regenerate_after' => $regenerateAfter,
+    ];
 }

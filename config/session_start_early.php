@@ -18,10 +18,11 @@ ini_set('session.gc_maxlifetime', (string) $sessionTimes['gc']);
 // Usar path='/' para que la cookie se envíe en toda la ruta (evita pérdida de sesión en subcarpetas tipo /mistorneos_beta/public/)
 $path = '/';
 $secure = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') || (!empty($_SERVER['HTTP_X_FORWARDED_PROTO']) && $_SERVER['HTTP_X_FORWARDED_PROTO'] === 'https');
+$cookieDomain = isset($sessionTimes['cookie_domain']) ? (string) $sessionTimes['cookie_domain'] : '';
 session_set_cookie_params([
     'lifetime' => $sessionTimes['cookie'],
     'path' => $path,
-    'domain' => '',
+    'domain' => $cookieDomain,
     'secure' => $secure,
     'httponly' => true,
     'samesite' => 'Lax',
@@ -29,9 +30,20 @@ session_set_cookie_params([
 $sname = !empty($sessionTimes['name']) ? (string)$sessionTimes['name'] : (getenv('SESSION_NAME') ?: 'mistorneos_session');
 session_name($sname);
 session_start();
-if ($session_debug) error_log('[SESSION_DEBUG] session_start_early.php | session_start OK | path=' . $path . ' | name=' . $sname . ' | id=' . session_id() . ' | cookie_enviada=' . (isset($_COOKIE[$sname]) ? 'si' : 'no'));
-if (!isset($_SESSION['created'])) $_SESSION['created'] = time();
-elseif (time() - $_SESSION['created'] > 1800) { session_regenerate_id(true); $_SESSION['created'] = time(); }
+if ($session_debug) {
+    error_log('[SESSION_DEBUG] session_start_early.php | session_start OK | path=' . $path . ' | domain=' . ($cookieDomain !== '' ? $cookieDomain : '(host)') . ' | name=' . $sname . ' | id=' . session_id() . ' | cookie_enviada=' . (isset($_COOKIE[$sname]) ? 'si' : 'no'));
+}
+if (!isset($_SESSION['created'])) {
+    $_SESSION['created'] = time();
+} else {
+    // Regeneración muy frecuente (p. ej. 30 min) + fetch/XHR puede dejar al usuario "sin sesión" hasta recargar (cf. Auth::login).
+    // Intervalo por defecto = max(1 h, SESSION_GC) vía session_env_read.php; 0 en SESSION_REGENERATE_AFTER_SECONDS desactiva.
+    $regenAfter = isset($sessionTimes['regenerate_after']) ? (int) $sessionTimes['regenerate_after'] : 0;
+    if ($regenAfter > 0 && (time() - (int) $_SESSION['created'] > $regenAfter)) {
+        session_regenerate_id(true);
+        $_SESSION['created'] = time();
+    }
+}
 
 // Invalidación puntual de referencias club_id por remapeo de IDs (marzo 2026).
 // Se ejecuta una sola vez por sesión para evitar conflictos con IDs legados.
