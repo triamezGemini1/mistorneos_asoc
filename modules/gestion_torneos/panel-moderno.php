@@ -9,6 +9,9 @@ require_once __DIR__ . '/../../config/db.php';
 if (!class_exists('AppHelpers', false)) {
     require_once __DIR__ . '/../../lib/app_helpers.php';
 }
+if (!class_exists('CSRF', false)) {
+    require_once __DIR__ . '/../../config/csrf.php';
+}
 
 $script_actual = basename($_SERVER['PHP_SELF'] ?? '');
 $use_standalone = in_array($script_actual, ['admin_torneo.php', 'panel_torneo.php']);
@@ -728,7 +731,8 @@ tailwind.config = {
                 <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Cerrar"></button>
             </div>
             <div class="modal-body">
-                <p class="text-muted small">Cargue <strong>Excel</strong> (.xlsx, .xls, .xlsm) o <strong>CSV</strong>. En el servidor debe existir <code>vendor/</code> (ejecute <code>composer install</code> en la raíz del proyecto) para los formatos modernos de Excel. Campos obligatorios: <strong>nacionalidad, cédula, nombre, club, organización</strong>. Si falta cualquiera, la fila se rechaza. Si aparece sesión expirada, recargue la página (F5) antes de subir.</p>
+                <input type="hidden" id="csrf_token_import_masiva" name="csrf_token_import_masiva" value="<?php echo htmlspecialchars(CSRF::token(), ENT_QUOTES, 'UTF-8'); ?>" autocomplete="off">
+                <p class="text-muted small">Cargue <strong>Excel</strong> (.xlsx, .xls, .xlsm) o <strong>CSV</strong>. En el servidor debe existir <code>vendor/</code> (ejecute <code>composer install</code> en la raíz del proyecto) para los formatos modernos de Excel. Campos obligatorios: <strong>nacionalidad, cédula, nombre, club, organización</strong>. Si falta cualquiera, la fila se rechaza. Si aparece sesión expirada o token CSRF, recargue la página (F5) antes de subir. Si el archivo es muy grande, revise <code>upload_max_filesize</code> y <code>post_max_size</code> en php.ini.</p>
                 <p class="small mb-2"><strong>Semáforo (tras Validar):</strong> <span class="badge" style="background:#3b82f6">Azul</span> Ya inscrito (omitir) · <span class="badge" style="background:#eab308;color:#000">Amarillo</span> Usuario existe (solo inscribir) · <span class="badge" style="background:#22c55e">Verde</span> Todo nuevo (crear e inscribir) · <span class="badge bg-danger">Rojo</span> Error de datos</p>
                 <div class="mb-3">
                     <label class="form-label">Archivo CSV</label>
@@ -1018,14 +1022,29 @@ async function confirmarCierreTorneo(event) {
     }
 
     function getCsrfToken() {
-        return document.querySelector('input[name="csrf_token"]') && document.querySelector('input[name="csrf_token"]').value || '';
+        var imp = document.getElementById('csrf_token_import_masiva');
+        if (imp && imp.value) {
+            return imp.value;
+        }
+        var first = document.querySelector('input[name="csrf_token"]');
+        return first && first.value ? first.value : '';
     }
 
-    /** URL absoluta a /public/api/... (evita fallos si <base> o la ruta relativa no coinciden). */
+    /**
+     * URL a archivos bajo public/ (api, assets).
+     * layout.php define APP_BASE_URL sin el segmento /public; hay que añadirlo o las peticiones van a …/api/… en lugar de …/public/api/… (sesión/cookies en otra ruta).
+     */
     function apiPublicUrl(path) {
         var p = (path || '').replace(/^\//, '');
         var base = (typeof window.APP_BASE_URL === 'string' && window.APP_BASE_URL) ? window.APP_BASE_URL.replace(/\/$/, '') : '';
-        return base ? (base + '/' + p) : p;
+        if (!base) {
+            return p;
+        }
+        var pubBase = base;
+        if (!/\/public$/i.test(pubBase)) {
+            pubBase = pubBase + '/public';
+        }
+        return pubBase + '/' + p;
     }
 
     function fetchJsonResponse(r) {
