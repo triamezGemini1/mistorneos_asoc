@@ -19,6 +19,74 @@ trait MesaAsignacionClubInterclubTrait
         return $c > 0 ? $c : 0;
     }
 
+    /**
+     * Orden de inscripción / número dentro del club (para vectores V1–V4 y RR de compañeros).
+     * Prioriza columnas habituales; si no hay, posición o id de usuario.
+     */
+    private function numeroOrdenDentroClub(array $j): int
+    {
+        foreach (['numero', 'num_fvd', 'inscrito_numero', 'numero_club', 'numjugador'] as $k) {
+            if (isset($j[$k]) && $j[$k] !== '' && is_numeric($j[$k])) {
+                return (int) $j[$k];
+            }
+        }
+        if (isset($j['posicion']) && is_numeric($j['posicion'])) {
+            return (int) $j['posicion'];
+        }
+
+        return (int) ($j['id_usuario'] ?? 0);
+    }
+
+    /** Orden interclub: club ascendente, luego número dentro del club, luego id usuario. */
+    private function compararClubYNumeroEnClub(array $a, array $b): int
+    {
+        $ca = $this->clubIdEfectivoJugador($a);
+        $cb = $this->clubIdEfectivoJugador($b);
+        if ($ca !== $cb) {
+            return $ca <=> $cb;
+        }
+        $na = $this->numeroOrdenDentroClub($a);
+        $nb = $this->numeroOrdenDentroClub($b);
+        if ($na !== $nb) {
+            return $na <=> $nb;
+        }
+
+        return (int) ($a['id_usuario'] ?? 0) <=> (int) ($b['id_usuario'] ?? 0);
+    }
+
+    /**
+     * Pares consecutivos (1–2), (3–4)… por club según orden club + número (parejas del mismo club).
+     *
+     * @param list<array<string, mixed>> $jugadoresOrdenadosGlobales ya ordenados por {@see compararClubYNumeroEnClub}
+     * @return list<array{p0: array<string,mixed>, p1: array<string,mixed>, club:int}>
+     */
+    private function construirListaParesIntraClubConsecutivos(array $jugadoresOrdenadosGlobales): array
+    {
+        $porClub = [];
+        foreach ($jugadoresOrdenadosGlobales as $j) {
+            $cid = $this->clubIdEfectivoJugador($j);
+            $porClub[$cid][] = $j;
+        }
+        ksort($porClub, SORT_NUMERIC);
+        $listaParObj = [];
+        foreach ($porClub as $cid => $lista) {
+            if ($lista === []) {
+                continue;
+            }
+            usort($lista, fn ($a, $b) => $this->compararClubYNumeroEnClub($a, $b));
+            $n = count($lista);
+            for ($i = 0; $i + 1 < $n; $i += 2) {
+                $listaParObj[] = [
+                    'p0' => $lista[$i],
+                    'p1' => $lista[$i + 1],
+                    'club' => (int) $cid,
+                ];
+            }
+        }
+
+        return $listaParObj;
+    }
+
     /** Comparación estable por clasificación dentro del torneo. */
     private function rankingValorOrdenJugador(array $j): array
     {
@@ -61,7 +129,7 @@ trait MesaAsignacionClubInterclubTrait
 
             /** @var list<array<string, mixed>> $listaClub */
             $listaClub = $porClub[$clubImpar];
-            usort($listaClub, fn ($a, $b) => $this->rankingValorOrdenJugador($a) <=> $this->rankingValorOrdenJugador($b));
+            usort($listaClub, fn ($a, $b) => $this->compararClubYNumeroEnClub($a, $b));
             $empeora = array_pop($listaClub);
             if ($empeora === null) {
                 break;
@@ -71,11 +139,11 @@ trait MesaAsignacionClubInterclubTrait
                 break;
             }
 
-            usort($byePool, fn ($a, $b) => $this->rankingValorOrdenJugador($a) <=> $this->rankingValorOrdenJugador($b));
+            usort($byePool, fn ($a, $b) => $this->compararClubYNumeroEnClub($a, $b));
             $entrada = null;
             foreach ($byePool as $cand) {
                 if ($this->clubIdEfectivoJugador($cand) === $clubImpar
-                    && ($this->rankingValorOrdenJugador($cand) <=> $this->rankingValorOrdenJugador($empeora)) <= 0) {
+                    && ($this->compararClubYNumeroEnClub($cand, $empeora)) <= 0) {
                     $entrada = $cand;
                     break;
                 }
@@ -140,7 +208,7 @@ trait MesaAsignacionClubInterclubTrait
             if ($lista === []) {
                 continue;
             }
-            usort($lista, fn ($a, $b) => $this->rankingValorOrdenJugador($a) <=> $this->rankingValorOrdenJugador($b));
+            usort($lista, fn ($a, $b) => $this->compararClubYNumeroEnClub($a, $b));
             if ((count($lista) % 2) === 1) {
                 $sinPareja = array_pop($lista);
                 if ($sinPareja !== null) {
@@ -156,6 +224,9 @@ trait MesaAsignacionClubInterclubTrait
     }
 
     /**
+     * RR de compañeros dentro del club: la lista debe estar ordenada por club + número ({@see compararClubYNumeroEnClub}).
+     * El desplazamiento circular según $roundSeed hace que en rondas sucesivas las parejas rotan (norma Berger/círculo).
+     *
      * @param list<array<string, mixed>> $jugadoresClubOrdenados
      * @return list<array{0: array<string,mixed>, 1: array<string,mixed>}>
      */
@@ -402,7 +473,7 @@ trait MesaAsignacionClubInterclubTrait
             if ($jugList === []) {
                 continue;
             }
-            usort($jugList, fn ($a, $b) => $this->rankingValorOrdenJugador($a) <=> $this->rankingValorOrdenJugador($b));
+            usort($jugList, fn ($a, $b) => $this->compararClubYNumeroEnClub($a, $b));
             $seedClub = (($roundSeed + (int) $cid * 17) % 10000007);
             foreach ($this->apareamientosCirculoCompanerosClub($jugList, $seedClub) as $dup) {
                 $listaParObj[] = [

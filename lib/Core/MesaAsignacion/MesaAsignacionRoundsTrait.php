@@ -24,7 +24,9 @@ trait MesaAsignacionRoundsTrait
     /**
      * RONDA 1: Dispersión por Clubes
      * Objetivo: jugadores del mismo club no se enfrenten al inicio.
-     * Orden: id_club, id_usuario. Vectores V1,V2,V3,V4. Mesa i: A=V1[i], C=V2[i], B=V3[i], D=V4[i]
+     * Modo clásico: id_club, id_usuario. Vectores V1,V2,V3,V4. Mesa i: A=V1[i], C=V2[i], B=V3[i], D=V4[i]
+     * Interclub RR: orden club + número dentro del club; parejas consecutivas del mismo club;
+     * mesa = pareja club A (pos. A–C) vs pareja club B (pos. B–D), vía {@see MesaAsignacionClubInterclubTrait::formarMesasGreedyPorParesClub}.
      * BYE (solo si NO es interclub RR): los sobrantes globales van a BYE en partiresul.
      * Interclub RR (club_interclub_rr): por club se excluyen los últimos (n mod 4) jugadores,
      * se marcan retirados (sin BYE); solo mesas completas.
@@ -43,22 +45,26 @@ trait MesaAsignacionRoundsTrait
             ];
         }
 
-        // 1. Ordenar por id_club e id_usuario
-        usort($inscritos, function ($a, $b) {
-            $clubA = (int) ($a['club_id'] ?? -1);
-            $clubB = (int) ($b['club_id'] ?? -1);
-            if ($clubA <= 0) {
-                $clubA = -1;
-            }
-            if ($clubB <= 0) {
-                $clubB = -1;
-            }
-            if ($clubA !== $clubB) {
-                return $clubA <=> $clubB;
-            }
+        // 1. Orden: interclub = club + número dentro del club; clásico = club + id_usuario
+        if ($esInterclub) {
+            usort($inscritos, fn ($a, $b) => $this->compararClubYNumeroEnClub($a, $b));
+        } else {
+            usort($inscritos, function ($a, $b) {
+                $clubA = (int) ($a['club_id'] ?? -1);
+                $clubB = (int) ($b['club_id'] ?? -1);
+                if ($clubA <= 0) {
+                    $clubA = -1;
+                }
+                if ($clubB <= 0) {
+                    $clubB = -1;
+                }
+                if ($clubA !== $clubB) {
+                    return $clubA <=> $clubB;
+                }
 
-            return (int) ($a['id_usuario'] ?? 0) <=> (int) ($b['id_usuario'] ?? 0);
-        });
+                return (int) ($a['id_usuario'] ?? 0) <=> (int) ($b['id_usuario'] ?? 0);
+            });
+        }
 
         $sobrantesInterclub = [];
         if ($esInterclub) {
@@ -82,66 +88,67 @@ trait MesaAsignacionRoundsTrait
                 }, $sobrantesInterclub);
                 $this->repo->marcarInscritosRetiradoSobrantesInterclub((int) $torneoId, $idsSob);
                 $jugadores = $this->repo->obtenerClasificacionInscritos($torneoId);
-                usort($jugadores, function ($a, $b) {
-                    $clubA = (int) ($a['club_id'] ?? -1);
-                    $clubB = (int) ($b['club_id'] ?? -1);
-                    if ($clubA <= 0) {
-                        $clubA = -1;
-                    }
-                    if ($clubB <= 0) {
-                        $clubB = -1;
-                    }
-                    if ($clubA !== $clubB) {
-                        return $clubA <=> $clubB;
-                    }
-
-                    return (int) ($a['id_usuario'] ?? 0) <=> (int) ($b['id_usuario'] ?? 0);
-                });
+                usort($jugadores, fn ($a, $b) => $this->compararClubYNumeroEnClub($a, $b));
             }
         } else {
             $jugadores = $inscritos;
         }
 
-        $total = count($jugadores);
-        $mesas = (int) floor($total / self::JUGADORES_POR_MESA);
-        if ($mesas < 1) {
-            return ['success' => false, 'message' => 'No hay suficientes jugadores para formar al menos 1 mesa (mínimo 4)'];
-        }
-
-        // 2. Crear vectores V1, V2, V3, V4 (solo jugadores asignados; los restantes van a BYE salvo interclub)
-        $asignar = $mesas * self::JUGADORES_POR_MESA;
-        $usados = array_slice($jugadores, 0, $asignar);
-        $jugadoresBye = array_slice($jugadores, $asignar);
-
-        if ($esInterclub && $jugadoresBye !== []) {
-            return [
-                'success' => false,
-                'message' => 'Torneo interclub: no se permite BYE en la primera ronda; quedaron jugadores sin mesa tras el reparto.',
-            ];
-        }
-
-        $v1 = $v2 = $v3 = $v4 = [];
-        foreach ($usados as $index => $j) {
-            if ($index < $mesas) {
-                $v1[] = $j;
-            } elseif ($index < $mesas * 2) {
-                $v2[] = $j;
-            } elseif ($index < $mesas * 3) {
-                $v3[] = $j;
-            } else {
-                $v4[] = $j;
-            }
-        }
-
-        // 3. Asignar mesas: A=V1[i], C=V2[i] (Pareja AC), B=V3[i], D=V4[i] (Pareja BD)
         $mesasArray = [];
-        for ($i = 0; $i < $mesas; $i++) {
-            $a = $v1[$i] ?? null;
-            $c = $v2[$i] ?? null;
-            $b = $v3[$i] ?? null;
-            $d = $v4[$i] ?? null;
-            if ($a && $c && $b && $d) {
-                $mesasArray[] = [$a, $c, $b, $d];
+        $jugadoresBye = [];
+
+        if ($esInterclub) {
+            usort($jugadores, fn ($a, $b) => $this->compararClubYNumeroEnClub($a, $b));
+            $listaPares = $this->construirListaParesIntraClubConsecutivos($jugadores);
+            $np = count($listaPares);
+            if ($np < 2 || ($np % 2) !== 0) {
+                return [
+                    'success' => false,
+                    'message' => 'Torneo interclub (R1): no se pudieron formar parejas completas por club (orden club + número). Revise inscripciones (múltiplos de 4 por club).',
+                ];
+            }
+            $mesas = (int) ($np / 2);
+            $mesasArray = $this->formarMesasGreedyPorParesClub($listaPares, $mesas, []);
+            if (count($mesasArray) !== $mesas) {
+                return [
+                    'success' => false,
+                    'message' => 'Torneo interclub (R1): no se pudieron emparejar todas las mesas (pareja de un club vs pareja de otro).',
+                ];
+            }
+        } else {
+            $total = count($jugadores);
+            $mesas = (int) floor($total / self::JUGADORES_POR_MESA);
+            if ($mesas < 1) {
+                return ['success' => false, 'message' => 'No hay suficientes jugadores para formar al menos 1 mesa (mínimo 4)'];
+            }
+
+            // 2. Crear vectores V1, V2, V3, V4 (solo jugadores asignados; los restantes van a BYE)
+            $asignar = $mesas * self::JUGADORES_POR_MESA;
+            $usados = array_slice($jugadores, 0, $asignar);
+            $jugadoresBye = array_slice($jugadores, $asignar);
+
+            $v1 = $v2 = $v3 = $v4 = [];
+            foreach ($usados as $index => $j) {
+                if ($index < $mesas) {
+                    $v1[] = $j;
+                } elseif ($index < $mesas * 2) {
+                    $v2[] = $j;
+                } elseif ($index < $mesas * 3) {
+                    $v3[] = $j;
+                } else {
+                    $v4[] = $j;
+                }
+            }
+
+            // 3. Asignar mesas: A=V1[i], C=V2[i] (Pareja AC), B=V3[i], D=V4[i] (Pareja BD)
+            for ($i = 0; $i < $mesas; $i++) {
+                $a = $v1[$i] ?? null;
+                $c = $v2[$i] ?? null;
+                $b = $v3[$i] ?? null;
+                $d = $v4[$i] ?? null;
+                if ($a && $c && $b && $d) {
+                    $mesasArray[] = [$a, $c, $b, $d];
+                }
             }
         }
 
@@ -185,7 +192,7 @@ trait MesaAsignacionRoundsTrait
     }
 
     /**
-     * Por cada club (id efectivo), deja solo los primeros n - (n mod 4) jugadores (orden id_usuario).
+     * Por cada club (id efectivo), deja solo los primeros n - (n mod 4) jugadores (orden club + número dentro del club).
      * Los últimos (resto) son sobrantes de ese club.
      *
      * @param list<array<string, mixed>> $ordenadosPorClubYUsuario
@@ -205,9 +212,7 @@ trait MesaAsignacionRoundsTrait
         $sobrantes = [];
         $quedan = [];
         foreach ($porClub as $lista) {
-            usort($lista, function ($a, $b) {
-                return (int) ($a['id_usuario'] ?? 0) <=> (int) ($b['id_usuario'] ?? 0);
-            });
+            usort($lista, fn ($a, $b) => $this->compararClubYNumeroEnClub($a, $b));
             $c = count($lista);
             $r = $c % 4;
             if ($r > 0) {
@@ -219,21 +224,7 @@ trait MesaAsignacionRoundsTrait
                 $quedan = array_merge($quedan, $lista);
             }
         }
-        usort($quedan, function ($a, $b) {
-            $clubA = (int) ($a['club_id'] ?? -1);
-            $clubB = (int) ($b['club_id'] ?? -1);
-            if ($clubA <= 0) {
-                $clubA = -1;
-            }
-            if ($clubB <= 0) {
-                $clubB = -1;
-            }
-            if ($clubA !== $clubB) {
-                return $clubA <=> $clubB;
-            }
-
-            return (int) ($a['id_usuario'] ?? 0) <=> (int) ($b['id_usuario'] ?? 0);
-        });
+        usort($quedan, fn ($a, $b) => $this->compararClubYNumeroEnClub($a, $b));
 
         return [$quedan, $sobrantes];
     }
