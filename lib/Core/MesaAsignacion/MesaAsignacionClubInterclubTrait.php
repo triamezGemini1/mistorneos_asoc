@@ -380,9 +380,17 @@ trait MesaAsignacionClubInterclubTrait
             }
         }
 
+        $this->ajustarMesasMaxDosMismoClub($mesas, $jugadoresBye, $matrizCompañeros);
+        if (! $this->todasLasMesasCumplenLimiteClub($mesas)) {
+            return [
+                'success' => false,
+                'message' => "No se pudo generar la ronda {$numRonda} (interclub RR): máximo 2 jugadores del mismo club por mesa.",
+            ];
+        }
+
         $this->repo->guardarAsignacionRonda($torneoId, $numRonda, $mesas, $this->registradoPorUsuarioId);
         if ($jugadoresBye !== []) {
-            $this->repo->aplicarBye($torneoId, $numRonda, $jugadoresBye, 3, $this->registradoPorUsuarioId);
+            $this->marcarRezagadosSinMesaComoRetirados((int) $torneoId, $jugadoresBye);
         }
 
         return [

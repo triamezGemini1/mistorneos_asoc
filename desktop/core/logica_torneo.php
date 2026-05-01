@@ -80,7 +80,9 @@ function generarRonda($torneo_id, $user_id, $is_admin_general, array $opciones =
             $mensaje = $resultado['message'];
             if (isset($resultado['total_mesas'])) $mensaje .= ': ' . $resultado['total_mesas'] . ' mesas';
             if (isset($resultado['total_equipos'])) $mensaje .= ', ' . $resultado['total_equipos'] . ' equipos';
-            if (isset($resultado['jugadores_bye']) && $resultado['jugadores_bye'] > 0) $mensaje .= ', ' . $resultado['jugadores_bye'] . ' jugadores BYE';
+            if (isset($resultado['jugadores_bye']) && $resultado['jugadores_bye'] > 0) {
+                $mensaje .= ', ' . $resultado['jugadores_bye'] . ' rezagado(s) sin mesa (retirados, sin partiresul)';
+            }
             return ['success' => true, 'message' => $mensaje];
         }
         return ['success' => false, 'message' => $resultado['message']];

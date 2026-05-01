@@ -277,6 +277,37 @@ trait MesaRepositoryPersistTrait
         return (int) $stmt->fetchColumn() > 0;
     }
 
+    /**
+     * Jugadores que no tienen mesa asignada en la ronda: sin filas en partiresul (no mesa 0).
+     * Marca inscripción como retirada (estatus 4) solo si estaba confirmada.
+     * Uso: interclub R1 (sobrantes por club), rezagados globales (resto n mod 4), o intercambios desde mesa a bolsa.
+     *
+     * @param list<int> $idsUsuario id_usuario a marcar como retirado
+     * @return int filas actualizadas
+     */
+    public function marcarInscritosRetiradoSobrantesInterclub(int $torneoId, array $idsUsuario): int
+    {
+        $ids = [];
+        foreach ($idsUsuario as $id) {
+            $id = (int) $id;
+            if ($id > 0) {
+                $ids[$id] = true;
+            }
+        }
+        $ids = array_keys($ids);
+        if ($ids === [] || $torneoId <= 0) {
+            return 0;
+        }
+        $ph = implode(',', array_fill(0, count($ids), '?'));
+        $whereConf = InscritosHelper::sqlWhereSoloConfirmadoConAlias('');
+        $sql = 'UPDATE inscritos SET estatus = ? WHERE torneo_id = ? AND id_usuario IN (' . $ph . ') AND (' . $whereConf . ')';
+        $stmt = $this->pdo->prepare($sql);
+        $est = (int) InscritosHelper::ESTATUS_RETIRADO_NUM;
+        $stmt->execute(array_merge([$est, $torneoId], $ids));
+
+        return $stmt->rowCount();
+    }
+
     public function eliminarRonda(int $torneoId, int $ronda): bool
     {
         try {

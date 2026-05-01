@@ -229,7 +229,7 @@ final class RoundManagerHandler
                     $mensaje .= ', ' . $resultado['total_equipos'] . ' equipos';
                 }
                 if (isset($resultado['jugadores_bye']) && $resultado['jugadores_bye'] > 0) {
-                    $mensaje .= ', ' . $resultado['jugadores_bye'] . ' jugadores BYE';
+                    $mensaje .= ', ' . $resultado['jugadores_bye'] . ' rezagado(s) sin mesa (retirados del torneo, sin partida en partiresul)';
                 }
                 if ($msg_no_presentes !== '') {
                     $mensaje .= '. ' . $msg_no_presentes;

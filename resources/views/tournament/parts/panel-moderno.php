@@ -559,7 +559,7 @@ tailwind.config = {
                                     <label class="block text-xs font-semibold text-gray-600 mb-1" for="estrategia_ronda2_gen_v">Emparejamiento (individual)</label>
                                     <select name="estrategia_ronda2" id="estrategia_ronda2_gen_v" class="w-full border border-gray-300 rounded-lg px-2 py-1 text-sm">
                                         <option value="separar">Clásico: r2 separar líderes; r3+ Suizo</option>
-                                        <option value="club_interclub_rr">Por club: RR compañeros interno; mesa vs otro club</option>
+                                        <option value="club_interclub_rr">Interclub: RR por club; sin BYE en R1 (sobrantes por club → retirados automáticos)</option>
                                     </select>
                                 </div>
                                 <?php endif; ?>

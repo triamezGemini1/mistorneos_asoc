@@ -6,7 +6,7 @@ trait MesaAsignacionRoundsTrait
     {
         $useClubIrr = $this->esEmparejamientoClubInterclubRR((string) $estrategiaRonda2);
         if ($numRonda === 1) {
-            return $this->generarPrimeraRonda($torneoId);
+            return $this->generarPrimeraRonda($torneoId, (string) $estrategiaRonda2);
         }
         if ($useClubIrr && $numRonda >= 2 && $numRonda < $totalRondas) {
             return $this->generarRondaClubInterclubRR((int) $torneoId, (int) $numRonda);
@@ -25,15 +25,18 @@ trait MesaAsignacionRoundsTrait
      * RONDA 1: Dispersión por Clubes
      * Objetivo: jugadores del mismo club no se enfrenten al inicio.
      * Orden: id_club, id_usuario. Vectores V1,V2,V3,V4. Mesa i: A=V1[i], C=V2[i], B=V3[i], D=V4[i]
-     * BYE: los sobrantes (tras dispersión por clubes) se asignan al azar en esta ronda;
-     * de la ronda 2 en adelante rige el criterio de últimos clasificados con prioridad a no repetir BYE.
+     * BYE (solo si NO es interclub RR): los sobrantes globales van a BYE en partiresul.
+     * Interclub RR (club_interclub_rr): por club se excluyen los últimos (n mod 4) jugadores,
+     * se marcan retirados (sin BYE); solo mesas completas.
      */
-    private function generarPrimeraRonda($torneoId)
+    private function generarPrimeraRonda($torneoId, string $estrategiaRonda2 = 'separar')
     {
-        $inscritos = $this->repo->obtenerClasificacionInscritos($torneoId);
-        $totalInscritos = count($inscritos);
+        $esInterclub = $this->esEmparejamientoClubInterclubRR($estrategiaRonda2);
 
-        if ($totalInscritos < self::JUGADORES_POR_MESA) {
+        $inscritos = $this->repo->obtenerClasificacionInscritos($torneoId);
+        $totalInicial = count($inscritos);
+
+        if ($totalInicial < self::JUGADORES_POR_MESA) {
             return [
                 'success' => false,
                 'message' => 'No hay suficientes jugadores inscritos (mínimo 4)'
@@ -41,33 +44,93 @@ trait MesaAsignacionRoundsTrait
         }
 
         // 1. Ordenar por id_club e id_usuario
-        usort($inscritos, function($a, $b) {
-            $clubA = (int)($a['club_id'] ?? -1);
-            $clubB = (int)($b['club_id'] ?? -1);
-            if ($clubA <= 0) $clubA = -1;
-            if ($clubB <= 0) $clubB = -1;
-            if ($clubA !== $clubB) return $clubA <=> $clubB;
-            return (int)($a['id_usuario'] ?? 0) <=> (int)($b['id_usuario'] ?? 0);
+        usort($inscritos, function ($a, $b) {
+            $clubA = (int) ($a['club_id'] ?? -1);
+            $clubB = (int) ($b['club_id'] ?? -1);
+            if ($clubA <= 0) {
+                $clubA = -1;
+            }
+            if ($clubB <= 0) {
+                $clubB = -1;
+            }
+            if ($clubA !== $clubB) {
+                return $clubA <=> $clubB;
+            }
+
+            return (int) ($a['id_usuario'] ?? 0) <=> (int) ($b['id_usuario'] ?? 0);
         });
 
-        $jugadores = $inscritos;
+        $sobrantesInterclub = [];
+        if ($esInterclub) {
+            [$jugadores, $sobrantesInterclub] = $this->separarSobrantesPorClubInterclubR1($inscritos);
+            $nQuedan = count($jugadores);
+            if ($nQuedan < self::JUGADORES_POR_MESA) {
+                return [
+                    'success' => false,
+                    'message' => 'Torneo interclub: al excluir automáticamente los sobrantes por club (mesa incompleta en cada club: resto al dividir entre 4) quedan menos de 4 jugadores confirmados. Ajuste inscripciones (múltiplos de 4 por club) o use otra estrategia de emparejamiento.',
+                ];
+            }
+            if ($nQuedan % self::JUGADORES_POR_MESA !== 0) {
+                return [
+                    'success' => false,
+                    'message' => 'Torneo interclub: reparto por club no dejó un total múltiplo de 4 (error interno).',
+                ];
+            }
+            if ($sobrantesInterclub !== []) {
+                $idsSob = array_map(static function ($j) {
+                    return (int) ($j['id_usuario'] ?? 0);
+                }, $sobrantesInterclub);
+                $this->repo->marcarInscritosRetiradoSobrantesInterclub((int) $torneoId, $idsSob);
+                $jugadores = $this->repo->obtenerClasificacionInscritos($torneoId);
+                usort($jugadores, function ($a, $b) {
+                    $clubA = (int) ($a['club_id'] ?? -1);
+                    $clubB = (int) ($b['club_id'] ?? -1);
+                    if ($clubA <= 0) {
+                        $clubA = -1;
+                    }
+                    if ($clubB <= 0) {
+                        $clubB = -1;
+                    }
+                    if ($clubA !== $clubB) {
+                        return $clubA <=> $clubB;
+                    }
+
+                    return (int) ($a['id_usuario'] ?? 0) <=> (int) ($b['id_usuario'] ?? 0);
+                });
+            }
+        } else {
+            $jugadores = $inscritos;
+        }
+
         $total = count($jugadores);
-        $mesas = (int)floor($total / self::JUGADORES_POR_MESA);
+        $mesas = (int) floor($total / self::JUGADORES_POR_MESA);
         if ($mesas < 1) {
             return ['success' => false, 'message' => 'No hay suficientes jugadores para formar al menos 1 mesa (mínimo 4)'];
         }
 
-        // 2. Crear vectores V1, V2, V3, V4 (solo jugadores asignados; los restantes van a BYE)
+        // 2. Crear vectores V1, V2, V3, V4 (solo jugadores asignados; los restantes van a BYE salvo interclub)
         $asignar = $mesas * self::JUGADORES_POR_MESA;
         $usados = array_slice($jugadores, 0, $asignar);
         $jugadoresBye = array_slice($jugadores, $asignar);
 
+        if ($esInterclub && $jugadoresBye !== []) {
+            return [
+                'success' => false,
+                'message' => 'Torneo interclub: no se permite BYE en la primera ronda; quedaron jugadores sin mesa tras el reparto.',
+            ];
+        }
+
         $v1 = $v2 = $v3 = $v4 = [];
         foreach ($usados as $index => $j) {
-            if ($index < $mesas) $v1[] = $j;
-            elseif ($index < $mesas * 2) $v2[] = $j;
-            elseif ($index < $mesas * 3) $v3[] = $j;
-            else $v4[] = $j;
+            if ($index < $mesas) {
+                $v1[] = $j;
+            } elseif ($index < $mesas * 2) {
+                $v2[] = $j;
+            } elseif ($index < $mesas * 3) {
+                $v3[] = $j;
+            } else {
+                $v4[] = $j;
+            }
         }
 
         // 3. Asignar mesas: A=V1[i], C=V2[i] (Pareja AC), B=V3[i], D=V4[i] (Pareja BD)
@@ -82,19 +145,97 @@ trait MesaAsignacionRoundsTrait
             }
         }
 
+        $byePool = array_values($jugadoresBye);
+        $this->ajustarMesasMaxDosMismoClub($mesasArray, $byePool, null);
+        if (! $this->todasLasMesasCumplenLimiteClub($mesasArray)) {
+            return [
+                'success' => false,
+                'message' => 'No se pudo organizar la primera ronda cumpliendo como máximo 2 jugadores del mismo club por mesa. Compruebe la distribución por club o reduzca concentración en un solo club.',
+            ];
+        }
+        $jugadoresBye = $byePool;
+
         $this->repo->guardarAsignacionRonda($torneoId, 1, $mesasArray, $this->registradoPorUsuarioId);
-        if (!empty($jugadoresBye)) {
-            $this->repo->aplicarBye($torneoId, 1, $jugadoresBye, 3, $this->registradoPorUsuarioId);
+        if ($jugadoresBye !== []) {
+            $this->marcarRezagadosSinMesaComoRetirados((int) $torneoId, $jugadoresBye);
+        }
+
+        $msg = $esInterclub
+            ? 'Primera ronda interclub generada: solo mesas completas; rezagados sin fila en partiresul (retirados si aplica).'
+            : 'Primera ronda generada exitosamente';
+        if ($esInterclub && $sobrantesInterclub !== []) {
+            $partes = [];
+            foreach ($sobrantesInterclub as $s) {
+                $nom = trim((string) ($s['nombre'] ?? ''));
+                $club = trim((string) ($s['club_nombre'] ?? ''));
+                $partes[] = $nom !== '' ? ($nom . ($club !== '' ? " ({$club})" : '')) : ('ID ' . (int) ($s['id_usuario'] ?? 0));
+            }
+            $msg .= ' Sobrantes por club (mesa incompleta en su club), excluidos y marcados como retirados: ' . implode('; ', $partes) . '.';
         }
 
         return [
             'success' => true,
-            'message' => 'Primera ronda generada exitosamente',
-            'total_inscritos' => $totalInscritos,
+            'message' => $msg,
+            'total_inscritos' => $totalInicial,
             'total_mesas' => count($mesasArray),
             'jugadores_bye' => count($jugadoresBye),
-            'mesas' => $mesasArray
+            'sobrantes_interclub' => $esInterclub ? count($sobrantesInterclub) : 0,
+            'mesas' => $mesasArray,
         ];
+    }
+
+    /**
+     * Por cada club (id efectivo), deja solo los primeros n - (n mod 4) jugadores (orden id_usuario).
+     * Los últimos (resto) son sobrantes de ese club.
+     *
+     * @param list<array<string, mixed>> $ordenadosPorClubYUsuario
+     * @return array{0: list<array<string, mixed>>, 1: list<array<string, mixed>>}
+     */
+    private function separarSobrantesPorClubInterclubR1(array $ordenadosPorClubYUsuario): array
+    {
+        $porClub = [];
+        foreach ($ordenadosPorClubYUsuario as $j) {
+            $cid = (int) ($j['club_id'] ?? 0);
+            if ($cid < 0) {
+                $cid = 0;
+            }
+            $porClub[$cid][] = $j;
+        }
+        ksort($porClub, SORT_NUMERIC);
+        $sobrantes = [];
+        $quedan = [];
+        foreach ($porClub as $lista) {
+            usort($lista, function ($a, $b) {
+                return (int) ($a['id_usuario'] ?? 0) <=> (int) ($b['id_usuario'] ?? 0);
+            });
+            $c = count($lista);
+            $r = $c % 4;
+            if ($r > 0) {
+                $sobrantes = array_merge($sobrantes, array_slice($lista, -$r));
+                if ($c > $r) {
+                    $quedan = array_merge($quedan, array_slice($lista, 0, $c - $r));
+                }
+            } else {
+                $quedan = array_merge($quedan, $lista);
+            }
+        }
+        usort($quedan, function ($a, $b) {
+            $clubA = (int) ($a['club_id'] ?? -1);
+            $clubB = (int) ($b['club_id'] ?? -1);
+            if ($clubA <= 0) {
+                $clubA = -1;
+            }
+            if ($clubB <= 0) {
+                $clubB = -1;
+            }
+            if ($clubA !== $clubB) {
+                return $clubA <=> $clubB;
+            }
+
+            return (int) ($a['id_usuario'] ?? 0) <=> (int) ($b['id_usuario'] ?? 0);
+        });
+
+        return [$quedan, $sobrantes];
     }
 
     /**
@@ -163,9 +304,17 @@ trait MesaAsignacionRoundsTrait
 
         $mesasArray = $this->validarYRotarRonda2($mesasArray, $matrizCompañeros);
 
+        $this->ajustarMesasMaxDosMismoClub($mesasArray, $jugadoresBye, $matrizCompañeros);
+        if (! $this->todasLasMesasCumplenLimiteClub($mesasArray)) {
+            return [
+                'success' => false,
+                'message' => 'No se pudo generar la segunda ronda cumpliendo como máximo 2 jugadores del mismo club por mesa (y respeto de parejas previas).',
+            ];
+        }
+
         $this->repo->guardarAsignacionRonda($torneoId, 2, $mesasArray, $this->registradoPorUsuarioId);
-        if (!empty($jugadoresBye)) {
-            $this->repo->aplicarBye($torneoId, 2, $jugadoresBye, 3, $this->registradoPorUsuarioId);
+        if ($jugadoresBye !== []) {
+            $this->marcarRezagadosSinMesaComoRetirados((int) $torneoId, $jugadoresBye);
         }
 
         return [
@@ -316,9 +465,17 @@ trait MesaAsignacionRoundsTrait
         // Garantizar exactamente numMesas mesas de 4: si hay mesas de más, redistribuir
         $mesas = $this->ajustarMesasExactas($mesas, $numMesas, $jugadoresParaMesas);
 
+        $this->ajustarMesasMaxDosMismoClub($mesas, $jugadoresBye, $matrizCompañeros);
+        if (! $this->todasLasMesasCumplenLimiteClub($mesas)) {
+            return [
+                'success' => false,
+                'message' => "No se pudo generar la ronda {$numRonda}: máximo 2 jugadores del mismo club por mesa no se cumple con la clasificación actual.",
+            ];
+        }
+
         $this->repo->guardarAsignacionRonda($torneoId, $numRonda, $mesas, $this->registradoPorUsuarioId);
-        if (!empty($jugadoresBye)) {
-            $this->repo->aplicarBye($torneoId, $numRonda, $jugadoresBye, 3, $this->registradoPorUsuarioId);
+        if ($jugadoresBye !== []) {
+            $this->marcarRezagadosSinMesaComoRetirados((int) $torneoId, $jugadoresBye);
         }
 
         return [
@@ -381,9 +538,18 @@ trait MesaAsignacionRoundsTrait
             $indice += 4;
         }
 
+        $matrizUlt = $this->obtenerMatrizCompañerosParaRonda($torneoId, $numRonda - 1);
+        $this->ajustarMesasMaxDosMismoClub($mesas, $jugadoresBye, $matrizUlt);
+        if (! $this->todasLasMesasCumplenLimiteClub($mesas)) {
+            return [
+                'success' => false,
+                'message' => 'No se pudo generar la última ronda cumpliendo como máximo 2 jugadores del mismo club por mesa.',
+            ];
+        }
+
         $this->repo->guardarAsignacionRonda($torneoId, $numRonda, $mesas, $this->registradoPorUsuarioId);
-        if (!empty($jugadoresBye)) {
-            $this->repo->aplicarBye($torneoId, $numRonda, $jugadoresBye, 3, $this->registradoPorUsuarioId);
+        if ($jugadoresBye !== []) {
+            $this->marcarRezagadosSinMesaComoRetirados((int) $torneoId, $jugadoresBye);
         }
 
         return [
