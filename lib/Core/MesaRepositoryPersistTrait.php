@@ -280,7 +280,8 @@ trait MesaRepositoryPersistTrait
     /**
      * Jugadores que no tienen mesa asignada en la ronda: sin filas en partiresul (no mesa 0).
      * Marca inscripción como retirada (estatus 4) solo si estaba confirmada.
-     * Uso: interclub R1 (sobrantes por club), rezagados globales (resto n mod 4), o intercambios desde mesa a bolsa.
+     * Uso: interclub R1 sobrantes n mod 4 por club, rezagados con mesa incompleta, etc.
+     * No usar para parejas excedentes por balance de dos clubes (flotantes: sin partiresul, sin retiro).
      *
      * @param list<int> $idsUsuario id_usuario a marcar como retirado
      * @return int filas actualizadas

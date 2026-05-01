@@ -28,7 +28,10 @@ trait MesaAsignacionLimiteClubMesaTrait
         if (count($mesa4) !== self::JUGADORES_POR_MESA) {
             return false;
         }
-        foreach ($this->conteosPorClubEnMesa($mesa4) as $n) {
+        foreach ($this->conteosPorClubEnMesa($mesa4) as $cid => $n) {
+            if ((int) $cid <= 0) {
+                continue;
+            }
             if ($n > 2) {
                 return false;
             }
@@ -54,7 +57,10 @@ trait MesaAsignacionLimiteClubMesaTrait
     private function metricaViolacionClubPorMesa(array $mesa4): int
     {
         $t = 0;
-        foreach ($this->conteosPorClubEnMesa($mesa4) as $n) {
+        foreach ($this->conteosPorClubEnMesa($mesa4) as $cid => $n) {
+            if ((int) $cid <= 0) {
+                continue;
+            }
             if ($n > 2) {
                 $t += ($n - 2);
             }

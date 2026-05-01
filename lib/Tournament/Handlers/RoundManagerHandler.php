@@ -231,6 +231,9 @@ final class RoundManagerHandler
                 if (isset($resultado['jugadores_bye']) && $resultado['jugadores_bye'] > 0) {
                     $mensaje .= ', ' . $resultado['jugadores_bye'] . ' rezagado(s) sin mesa (retirados del torneo, sin partida en partiresul)';
                 }
+                if (isset($resultado['excedentes_club_interclub_parejas']) && (int) $resultado['excedentes_club_interclub_parejas'] > 0) {
+                    $mensaje .= ', ' . (int) $resultado['excedentes_club_interclub_parejas'] . ' pareja(s) excedentes de club (sin mesa; no BYE ni estadística de partida en esa ronda)';
+                }
                 if ($msg_no_presentes !== '') {
                     $mensaje .= '. ' . $msg_no_presentes;
                 }

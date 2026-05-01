@@ -125,6 +125,68 @@ trait MesaAsignacionClubInterclubTrait
         return $out;
     }
 
+    /**
+     * Con exactamente dos clubes que aportan parejas, solo caben min(P1, P2) mesas (cada mesa usa una pareja de cada club).
+     * Recorta las parejas sobrantes del club más numeroso (se retiran las últimas por orden club + número en el primer jugador de la pareja).
+     *
+     * @param list<array{p0: array<string,mixed>, p1: array<string,mixed>, club:int}> $listaPares
+     * @return array{0: list<array{p0: array<string,mixed>, p1: array<string,mixed>, club:int}>, 1: list<array<string,mixed>>}
+     */
+    private function recortarParesInterclubSiSoloDosClubes(array $listaPares): array
+    {
+        if ($listaPares === []) {
+            return [[], []];
+        }
+        /** @var array<int, list<array{p0: array<string,mixed>, p1: array<string,mixed>, club:int}>> $porClub */
+        $porClub = [];
+        foreach ($listaPares as $par) {
+            $cid = (int) ($par['club'] ?? 0);
+            $porClub[$cid][] = $par;
+        }
+        $clubsConPares = [];
+        foreach ($porClub as $cid => $lista) {
+            if ($lista !== []) {
+                $clubsConPares[] = (int) $cid;
+            }
+        }
+        if (count($clubsConPares) !== 2) {
+            return [$listaPares, []];
+        }
+        sort($clubsConPares, SORT_NUMERIC);
+        $id0 = $clubsConPares[0];
+        $id1 = $clubsConPares[1];
+        $n0 = count($porClub[$id0]);
+        $n1 = count($porClub[$id1]);
+        $cap = min($n0, $n1);
+        /** @var list<array<string,mixed>> $excluidos */
+        $excluidos = [];
+        foreach ([$id0, $id1] as $cid) {
+            $lista = $porClub[$cid];
+            if (count($lista) <= $cap) {
+                continue;
+            }
+            usort($lista, fn ($a, $b) => $this->compararClubYNumeroEnClub($a['p0'], $b['p0']));
+            $sacadas = array_slice($lista, $cap);
+            $porClub[$cid] = array_slice($lista, 0, $cap);
+            foreach ($sacadas as $par) {
+                $excluidos[] = $par['p0'];
+                $excluidos[] = $par['p1'];
+            }
+        }
+        $nuevaLista = [];
+        ksort($porClub, SORT_NUMERIC);
+        foreach ($porClub as $lista) {
+            if ($lista === []) {
+                continue;
+            }
+            foreach ($lista as $par) {
+                $nuevaLista[] = $par;
+            }
+        }
+
+        return [$nuevaLista, $excluidos];
+    }
+
     /** Comparación estable por clasificación dentro del torneo. */
     private function rankingValorOrdenJugador(array $j): array
     {
@@ -537,6 +599,18 @@ trait MesaAsignacionClubInterclubTrait
             }
         }
 
+        [$listaParObj, $exclDosClubesRr] = $this->recortarParesInterclubSiSoloDosClubes($listaParObj);
+        /** @var list<array<string, mixed>> $excedentesParejasFlotantes no mesa, no BYE, no retiro; solo reporte */
+        $excedentesParejasFlotantes = $exclDosClubesRr;
+        $pairsLeft = count($listaParObj);
+        if ($pairsLeft < 2 || ($pairsLeft % 2) !== 0) {
+            return [
+                'success' => false,
+                'message' => 'Club interclub RR: tras equilibrar parejas por club (solo dos clubes con parejas) no quedan suficientes parejas para armar mesas.',
+            ];
+        }
+        $numMesas = (int) ($pairsLeft / 2);
+
         $mesas = $this->formarMesasGreedyPorParesClub($listaParObj, $numMesas, $matrizEnfrent);
         if (count($mesas) !== $numMesas) {
             $mesas = $this->generarRondaIntermediaConstruirMesasSuizoFallback(
@@ -571,12 +645,24 @@ trait MesaAsignacionClubInterclubTrait
         if ($sinParejaPorClub !== []) {
             $msg .= ' Excluido(s) del vector de parejas (sin compañero de club; al final de no asignados): ' . count($sinParejaPorClub) . '.';
         }
+        if ($excedentesParejasFlotantes !== []) {
+            $partesExc = [];
+            foreach ($excedentesParejasFlotantes as $s) {
+                $nom = trim((string) ($s['nombre'] ?? ''));
+                $club = trim((string) ($s['club_nombre'] ?? ''));
+                $partesExc[] = $nom !== '' ? ($nom . ($club !== '' ? " ({$club})" : '')) : ('ID ' . (int) ($s['id_usuario'] ?? 0));
+            }
+            $msg .= ' Excedentes de club (parejas flotantes sin mesa; no BYE ni partida en partiresul): '
+                . (string) (int) (count($excedentesParejasFlotantes) / 2) . ' pareja(s): ' . implode('; ', $partesExc) . '.';
+        }
 
         return [
             'success' => true,
             'message' => $msg,
             'total_mesas' => count($mesas),
             'jugadores_bye' => count($jugadoresBye),
+            'excedentes_club_interclub_jugadores' => count($excedentesParejasFlotantes),
+            'excedentes_club_interclub_parejas' => (int) (count($excedentesParejasFlotantes) / 2),
             'mesas' => $mesas,
         ];
     }

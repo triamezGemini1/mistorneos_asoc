@@ -30,6 +30,7 @@ trait MesaAsignacionRoundsTrait
      * BYE (solo si NO es interclub RR): los sobrantes globales van a BYE en partiresul.
      * Interclub RR (club_interclub_rr): por club se excluyen los últimos (n mod 4) jugadores,
      * se marcan retirados (sin BYE); solo mesas completas.
+     * Parejas excedentes por desbalance entre dos clubes: no partiresul, no BYE, no retiro; solo informe.
      */
     private function generarPrimeraRonda($torneoId, string $estrategiaRonda2 = 'separar')
     {
@@ -96,10 +97,16 @@ trait MesaAsignacionRoundsTrait
 
         $mesasArray = [];
         $jugadoresBye = [];
+        /** @var list<array<string, mixed>> Jugadores en parejas que no entran a mesa (solo dos clubes); no retiro, no partida/BYE. */
+        $excedentesParejasFlotantes = [];
 
         if ($esInterclub) {
             usort($jugadores, fn ($a, $b) => $this->compararClubYNumeroEnClub($a, $b));
             $listaPares = $this->construirListaParesIntraClubConsecutivos($jugadores);
+            [$listaPares, $exclPorDosClubes] = $this->recortarParesInterclubSiSoloDosClubes($listaPares);
+            if ($exclPorDosClubes !== []) {
+                $excedentesParejasFlotantes = $exclPorDosClubes;
+            }
             $np = count($listaPares);
             if ($np < 2 || ($np % 2) !== 0) {
                 return [
@@ -157,7 +164,7 @@ trait MesaAsignacionRoundsTrait
         if (! $this->todasLasMesasCumplenLimiteClub($mesasArray)) {
             return [
                 'success' => false,
-                'message' => 'No se pudo organizar la primera ronda cumpliendo como máximo 2 jugadores del mismo club por mesa. Compruebe que haya al menos dos clubes con jugadores en mesa, que los totales por club permitan emparejar parejas de distintos clubes en cada mesa, y que no quede un solo club con todos los huecos tras retirar sobrantes.',
+                'message' => 'No se pudo organizar la primera ronda cumpliendo como máximo 2 jugadores del mismo club con id asignado por mesa (sin club no cuenta en ese tope). Compruebe que existan al menos dos clubes con id distinto entre los inscritos en mesa, o que los jugadores tengan club_id correcto en BD.',
             ];
         }
         $jugadoresBye = $byePool;
@@ -168,7 +175,7 @@ trait MesaAsignacionRoundsTrait
         }
 
         $msg = $esInterclub
-            ? 'Primera ronda interclub generada: solo mesas completas; rezagados sin fila en partiresul (retirados si aplica).'
+            ? 'Primera ronda interclub generada: solo mesas completas; sin BYE en partiresul para excedentes de club.'
             : 'Primera ronda generada exitosamente';
         if ($esInterclub && $sobrantesInterclub !== []) {
             $partes = [];
@@ -177,7 +184,18 @@ trait MesaAsignacionRoundsTrait
                 $club = trim((string) ($s['club_nombre'] ?? ''));
                 $partes[] = $nom !== '' ? ($nom . ($club !== '' ? " ({$club})" : '')) : ('ID ' . (int) ($s['id_usuario'] ?? 0));
             }
-            $msg .= ' Sobrantes por club (mesa incompleta en su club), excluidos y marcados como retirados: ' . implode('; ', $partes) . '.';
+            $msg .= ' Sobrantes por club (n mod 4 en su club), excluidos y marcados como retirados: ' . implode('; ', $partes) . '.';
+        }
+        if ($esInterclub && $excedentesParejasFlotantes !== []) {
+            $partesExc = [];
+            foreach ($excedentesParejasFlotantes as $s) {
+                $nom = trim((string) ($s['nombre'] ?? ''));
+                $club = trim((string) ($s['club_nombre'] ?? ''));
+                $partesExc[] = $nom !== '' ? ($nom . ($club !== '' ? " ({$club})" : '')) : ('ID ' . (int) ($s['id_usuario'] ?? 0));
+            }
+            $npExc = count($excedentesParejasFlotantes);
+            $msg .= ' Excedentes de club (parejas flotantes sin mesa en esta ronda; no BYE, no fila en partiresul, no afectan estadística de partida): '
+                . (string) (int) ($npExc / 2) . ' pareja(s), jugadores: ' . implode('; ', $partesExc) . '.';
         }
 
         return [
@@ -187,6 +205,8 @@ trait MesaAsignacionRoundsTrait
             'total_mesas' => count($mesasArray),
             'jugadores_bye' => count($jugadoresBye),
             'sobrantes_interclub' => $esInterclub ? count($sobrantesInterclub) : 0,
+            'excedentes_club_interclub_jugadores' => $esInterclub ? count($excedentesParejasFlotantes) : 0,
+            'excedentes_club_interclub_parejas' => $esInterclub ? (int) (count($excedentesParejasFlotantes) / 2) : 0,
             'mesas' => $mesasArray,
         ];
     }
