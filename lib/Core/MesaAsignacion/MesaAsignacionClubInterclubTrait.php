@@ -195,17 +195,17 @@ trait MesaAsignacionClubInterclubTrait
     }
 
     /**
-     * Con exactamente dos clubes (id > 0) en el pool que jugará R1, exige que cada uno tenga
-     * exactamente {@see MesaRepository::obtenerPareclubTorneo} jugadores si el torneo tiene pareclub > 0.
+     * Advertencias previas a la R1 interclub (no bloquean): >50% en un club, bajo mínimo pareclub, etc.
      *
-     * @param list<array<string, mixed>> $jugadoresActivos inscritos confirmados tras quitar n mod 4 por club
-     * @return string|null mensaje de error o null si OK / no aplica
+     * @param list<array<string, mixed>> $jugadoresActivos pool que jugará (tras n mod 4 por club)
+     * @return list<string>
      */
-    private function validarDosClubesVsPareclubTorneo(int $torneoId, array $jugadoresActivos): ?string
+    private function recolectarAdvertenciasInterclubR1(int $torneoId, array $jugadoresActivos): array
     {
-        $pareclub = $this->repo->obtenerPareclubTorneo($torneoId);
-        if ($pareclub <= 0) {
-            return null;
+        $adv = [];
+        $total = count($jugadoresActivos);
+        if ($total <= 0) {
+            return $adv;
         }
         /** @var array<int, array{n: int, nombre: string}> $porClub */
         $porClub = [];
@@ -222,23 +222,92 @@ trait MesaAsignacionClubInterclubTrait
             }
             $porClub[$cid]['n']++;
         }
-        if (count($porClub) !== 2) {
-            return null;
-        }
-        $partes = [];
         foreach ($porClub as $cid => $info) {
             $n = (int) $info['n'];
             $nom = $info['nombre'] !== '' ? $info['nombre'] : ('Club #' . $cid);
-            if ($n !== $pareclub) {
-                $partes[] = "{$nom}: {$n} jugadores en mesa (el torneo exige exactamente {$pareclub} por club en «Jugadores por club»)";
+            if ($n > $total / 2) {
+                $adv[] = "Atención: {$nom} concentra más del 50% de los atletas ({$n} de {$total}); puede ser inevitable repetir más de dos jugadores del mismo club en alguna mesa o emparejar compañeros del mismo club. Se prioriza la alternancia y se completan las mesas.";
             }
         }
-        if ($partes === []) {
-            return null;
+        $pareclub = $this->repo->obtenerPareclubTorneo($torneoId);
+        if ($pareclub > 0) {
+            foreach ($porClub as $cid => $info) {
+                $n = (int) $info['n'];
+                $nom = $info['nombre'] !== '' ? $info['nombre'] : ('Club #' . $cid);
+                if ($n < $pareclub) {
+                    $adv[] = "Advertencia: {$nom} tiene {$n} jugadores en mesa, por debajo del mínimo «Jugadores por club» del torneo ({$pareclub}).";
+                }
+            }
         }
 
-        return 'Interclub con dos clubes: revise la inscripción antes de generar la ronda 1. '
-            . implode('; ', $partes) . '. Corrija cantidades o el campo «Jugadores por club» (pareclub) del torneo.';
+        return $adv;
+    }
+
+    /**
+     * Ronda 1 interclub: forma mesas [A,C,B,D] emparejando parejas intra-club de **dos clubes distintos**
+     * cuando es posible; prioriza el club con más parejas restantes frente al segundo con más resto, etc.
+     * Si solo queda un club con parejas, completa la mesa con dos parejas del mismo club (caso límite).
+     *
+     * @param list<array{p0: array<string,mixed>, p1: array<string,mixed>, club:int}> $listaPares
+     * @return list<list<array<string,mixed>>>
+     */
+    private function formarMesasR1InterclubAlternanciaPorTamanoClub(array $listaPares): array
+    {
+        if ($listaPares === []) {
+            return [];
+        }
+        /** @var array<int, list<array{p0: array<string,mixed>, p1: array<string,mixed>, club:int}>> $colas */
+        $colas = [];
+        foreach ($listaPares as $par) {
+            $cid = (int) ($par['club'] ?? 0);
+            $colas[$cid][] = $par;
+        }
+        foreach ($colas as $cid => &$lst) {
+            usort($lst, fn ($a, $b) => $this->compararClubYNumeroEnClub($a['p0'], $b['p0']));
+        }
+        unset($lst);
+
+        $mesas = [];
+        $maxIter = count($listaPares) + 8;
+        for ($iter = 0; $iter < $maxIter; $iter++) {
+            /** @var list<int> $ids */
+            $ids = [];
+            foreach ($colas as $cid => $lst) {
+                if ($lst !== []) {
+                    $ids[] = (int) $cid;
+                }
+            }
+            if ($ids === []) {
+                break;
+            }
+            if (count($ids) === 1) {
+                $only = $ids[0];
+                if (count($colas[$only]) < 2) {
+                    break;
+                }
+                $pa = array_shift($colas[$only]);
+                $pb = array_shift($colas[$only]);
+                $mesas[] = [$pa['p0'], $pa['p1'], $pb['p0'], $pb['p1']];
+
+                continue;
+            }
+            usort($ids, function (int $a, int $b) use ($colas): int {
+                $na = count($colas[$a]);
+                $nb = count($colas[$b]);
+                if ($na !== $nb) {
+                    return $nb <=> $na;
+                }
+
+                return $a <=> $b;
+            });
+            $c1 = $ids[0];
+            $c2 = $ids[1];
+            $pa = array_shift($colas[$c1]);
+            $pb = array_shift($colas[$c2]);
+            $mesas[] = [$pa['p0'], $pa['p1'], $pb['p0'], $pb['p1']];
+        }
+
+        return $mesas;
     }
 
     /** Comparación estable por clasificación dentro del torneo. */

@@ -86,6 +86,9 @@ function generarRonda($torneo_id, $user_id, $is_admin_general, array $opciones =
             if (isset($resultado['excedentes_club_interclub_parejas']) && (int) $resultado['excedentes_club_interclub_parejas'] > 0) {
                 $mensaje .= ', ' . (int) $resultado['excedentes_club_interclub_parejas'] . ' pareja(s) excedentes de club (sin mesa; no BYE ni estadística de partida en esa ronda)';
             }
+            if (! empty($resultado['advertencias_interclub_r1']) && is_array($resultado['advertencias_interclub_r1'])) {
+                $mensaje .= ' ' . implode(' ', array_map('strval', $resultado['advertencias_interclub_r1']));
+            }
             return ['success' => true, 'message' => $mensaje];
         }
         return ['success' => false, 'message' => $resultado['message']];

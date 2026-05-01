@@ -26,7 +26,8 @@ trait MesaAsignacionRoundsTrait
      * Objetivo: jugadores del mismo club no se enfrenten al inicio.
      * Modo clásico: id_club, id_usuario. Vectores V1,V2,V3,V4. Mesa i: A=V1[i], C=V2[i], B=V3[i], D=V4[i]
      * Interclub RR: orden club + número dentro del club; parejas consecutivas del mismo club;
-     * mesa = pareja club A (pos. A–C) vs pareja club B (pos. B–D), vía {@see MesaAsignacionClubInterclubTrait::formarMesasGreedyPorParesClub}.
+     * R1: mesas por {@see MesaAsignacionClubInterclubTrait::formarMesasR1InterclubAlternanciaPorTamanoClub}
+     * (club con más parejas vs el segundo con más resto; avisos si >50% en un club o bajo pareclub; se permite guardar si el tope 2/mesa no es matemáticamente posible).
      * BYE (solo si NO es interclub RR): los sobrantes globales van a BYE en partiresul.
      * Interclub RR (club_interclub_rr): por club se excluyen los últimos (n mod 4) jugadores,
      * se marcan retirados (sin BYE); solo mesas completas.
@@ -95,14 +96,10 @@ trait MesaAsignacionRoundsTrait
             $jugadores = $inscritos;
         }
 
+        /** @var list<string> */
+        $advertenciasInterclubR1 = [];
         if ($esInterclub) {
-            $errPlantillaDosClubes = $this->validarDosClubesVsPareclubTorneo((int) $torneoId, $jugadores);
-            if ($errPlantillaDosClubes !== null) {
-                return [
-                    'success' => false,
-                    'message' => $errPlantillaDosClubes,
-                ];
-            }
+            $advertenciasInterclubR1 = $this->recolectarAdvertenciasInterclubR1((int) $torneoId, $jugadores);
         }
 
         $mesasArray = [];
@@ -125,11 +122,14 @@ trait MesaAsignacionRoundsTrait
                 ];
             }
             $mesas = (int) ($np / 2);
-            $mesasArray = $this->formarMesasGreedyPorParesClub($listaPares, $mesas, []);
+            $mesasArray = $this->formarMesasR1InterclubAlternanciaPorTamanoClub($listaPares);
+            if (count($mesasArray) !== $mesas) {
+                $mesasArray = $this->formarMesasGreedyPorParesClub($listaPares, $mesas, []);
+            }
             if (count($mesasArray) !== $mesas) {
                 return [
                     'success' => false,
-                    'message' => 'Torneo interclub (R1): no se pudieron emparejar todas las mesas (pareja de un club vs pareja de otro).',
+                    'message' => 'Torneo interclub (R1): no se pudieron emparejar todas las mesas (parejas intra-club vs otro club).',
                 ];
             }
         } else {
@@ -172,12 +172,14 @@ trait MesaAsignacionRoundsTrait
         $byePool = array_values($jugadoresBye);
         $this->ajustarMesasMaxDosMismoClub($mesasArray, $byePool, null);
         if (! $this->todasLasMesasCumplenLimiteClub($mesasArray)) {
-            return [
-                'success' => false,
-                'message' => 'No se pudo cerrar la primera ronda interclub respetando «máximo 2 jugadores del mismo club con id > 0 por mesa» (quienes van sin club en BD no entran en ese tope). '
-                    . 'Revise: (1) cada inscrito tenga club_id o id_club correcto; (2) con solo dos clubes, que ambos cumplan «Jugadores por club» (pareclub) del torneo —el sistema valida eso antes de asignar; '
-                    . '(3) con tres o más clubes y total múltiplo de 4, la asignación alterna clubes priorizando el que más parejas aporta.',
-            ];
+            if ($esInterclub) {
+                $advertenciasInterclubR1[] = 'Aviso: alguna mesa supera «2 jugadores del mismo club (id > 0)» por reparto inevitable; se guardó la ronda priorizando mesas completas y alternancia.';
+            } else {
+                return [
+                    'success' => false,
+                    'message' => 'No se pudo cerrar la primera ronda cumpliendo como máximo 2 jugadores del mismo club con id asignado por mesa (sin club no cuenta en ese tope).',
+                ];
+            }
         }
         $jugadoresBye = $byePool;
 
@@ -187,8 +189,11 @@ trait MesaAsignacionRoundsTrait
         }
 
         $msg = $esInterclub
-            ? 'Primera ronda interclub generada: solo mesas completas; sin BYE en partiresul para excedentes de club.'
+            ? 'Primera ronda interclub generada: mesas por alternancia de clubes (mayor tamaño primero); sin BYE en partiresul para excedentes de club.'
             : 'Primera ronda generada exitosamente';
+        if ($esInterclub && $advertenciasInterclubR1 !== []) {
+            $msg .= ' ' . implode(' ', $advertenciasInterclubR1);
+        }
         if ($esInterclub && $sobrantesInterclub !== []) {
             $partes = [];
             foreach ($sobrantesInterclub as $s) {
@@ -219,6 +224,7 @@ trait MesaAsignacionRoundsTrait
             'sobrantes_interclub' => $esInterclub ? count($sobrantesInterclub) : 0,
             'excedentes_club_interclub_jugadores' => $esInterclub ? count($excedentesParejasFlotantes) : 0,
             'excedentes_club_interclub_parejas' => $esInterclub ? (int) (count($excedentesParejasFlotantes) / 2) : 0,
+            'advertencias_interclub_r1' => $esInterclub ? $advertenciasInterclubR1 : [],
             'mesas' => $mesasArray,
         ];
     }
