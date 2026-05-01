@@ -87,6 +87,44 @@ trait MesaAsignacionClubInterclubTrait
         return $listaParObj;
     }
 
+    /**
+     * Reordena las parejas (objetos con club) en round-robin por club ascendente.
+     * Evita el bloque [todas las parejas del club A][todas las de B]… que hace que el greedy
+     * consuma solo A–B y al final queden solo parejas de C sin club rival (fallo “máx. 2 por mesa”).
+     *
+     * @param list<array{p0: array<string,mixed>, p1: array<string,mixed>, club:int}> $listaPares
+     * @return list<array{p0: array<string,mixed>, p1: array<string,mixed>, club:int}>
+     */
+    private function intercalarListaParesPorClub(array $listaPares): array
+    {
+        if ($listaPares === []) {
+            return [];
+        }
+        /** @var array<int, list<array{p0: array<string,mixed>, p1: array<string,mixed>, club:int}>> $colas */
+        $colas = [];
+        foreach ($listaPares as $par) {
+            $cid = (int) ($par['club'] ?? 0);
+            $colas[$cid][] = $par;
+        }
+        ksort($colas, SORT_NUMERIC);
+        /** @var list<int> $ordenClubes */
+        $ordenClubes = array_map('intval', array_keys($colas));
+        $out = [];
+        $hay = true;
+        while ($hay) {
+            $hay = false;
+            foreach ($ordenClubes as $cid) {
+                if (! isset($colas[$cid]) || $colas[$cid] === []) {
+                    continue;
+                }
+                $hay = true;
+                $out[] = array_shift($colas[$cid]);
+            }
+        }
+
+        return $out;
+    }
+
     /** Comparación estable por clasificación dentro del torneo. */
     private function rankingValorOrdenJugador(array $j): array
     {
@@ -299,16 +337,22 @@ trait MesaAsignacionClubInterclubTrait
     private function formarMesasGreedyPorParesClub(array $listaPares, int $mesasObjetivo, array $matrizEnfrentamiento): array
     {
         $mesasObjetivo = max(0, $mesasObjetivo);
-        $disponibles = array_values($listaPares);
-        usort($disponibles, static function ($a, $b) {
-            return ((int) ($a['club'] ?? 0)) <=> ((int) ($b['club'] ?? 0));
-        });
+        $disponibles = $this->intercalarListaParesPorClub($listaPares);
 
         /** @var list<bool> $usado */
         $usado = array_fill(0, count($disponibles), false);
         $mesasArr = [];
 
         for ($mesaIdx = 0; $mesaIdx < $mesasObjetivo; $mesaIdx++) {
+            $restantesPorClub = [];
+            for ($qq = 0; $qq < count($disponibles); $qq++) {
+                if ($usado[$qq]) {
+                    continue;
+                }
+                $cq = (int) ($disponibles[$qq]['club'] ?? 0);
+                $restantesPorClub[$cq] = ($restantesPorClub[$cq] ?? 0) + 1;
+            }
+
             $iP = null;
             for ($p = 0; $p < count($disponibles); $p++) {
                 if (! $usado[$p]) {
@@ -324,6 +368,7 @@ trait MesaAsignacionClubInterclubTrait
 
             $mejorQ = null;
             $mejorScore = PHP_INT_MAX;
+            $mejorReservaRival = -1;
             for ($q = 0; $q < count($disponibles); $q++) {
                 if ($usado[$q]) {
                     continue;
@@ -337,8 +382,13 @@ trait MesaAsignacionClubInterclubTrait
                     [$seg['p0'], $seg['p1']],
                     $matrizEnfrentamiento
                 );
-                if ($sc < $mejorScore) {
+                $clubSeg = (int) ($seg['club'] ?? 0);
+                $reservaRival = (int) ($restantesPorClub[$clubSeg] ?? 0);
+                if ($sc < $mejorScore
+                    || ($sc === $mejorScore && $reservaRival > $mejorReservaRival)
+                    || ($sc === $mejorScore && $reservaRival === $mejorReservaRival && $mejorQ !== null && $q < $mejorQ)) {
                     $mejorScore = $sc;
+                    $mejorReservaRival = $reservaRival;
                     $mejorQ = $q;
                 }
             }

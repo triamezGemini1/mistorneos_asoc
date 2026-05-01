@@ -157,7 +157,7 @@ trait MesaAsignacionRoundsTrait
         if (! $this->todasLasMesasCumplenLimiteClub($mesasArray)) {
             return [
                 'success' => false,
-                'message' => 'No se pudo organizar la primera ronda cumpliendo como máximo 2 jugadores del mismo club por mesa. Compruebe la distribución por club o reduzca concentración en un solo club.',
+                'message' => 'No se pudo organizar la primera ronda cumpliendo como máximo 2 jugadores del mismo club por mesa. Compruebe que haya al menos dos clubes con jugadores en mesa, que los totales por club permitan emparejar parejas de distintos clubes en cada mesa, y que no quede un solo club con todos los huecos tras retirar sobrantes.',
             ];
         }
         $jugadoresBye = $byePool;
