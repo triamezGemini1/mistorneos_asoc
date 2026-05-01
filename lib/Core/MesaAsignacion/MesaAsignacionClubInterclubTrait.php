@@ -118,6 +118,44 @@ trait MesaAsignacionClubInterclubTrait
     }
 
     /**
+     * Por club (clave 0 = sin club), orden por ranking: si hay cantidad impar, el último del vector
+     * queda sin pareja de club y se excluye del pool de asignación RR; se devuelve al final en $rezagados.
+     *
+     * @param list<array<string, mixed>> $jugadores
+     * @return array{0: list<array<string, mixed>>, 1: list<array<string, mixed>>} [pool solo jugadores con pareja de club, rezagados al final]
+     */
+    private function excluirImparesPorClubAlFinalDelVector(array $jugadores): array
+    {
+        $porClub = [];
+        foreach ($jugadores as $j) {
+            $cid = $this->clubIdEfectivoJugador($j);
+            $k = $cid > 0 ? $cid : 0;
+            $porClub[$k][] = $j;
+        }
+        ksort($porClub, SORT_NUMERIC);
+
+        $rezagados = [];
+        $pool = [];
+        foreach ($porClub as $lista) {
+            if ($lista === []) {
+                continue;
+            }
+            usort($lista, fn ($a, $b) => $this->rankingValorOrdenJugador($a) <=> $this->rankingValorOrdenJugador($b));
+            if ((count($lista) % 2) === 1) {
+                $sinPareja = array_pop($lista);
+                if ($sinPareja !== null) {
+                    $rezagados[] = $sinPareja;
+                }
+            }
+            foreach ($lista as $jx) {
+                $pool[] = $jx;
+            }
+        }
+
+        return [$pool, $rezagados];
+    }
+
+    /**
      * @param list<array<string, mixed>> $jugadoresClubOrdenados
      * @return list<array{0: array<string,mixed>, 1: array<string,mixed>}>
      */
@@ -290,15 +328,15 @@ trait MesaAsignacionClubInterclubTrait
             ];
         }
 
-        $numMesas = (int) floor($totalInscritos / self::JUGADORES_POR_MESA);
-        $numBye = $totalInscritos - ($numMesas * self::JUGADORES_POR_MESA);
+        $numMesasPre = (int) floor($totalInscritos / self::JUGADORES_POR_MESA);
+        $numBye = $totalInscritos - ($numMesasPre * self::JUGADORES_POR_MESA);
         $conteoBye = $this->repo->obtenerConteoByePorJugador($torneoId, $numRonda);
         if ($numBye > 0) {
             if ($conteoBye !== []) {
-                [$jugadoresParaMesas, $jugadoresBye] = $this->reordenarParaLimitarBye($inscritos, $conteoBye, $numBye, $numMesas);
+                [$jugadoresParaMesas, $jugadoresBye] = $this->reordenarParaLimitarBye($inscritos, $conteoBye, $numBye, $numMesasPre);
             } else {
-                $jugadoresParaMesas = array_slice($inscritos, 0, $numMesas * self::JUGADORES_POR_MESA);
-                $jugadoresBye = array_slice($inscritos, $numMesas * self::JUGADORES_POR_MESA, $numBye);
+                $jugadoresParaMesas = array_slice($inscritos, 0, $numMesasPre * self::JUGADORES_POR_MESA);
+                $jugadoresBye = array_slice($inscritos, $numMesasPre * self::JUGADORES_POR_MESA, $numBye);
             }
         } else {
             $jugadoresParaMesas = $inscritos;
@@ -306,6 +344,18 @@ trait MesaAsignacionClubInterclubTrait
         }
 
         $this->equilibrarParidadClubesMesaVersusBye($jugadoresParaMesas, $jugadoresBye);
+
+        [$jugadoresParaMesas, $sinParejaPorClub] = $this->excluirImparesPorClubAlFinalDelVector($jugadoresParaMesas);
+        $jugadoresBye = array_values(array_merge($jugadoresBye, $sinParejaPorClub));
+
+        $nPool = count($jugadoresParaMesas);
+        if ($nPool < self::JUGADORES_POR_MESA) {
+            return [
+                'success' => false,
+                'message' => 'Club interclub RR: tras excluir jugadores sin pareja de club no quedan al menos 4 participantes para armar mesas.',
+            ];
+        }
+        $numMesas = (int) floor($nPool / self::JUGADORES_POR_MESA);
 
         $matrizCompañeros = $this->obtenerMatrizCompañerosParaRonda($torneoId, $numRonda - 1);
         $matrizEnfrent = $this->obtenerMatrizEnfrentamientosAcumulada($torneoId, $numRonda);
@@ -393,9 +443,14 @@ trait MesaAsignacionClubInterclubTrait
             $this->marcarRezagadosSinMesaComoRetirados((int) $torneoId, $jugadoresBye);
         }
 
+        $msg = "Ronda {$numRonda} generada (interclub + RR interno por club)";
+        if ($sinParejaPorClub !== []) {
+            $msg .= ' Excluido(s) del vector de parejas (sin compañero de club; al final de no asignados): ' . count($sinParejaPorClub) . '.';
+        }
+
         return [
             'success' => true,
-            'message' => "Ronda {$numRonda} generada (interclub + RR interno por club)",
+            'message' => $msg,
             'total_mesas' => count($mesas),
             'jugadores_bye' => count($jugadoresBye),
             'mesas' => $mesas,
