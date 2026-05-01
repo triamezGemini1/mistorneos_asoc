@@ -28,6 +28,25 @@ class ClubRepository
     }
 
     /**
+     * Homologa el texto leído de Excel/CSV: BOM, espacios Unicode, marcas invisibles, NFKC (dígitos ancho completo → ASCII).
+     * Debe usarse antes de interpretar el valor como id de {@see findById}.
+     */
+    public static function sanitizarReferenciaClubImport(string $ref): string
+    {
+        $ref = preg_replace('/^\xEF\xBB\xBF/u', '', $ref);
+        if (class_exists(\Normalizer::class)) {
+            $n = \Normalizer::normalize($ref, \Normalizer::FORM_KC);
+            if ($n !== false) {
+                $ref = $n;
+            }
+        }
+        $ref = preg_replace('/[\x{200B}-\x{200D}\x{FEFF}\x{00AD}\x{200E}\x{200F}\x{2060}]/u', '', $ref);
+        $ref = preg_replace('/[\x{00A0}\x{202F}\x{2007}]/u', ' ', $ref);
+
+        return trim($ref);
+    }
+
+    /**
      * Busca club por nombre
      */
     public function findByName(string $name): ?array
@@ -36,6 +55,68 @@ class ClubRepository
         $stmt->execute([$name]);
         $club = $stmt->fetch(PDO::FETCH_ASSOC);
         return $club ?: null;
+    }
+
+    /**
+     * Si el texto es un entero positivo (p. ej. "27", "27.0" desde Excel), devuelve ese id; si no, null.
+     */
+    private function parseImportClubIdPk(string $ref): ?int
+    {
+        $ref = self::sanitizarReferenciaClubImport($ref);
+        if ($ref === '') {
+            return null;
+        }
+        $probe = str_replace(',', '.', $ref);
+        if (!is_numeric($probe)) {
+            return null;
+        }
+        $f = (float) $probe;
+        if ($f < 1 || $f > PHP_INT_MAX || (int) $f != $f) {
+            return null;
+        }
+
+        return (int) $f;
+    }
+
+    /**
+     * Resuelve el id de club a partir del valor del archivo de importación masiva:
+     * - Valor numérico entero (incl. "27.0" de planilla): solo {@see findById} — es el id de `clubes`.
+     * - En otro caso: nombre exacto, cod_org como texto, nombre sin distinguir mayúsculas.
+     *
+     * @return int|null id en clubes o null si no hay coincidencia
+     */
+    public function resolveFromImportReference(string $ref): ?int
+    {
+        $ref = self::sanitizarReferenciaClubImport($ref);
+        if ($ref === '') {
+            return null;
+        }
+
+        $maybeId = $this->parseImportClubIdPk($ref);
+        if ($maybeId !== null) {
+            $byId = $this->findById($maybeId);
+
+            return $byId !== null ? $maybeId : null;
+        }
+
+        $byName = $this->findByName($ref);
+        if ($byName !== null) {
+            return (int) $byName['id'];
+        }
+        try {
+            $stmt = $this->pdo->prepare('SELECT id FROM clubes WHERE CAST(cod_org AS CHAR) = ? LIMIT 1');
+            $stmt->execute([$ref]);
+            $id = $stmt->fetchColumn();
+            if ($id !== false) {
+                return (int) $id;
+            }
+        } catch (\Throwable $e) {
+        }
+        $stmt = $this->pdo->prepare('SELECT id FROM clubes WHERE LOWER(TRIM(nombre)) = LOWER(TRIM(?)) LIMIT 1');
+        $stmt->execute([$ref]);
+        $id2 = $stmt->fetchColumn();
+
+        return $id2 !== false ? (int) $id2 : null;
     }
 
     /**

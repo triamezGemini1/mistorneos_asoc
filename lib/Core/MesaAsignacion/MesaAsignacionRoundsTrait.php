@@ -4,15 +4,21 @@ trait MesaAsignacionRoundsTrait
 {
     public function generarAsignacionRonda($torneoId, $numRonda, $totalRondas, $estrategiaRonda2 = 'separar')
     {
+        $useClubIrr = $this->esEmparejamientoClubInterclubRR((string) $estrategiaRonda2);
         if ($numRonda === 1) {
             return $this->generarPrimeraRonda($torneoId);
-        } elseif ($numRonda === 2) {
-            return $this->generarSegundaRonda($torneoId);
-        } elseif ($numRonda === $totalRondas) {
-            return $this->generarUltimaRonda($torneoId, $numRonda);
-        } else {
-            return $this->generarRondaIntermedia($torneoId, $numRonda);
         }
+        if ($useClubIrr && $numRonda >= 2 && $numRonda < $totalRondas) {
+            return $this->generarRondaClubInterclubRR((int) $torneoId, (int) $numRonda);
+        }
+        if ($numRonda === $totalRondas) {
+            return $this->generarUltimaRonda($torneoId, $numRonda);
+        }
+        if ($numRonda === 2) {
+            return $this->generarSegundaRonda($torneoId);
+        }
+
+        return $this->generarRondaIntermedia($torneoId, $numRonda);
     }
 
     /**

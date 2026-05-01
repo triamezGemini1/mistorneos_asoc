@@ -551,6 +551,15 @@ tailwind.config = {
                                 <input type="hidden" name="action" value="generar_ronda">
                                 <input type="hidden" name="csrf_token" value="<?php echo CSRF::token(); ?>">
                                 <input type="hidden" name="torneo_id" value="<?php echo (int)($torneo['id'] ?? 0); ?>">
+                                <?php if (!$es_modalidad_equipos_o_parejas && !$es_modalidad_parejas_fijas): ?>
+                                <div class="mb-2 text-left">
+                                    <label class="block text-xs font-semibold text-gray-600 mb-1" for="estrategia_ronda2_gen_v">Emparejamiento (individual)</label>
+                                    <select name="estrategia_ronda2" id="estrategia_ronda2_gen_v" class="w-full border border-gray-300 rounded-lg px-2 py-1 text-sm">
+                                        <option value="separar">Clásico: r2 separar líderes; r3+ Suizo</option>
+                                        <option value="club_interclub_rr">Por club: RR compañeros interno; mesa vs otro club</option>
+                                    </select>
+                                </div>
+                                <?php endif; ?>
                                 <button type="submit" id="btn-generar-ronda"
                                         data-btn-reset-html="<?php echo htmlspecialchars(
                                             'Generar Ronda ' . (int)$proximaRonda,
@@ -967,13 +976,14 @@ async function confirmarCierreTorneo(event) {
 // --- Importación masiva ---
 (function() {
     const CAMPOS = ['nacionalidad','cedula','nombre','sexo','fecha_nac','telefono','email','club','organizacion'];
-    const CAMPOS_LABEL = { organizacion: 'Organización' };
+    const CAMPOS_LABEL = { organizacion: 'Organización', club: 'Club (id en tabla clubes o nombre)' };
     const COLORS = { omitir: '#3b82f6', inscribir: '#eab308', crear_inscribir: '#22c55e', error: '#ef4444' };
     const CAMPO_ALIASES = {
         nombre: ['nombre', 'nombres y apellidos', 'nombres', 'nombres y apellido'],
         cedula: ['cedula', 'cédula', 'cedula de identidad'],
+        sexo: ['sexo', 'genero', 'género'],
         organizacion: ['organizacion', 'organización', 'entidad', 'asociacion', 'asociación'],
-        club: ['club', 'club_nombre', 'club nombre']
+        club: ['club', 'id_club', 'id club', 'club_id', 'club id', 'club_nombre', 'club nombre', 'codigo_club', 'club_codigo', 'cod_club', 'codigo club']
     };
     let importMasivaHeaders = [];
     let importMasivaRows = [];

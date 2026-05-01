@@ -49,6 +49,23 @@ final class OpEspecialesHelper
      */
     public static function sincronizarEstadisticasInscritos(int $torneoId): void
     {
+        if (! \function_exists('actualizarEstadisticasInscritos')) {
+            if (! \defined('TORNEO_GESTION_SKIP_AUTH')) {
+                \define('TORNEO_GESTION_SKIP_AUTH', true);
+            }
+            if (! \defined('TORNEO_GESTION_SKIP_ROUTER')) {
+                \define('TORNEO_GESTION_SKIP_ROUTER', true);
+            }
+            $mod = __DIR__ . '/../../modules/torneo_gestion.php';
+            if (\is_readable($mod)) {
+                require_once $mod;
+            }
+        }
+        if (\function_exists('actualizarEstadisticasInscritos')) {
+            actualizarEstadisticasInscritos($torneoId);
+
+            return;
+        }
         $pdo = \DB::pdo();
         $st = $pdo->prepare('SELECT DISTINCT id_usuario FROM inscritos WHERE torneo_id = ? AND estatus != 4');
         $st->execute([$torneoId]);

@@ -8,6 +8,7 @@ require_once __DIR__ . '/MesaAsignacionRoundsTrait.php';
 require_once __DIR__ . '/MesaAsignacionQueueTrait.php';
 require_once __DIR__ . '/MesaAsignacionConflictos1Trait.php';
 require_once __DIR__ . '/MesaAsignacionConflictos2Trait.php';
+require_once __DIR__ . '/MesaAsignacionClubInterclubTrait.php';
 
 /**
  * Algoritmo de asignación de jugadores a mesas (sin HTML; persistencia vía MesaRepository).
@@ -18,6 +19,7 @@ class MesaAsignacionAlgorithm
     use MesaAsignacionQueueTrait;
     use MesaAsignacionConflictos1Trait;
     use MesaAsignacionConflictos2Trait;
+    use MesaAsignacionClubInterclubTrait;
 
     public const JUGADORES_POR_MESA = 4;
 

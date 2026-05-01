@@ -356,9 +356,10 @@ $page_title = 'Op Especiales — ' . htmlspecialchars((string) ($torneo['nombre'
             </div>
           <?php else: ?>
             <div class="mb-2">
-              <label class="form-label">Estrategia ronda 2+ (p/parejas)</label>
+              <label class="form-label">Estrategia emparejamiento (individual / mesas)</label>
               <select name="estrategia_ronda2" class="form-select">
-                <option value="separar">Separar líderes</option>
+                <option value="separar">Clásico — ronda 2: separar líderes; siguientes: Suizo</option>
+                <option value="club_interclub_rr">Interclub — RR de compañeros por club; rivales de otro club</option>
               </select>
             </div>
           <?php endif; ?>

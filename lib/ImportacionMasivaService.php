@@ -39,6 +39,79 @@ class ImportacionMasivaService
     }
 
     /**
+     * Sexo en BD: M, F, O. Acepta códigos numéricos típicos en planillas (1=masculino, 2=femenino).
+     */
+    /**
+     * Unifica el código de club desde planilla: homologación de celda + entero como id de `clubes` ("27.0" / "27,0" de Excel).
+     */
+    public static function normalizarReferenciaClubImport(string $s): string
+    {
+        $s = ClubRepository::sanitizarReferenciaClubImport($s);
+        if ($s === '') {
+            return '';
+        }
+        $probe = str_replace(',', '.', $s);
+        if (!is_numeric($probe)) {
+            return $s;
+        }
+        $f = (float) $probe;
+        if ($f < 1 || $f > PHP_INT_MAX || (int) $f != $f) {
+            return $s;
+        }
+
+        return (string) (int) $f;
+    }
+
+    /**
+     * Mensaje claro cuando no se resolvió el club: distingue id numérico inexistente en la BD de la app
+     * frente a texto, y detecta inconsistencia si el id sí existe al consultar de nuevo.
+     */
+    private static function mensajeErrorClubNoResuelto(PDO $pdo, string $refDesdeFilaNormalizada): string
+    {
+        $limp = ClubRepository::sanitizarReferenciaClubImport(self::asegurarUtf8($refDesdeFilaNormalizada));
+        if ($limp === '') {
+            return 'Club vacío tras homologar el valor de la celda (revise mapeo de columnas).';
+        }
+        $soloId = ctype_digit($limp);
+        if (!$soloId) {
+            return 'Club no encontrado (id numérico en tabla clubes, cod_org o nombre). Valor homologado: ' . $limp;
+        }
+        $id = (int) $limp;
+        $st = $pdo->prepare('SELECT id, nombre FROM clubes WHERE id = ? LIMIT 1');
+        $st->execute([$id]);
+        if ($st->fetch(PDO::FETCH_ASSOC)) {
+            return 'Inconsistencia al resolver club: el id ' . $id . ' existe en clubes en esta conexión, pero la importación no lo reconoció. Recargue (F5) y reintente; si persiste, informe soporte.';
+        }
+
+        return 'No existe club con id ' . $id . ' en la tabla clubes de la base de datos que usa esta aplicación (confirme host/base en config y que coincida con donde vio los ids 27/28). Valor homologado desde archivo: ' . $limp . '.';
+    }
+
+    private static function normalizarSexoImportacion($valor): string
+    {
+        if ($valor === null || $valor === '') {
+            return 'M';
+        }
+        $s = strtoupper(trim((string) $valor));
+        if ($s === '' || $s === '0') {
+            return 'M';
+        }
+        if (in_array($s, ['M', 'F', 'O'], true)) {
+            return $s;
+        }
+        if (in_array($s, ['1', 'H', 'MASCULINO', 'HOMBRE', 'MALE', 'M.', 'VARON', 'VARÓN'], true)) {
+            return 'M';
+        }
+        if (in_array($s, ['2', 'FEMENINO', 'MUJER', 'FEMALE', 'F.'], true)) {
+            return 'F';
+        }
+        if (in_array($s, ['3', 'OTRO', 'OTHER', 'NB', 'X'], true)) {
+            return 'O';
+        }
+
+        return 'M';
+    }
+
+    /**
      * Normaliza y valida una fila para importación.
      * Acepta 'organizacion' o 'entidad' en entrada; internamente se guarda en columna `entidad`.
      * Cédula: solo dígitos (preg_replace residuos invisibles).
@@ -50,30 +123,35 @@ class ImportacionMasivaService
             $s = is_string($v) ? trim($v) : (string) $v;
             return $s;
         };
-        $nacionalidadRaw = $trim($fila['nacionalidad'] ?? '');
+        $nacionalidadRaw = $trim($fila['nacionalidad'] ?? $fila['NACIONALIDAD'] ?? '');
         $nacionalidad = strtoupper($nacionalidadRaw);
         if (!in_array($nacionalidad, ['V', 'E', 'J', 'P'], true)) {
             $nacionalidad = 'V';
         }
-        $cedulaRaw = $trim($fila['cedula'] ?? '');
+        $cedulaRaw = $trim($fila['cedula'] ?? $fila['CEDULA'] ?? $fila['Cédula'] ?? '');
         $cedula = preg_replace('/[^0-9]/', '', $cedulaRaw);
-        $nombre = self::asegurarUtf8($trim($fila['nombre'] ?? ''));
-        $sexo = strtoupper($trim($fila['sexo'] ?? 'M'));
-        if (!in_array($sexo, ['M', 'F', 'O'], true)) {
-            $sexo = 'M';
+        $nombre = self::asegurarUtf8($trim($fila['nombre'] ?? $fila['NOMBRE'] ?? ''));
+        $sexo = self::normalizarSexoImportacion($fila['sexo'] ?? $fila['SEXO'] ?? 'M');
+        $fechnac = $trim($fila['fecha_nac'] ?? $fila['fechnac'] ?? $fila['FECHA_NAC'] ?? $fila['fecha_nacimiento'] ?? '');
+        $telefono = $trim($fila['telefono'] ?? $fila['celular'] ?? $fila['TELEFONO'] ?? '');
+        $email = $trim($fila['email'] ?? $fila['EMAIL'] ?? '');
+        // Prioridad alineada con el panel (campo "club" / id_club); luego códigos alternos.
+        $refClub = $trim($fila['club'] ?? $fila['CLUB'] ?? $fila['id_club'] ?? $fila['ID_CLUB'] ?? $fila['club_id'] ?? $fila['club_nombre'] ?? '');
+        if ($refClub === '') {
+            $refClub = $trim($fila['codigo_club'] ?? $fila['club_codigo'] ?? $fila['cod_club'] ?? '');
         }
-        $fechnac = $trim($fila['fecha_nac'] ?? $fila['fechnac'] ?? '');
-        $telefono = $trim($fila['telefono'] ?? $fila['celular'] ?? '');
-        $email = $trim($fila['email'] ?? '');
-        $clubNombre = $trim($fila['club'] ?? $fila['club_nombre'] ?? '');
-        $organizacion = isset($fila['organizacion']) ? $fila['organizacion'] : (isset($fila['entidad']) ? $fila['entidad'] : null);
+        $refClub = self::normalizarReferenciaClubImport($refClub);
+        $organizacion = $fila['organizacion'] ?? $fila['ORGANIZACION'] ?? $fila['organización'] ?? null;
+        if ($organizacion === null) {
+            $organizacion = $fila['entidad'] ?? $fila['ENTIDAD'] ?? null;
+        }
         $organizacionVal = ($organizacion !== null && $organizacion !== '') ? (int) $organizacion : 0;
 
         $camposObligatorios = [
             'nacionalidad' => $nacionalidadRaw === '' ? 'Nacionalidad' : null,
             'cedula' => ($cedula === '' || strlen($cedula) < 4) ? 'Cedula (min. 4 digitos)' : null,
             'nombre' => ($nombre === '' || strlen($nombre) < 2) ? 'Nombre' : null,
-            'club' => $clubNombre === '' ? 'Club' : null,
+            'club' => $refClub === '' ? 'Club (id en tabla clubes o nombre)' : null,
             'organizacion' => $organizacionVal < 1 ? 'Organizacion' : null,
         ];
         foreach ($camposObligatorios as $campo => $nombreCampo) {
@@ -90,7 +168,7 @@ class ImportacionMasivaService
             'fechnac' => $fechnac,
             'telefono' => $telefono,
             'email' => $email,
-            'club_nombre' => $clubNombre,
+            'club_nombre' => $refClub,
             'entidad' => $organizacionVal,
         ];
         return ['normalized' => $normalized, 'error' => null];
@@ -105,6 +183,7 @@ class ImportacionMasivaService
     {
         $resultado = [];
         $torneoId = (int) $torneoId;
+        $clubRepo = new ClubRepository($pdo);
         foreach ($filas as $idx => $fila) {
             $filaNum = $idx + 1;
             $norm = self::normalizarFila($fila, $filaNum);
@@ -124,17 +203,28 @@ class ImportacionMasivaService
                 continue;
             }
 
+            $refClubVal = self::asegurarUtf8((string) $n['club_nombre']);
+            $idClubArchivo = $clubRepo->resolveFromImportReference($refClubVal);
+            if ($idClubArchivo === null) {
+                $resultado[] = [
+                    'fila' => $filaNum,
+                    'estado' => self::ESTADO_ERROR,
+                    'mensaje' => self::mensajeErrorClubNoResuelto($pdo, (string) $n['club_nombre']),
+                ];
+                continue;
+            }
+
             // b) ¿Existe en usuarios?
             $stmt = $pdo->prepare("SELECT id FROM usuarios WHERE cedula = ? LIMIT 1");
             $stmt->execute([$cedula]);
             if ($stmt->fetch()) {
-                $resultado[] = ['fila' => $filaNum, 'estado' => self::ESTADO_INSCRIBIR, 'mensaje' => 'Usuario existe; se inscribirá'];
+                $resultado[] = ['fila' => $filaNum, 'estado' => self::ESTADO_INSCRIBIR, 'mensaje' => 'Usuario existe; se inscribirá con club del archivo'];
                 continue;
             }
 
-            // c) Todo nuevo: crear usuario e inscribir (Organización y Club ya validados en normalizarFila)
-            if ($n['club_nombre'] === '' || (int) ($n['entidad'] ?? 0) < 1) {
-                $resultado[] = ['fila' => $filaNum, 'estado' => self::ESTADO_ERROR, 'mensaje' => 'Falta Organización o Club (Campos obligatorios)'];
+            // c) Todo nuevo: crear usuario e inscribir
+            if ((int) ($n['entidad'] ?? 0) < 1) {
+                $resultado[] = ['fila' => $filaNum, 'estado' => self::ESTADO_ERROR, 'mensaje' => 'Falta Organización (campo obligatorio)'];
                 continue;
             }
             $resultado[] = ['fila' => $filaNum, 'estado' => self::ESTADO_CREAR_INSCRIBIR, 'mensaje' => 'Se creará usuario e inscribirá'];
@@ -182,31 +272,29 @@ class ImportacionMasivaService
                         continue;
                     }
 
+                    $refClubArchivo = self::asegurarUtf8((string) ($n['club_nombre'] ?? ''));
+                    $idClubTorneo = $clubRepo->resolveFromImportReference($refClubArchivo);
+                    if ($idClubTorneo === null) {
+                        $errores[] = [
+                            'fila' => $filaNum,
+                            'cedula' => $cedula,
+                            'motivo' => self::mensajeErrorClubNoResuelto($pdo, (string) ($n['club_nombre'] ?? '')),
+                        ];
+                        continue;
+                    }
+
                     // b) Buscar en usuarios
                     $stmt = $pdo->prepare("SELECT id, club_id, nombre, sexo FROM usuarios WHERE cedula = ? LIMIT 1");
                     $stmt->execute([$cedula]);
                     $rowUser = $stmt->fetch(PDO::FETCH_ASSOC);
                     $idUsuario = $rowUser ? (int) $rowUser['id'] : null;
-                    $idClubInscrito = $rowUser && !empty($rowUser['club_id']) ? (int) $rowUser['club_id'] : null;
 
                     if ($idUsuario === null) {
-                        // c) Organización y Club obligatorios; el club debe existir (no se crean clubes desde esta importación)
-                        $clubNombre = self::asegurarUtf8($n['club_nombre'] ?? '');
+                        // c) Organización obligatoria; el club viene del archivo (debe existir en BD)
                         $organizacionVal = (int) ($n['entidad'] ?? 0);
-                        if ($clubNombre === '' || $organizacionVal < 1) {
-                            $errores[] = ['fila' => $filaNum, 'cedula' => $cedula, 'motivo' => 'Organizacion/Club obligatorio ausente'];
+                        if ($organizacionVal < 1) {
+                            $errores[] = ['fila' => $filaNum, 'cedula' => $cedula, 'motivo' => 'Organización obligatoria ausente'];
                             continue;
-                        }
-                        $club = $clubRepo->findByName($clubNombre);
-                        if ($club === null) {
-                            $clubById = is_numeric($clubNombre) ? $clubRepo->findById((int) $clubNombre) : null;
-                            if ($clubById === null) {
-                                $errores[] = ['fila' => $filaNum, 'cedula' => $cedula, 'motivo' => 'Club no encontrado (debe existir previamente): ' . $clubNombre];
-                                continue;
-                            }
-                            $idClub = (int) $clubById['id'];
-                        } else {
-                            $idClub = (int) $club['id'];
                         }
 
                         $email = $n['email'] !== '' ? $n['email'] : ('user' . $cedula . '@inscrito.local');
@@ -237,7 +325,7 @@ class ImportacionMasivaService
                             'fechnac' => $fechnac,
                             'email' => $email,
                             'celular' => $n['telefono'],
-                            'club_id' => $idClub,
+                            'club_id' => $idClubTorneo,
                             '_allow_club_for_usuario' => true,
                         ];
                         if ($n['entidad'] !== null && $n['entidad'] > 0) {
@@ -255,7 +343,6 @@ class ImportacionMasivaService
                         }
                         UserActivationHelper::activateUser($pdo, $idUsuario);
                         $nuevos++;
-                        $idClubInscrito = $idClub;
                     } else {
                         // Usuario existente: homologar datos clave desde Excel de inscripción masiva.
                         $nombreExcel = self::asegurarUtf8((string)($n['nombre'] ?? ''));
@@ -274,7 +361,7 @@ class ImportacionMasivaService
                         InscritosHelper::insertarInscrito($pdo, [
                             'id_usuario' => $idUsuario,
                             'torneo_id' => $torneoId,
-                            'id_club' => $idClubInscrito,
+                            'id_club' => $idClubTorneo,
                             'estatus' => 1,
                             'inscrito_por' => $inscritoPor,
                             'numero' => 0,

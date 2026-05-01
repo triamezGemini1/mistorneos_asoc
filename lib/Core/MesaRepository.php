@@ -53,10 +53,11 @@ final class MesaRepository
         $og = InscritosHelper::sqlExprColumnaNumerica('i.ganados');
         $oe = InscritosHelper::sqlExprColumnaNumerica('i.efectividad');
         $op = InscritosHelper::sqlExprColumnaNumerica('i.puntos');
-        $sql = 'SELECT i.*, u.nombre, u.sexo, c.nombre as club_nombre, c.id as club_id
+        $clubIdExpr = 'COALESCE(NULLIF(i.id_club, 0), NULLIF(u.club_id, 0))';
+        $sql = 'SELECT i.*, u.nombre, u.sexo, c.nombre as club_nombre, ' . $clubIdExpr . ' as club_id
                 FROM inscritos i
                 INNER JOIN usuarios u ON i.id_usuario = u.id
-                LEFT JOIN clubes c ON i.id_club = c.id
+                LEFT JOIN clubes c ON c.id = ' . $clubIdExpr . '
                 WHERE i.torneo_id = ? AND ' . InscritosHelper::sqlWhereSoloConfirmadoConAlias('i') . $ent['sql'] . '
                 ORDER BY i.posicion ASC, ' . $og . ' DESC, ' . $oe . ' DESC, ' . $op . ' DESC, i.id_usuario ASC';
         $stmt = $this->pdo->prepare($sql);
@@ -116,12 +117,13 @@ final class MesaRepository
         $byeR1Expr = "(CASE WHEN pr1.id IS NOT NULL AND ({$regPr1}) AND {$ganoR1} AND pr1.mesa = 0 THEN 1 ELSE 0 END)";
         $oe = InscritosHelper::sqlExprColumnaNumerica('i.efectividad');
         $op = InscritosHelper::sqlExprColumnaNumerica('i.puntos');
-        $sql = 'SELECT i.*, u.nombre, u.sexo, c.nombre as club_nombre, c.id as club_id,
+        $clubIdExprR2 = 'COALESCE(NULLIF(i.id_club, 0), NULLIF(u.club_id, 0))';
+        $sql = 'SELECT i.*, u.nombre, u.sexo, c.nombre as club_nombre, ' . $clubIdExprR2 . ' as club_id,
                 ' . $ganadorR1Expr . ' AS ganador_r1,
                 ' . $byeR1Expr . ' AS bye_r1
                 FROM inscritos i
                 INNER JOIN usuarios u ON i.id_usuario = u.id
-                LEFT JOIN clubes c ON i.id_club = c.id
+                LEFT JOIN clubes c ON c.id = ' . $clubIdExprR2 . '
                 LEFT JOIN partiresul pr1 ON pr1.id_torneo = i.torneo_id AND pr1.id_usuario = i.id_usuario AND pr1.partida = 1
                 WHERE i.torneo_id = ? AND ' . InscritosHelper::sqlWhereSoloConfirmadoConAlias('i') . $entI['sql'] . '
                 ORDER BY

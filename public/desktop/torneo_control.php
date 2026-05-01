@@ -100,8 +100,8 @@ require_once __DIR__ . '/desktop_layout.php';
                     <div class="col-md-6" id="wrapEstrategiaIndividual">
                         <label class="form-label fw-bold">Estrategia (individual/parejas)</label>
                         <select name="estrategia_ronda2" class="form-select">
-                            <option value="separar">Separar líderes</option>
-                            <option value="suizo">Suizo</option>
+                            <option value="separar">Separar líderes (+ Suizo en rondas 3+)</option>
+                            <option value="club_interclub_rr">Interclub: RR compañeros por club</option>
                         </select>
                     </div>
                     <div class="col-md-6 d-none" id="wrapEstrategiaEquipos">
