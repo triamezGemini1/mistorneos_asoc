@@ -224,13 +224,19 @@ trait MesaAsignacionClubInterclubTrait
     }
 
     /**
-     * RR de compañeros dentro del club: la lista debe estar ordenada por club + número ({@see compararClubYNumeroEnClub}).
-     * El desplazamiento circular según $roundSeed hace que en rondas sucesivas las parejas rotan (norma Berger/círculo).
+     * Parejas de compañeros dentro del club (torneo por parejas rotadas).
+     * La lista debe estar ordenada por número dentro del club ({@see compararClubYNumeroEnClub}).
      *
-     * @param list<array<string, mixed>> $jugadoresClubOrdenados
+     * La ronda 1 del torneo arma parejas consecutivas 1–2, 3–4, … en {@see construirListaParesIntraClubConsecutivos}.
+     * Desde la ronda 2 se usa el círculo fijando al primer jugador del orden y desplazando el resto:
+     * para 4 jugadores (posiciones 1–4) la secuencia de rondas 2, 3, 4… es (1–3 vs 2–4), (1–4 vs 2–3), (1–2 vs 3–4), y cicla.
+     * El desplazamiento es determinista: número de ronda del torneo mod (n − 1).
+     *
+     * @param list<array<string, mixed>> $jugadoresClubOrdenados jugadores de un solo club, ordenados por número
+     * @param int $numRondaTorneo número de ronda del torneo (≥ 2 cuando se llama desde interclub RR)
      * @return list<array{0: array<string,mixed>, 1: array<string,mixed>}>
      */
-    private function apareamientosCirculoCompanerosClub(array $jugadoresClubOrdenados, int $roundSeed): array
+    private function apareamientosCirculoCompanerosClub(array $jugadoresClubOrdenados, int $numRondaTorneo): array
     {
         $n = count($jugadoresClubOrdenados);
         if ($n < 2 || ($n % 2) !== 0) {
@@ -244,7 +250,7 @@ trait MesaAsignacionClubInterclubTrait
         $circle[] = $jugadoresClubOrdenados[0];
         $rest = array_slice($jugadoresClubOrdenados, 1);
         $rlen = count($rest);
-        $shift = (($roundSeed % $rlen) + $rlen) % $rlen;
+        $shift = (($numRondaTorneo % $rlen) + $rlen) % $rlen;
         for ($i = 0; $i < $rlen; $i++) {
             $circle[] = $rest[($i + $shift) % $rlen];
         }
@@ -465,8 +471,6 @@ trait MesaAsignacionClubInterclubTrait
         }
         ksort($porClub);
 
-        $roundSeed = (($numRonda - 2) * 7937 + $torneoId * 17) % 1000003;
-
         /** @var list<array{p0: array<string,mixed>, p1: array<string,mixed>, club:int}> $listaParObj */
         $listaParObj = [];
         foreach ($porClub as $cid => $jugList) {
@@ -474,8 +478,7 @@ trait MesaAsignacionClubInterclubTrait
                 continue;
             }
             usort($jugList, fn ($a, $b) => $this->compararClubYNumeroEnClub($a, $b));
-            $seedClub = (($roundSeed + (int) $cid * 17) % 10000007);
-            foreach ($this->apareamientosCirculoCompanerosClub($jugList, $seedClub) as $dup) {
+            foreach ($this->apareamientosCirculoCompanerosClub($jugList, $numRonda) as $dup) {
                 $listaParObj[] = [
                     'p0' => $dup[0],
                     'p1' => $dup[1],
