@@ -93,10 +93,12 @@ trait MesaAsignacionLimiteClubMesaTrait
     }
 
     /**
-     * Intenta reducir violaciones del límite de club intercambiando jugadores entre mesas y con la bolsa de rezagados.
+     * Intenta reducir violaciones del límite de club intercambiando **parejas enteras** entre mesas.
+     * Cada mesa es [A, C, B, D]: secuencias 1–2 y 3–4 son compañeros; no se permutan jugadores sueltos
+     * (evita romper parejas tras interclub RR o cualquier ronda con ese layout).
      *
      * @param list<list<array<string, mixed>>> $mesas
-     * @param list<array<string, mixed>> $byePool
+     * @param list<array<string, mixed>> $byePool (no se usa para intercambios; se conserva la integridad de parejas)
      * @param array<int, array<int, true>>|null $matrizCompañeros null = no validar historial de parejas
      */
     private function ajustarMesasMaxDosMismoClub(array &$mesas, array &$byePool, ?array $matrizCompañeros = null): void
@@ -116,15 +118,23 @@ trait MesaAsignacionLimiteClubMesaTrait
                 $mejorAccion = null;
 
                 $nM = count($mesas);
+                /** @var list<int> $bloquesInicio índice 0 = pareja AC (sec. 1–2), 2 = pareja BD (sec. 3–4) */
+                $bloquesInicio = [0, 2];
                 for ($m1 = 0; $m1 < $nM; $m1++) {
-                    for ($p1 = 0; $p1 < 4; $p1++) {
+                    foreach ($bloquesInicio as $b1) {
                         for ($m2 = $m1 + 1; $m2 < $nM; $m2++) {
-                            for ($p2 = 0; $p2 < 4; $p2++) {
+                            foreach ($bloquesInicio as $b2) {
                                 $nm1 = $mesas[$m1];
                                 $nm2 = $mesas[$m2];
-                                $t = $nm1[$p1];
-                                $nm1[$p1] = $nm2[$p2];
-                                $nm2[$p2] = $t;
+                                if (count($nm1) !== 4 || count($nm2) !== 4) {
+                                    continue;
+                                }
+                                $t0 = $nm1[$b1];
+                                $t1 = $nm1[$b1 + 1];
+                                $nm1[$b1] = $nm2[$b2];
+                                $nm1[$b1 + 1] = $nm2[$b2 + 1];
+                                $nm2[$b2] = $t0;
+                                $nm2[$b2 + 1] = $t1;
                                 if (! $this->mesaCumpleMaxDosMismoClub($nm1) || ! $this->mesaCumpleMaxDosMismoClub($nm2)) {
                                     continue;
                                 }
@@ -136,26 +146,8 @@ trait MesaAsignacionLimiteClubMesaTrait
                                 $delta = $viejo - $nuevo;
                                 if ($delta > $mejorDelta) {
                                     $mejorDelta = $delta;
-                                    $mejorAccion = ['t' => 'mm', 'm1' => $m1, 'p1' => $p1, 'm2' => $m2, 'p2' => $p2];
+                                    $mejorAccion = ['m1' => $m1, 'b1' => $b1, 'm2' => $m2, 'b2' => $b2];
                                 }
-                            }
-                        }
-
-                        foreach ($byePool as $bi => $bj) {
-                            $nm1 = $mesas[$m1];
-                            $nm1[$p1] = $bj;
-                            if (! $this->mesaCumpleMaxDosMismoClub($nm1)) {
-                                continue;
-                            }
-                            if (! $soloClub && ! $this->mesaRespetaHistorialParejas($nm1, $matrizCompañeros)) {
-                                continue;
-                            }
-                            $viejo = $this->metricaViolacionClubPorMesa($mesas[$m1]);
-                            $nuevo = $this->metricaViolacionClubPorMesa($nm1);
-                            $delta = $viejo - $nuevo;
-                            if ($delta > $mejorDelta) {
-                                $mejorDelta = $delta;
-                                $mejorAccion = ['t' => 'mb', 'm1' => $m1, 'p1' => $p1, 'bi' => $bi, 'sale' => $mesas[$m1][$p1]];
                             }
                         }
                     }
@@ -164,22 +156,16 @@ trait MesaAsignacionLimiteClubMesaTrait
                 if ($mejorAccion === null || $mejorDelta <= 0) {
                     break;
                 }
-                if ($mejorAccion['t'] === 'mm') {
-                    $m1 = $mejorAccion['m1'];
-                    $p1 = $mejorAccion['p1'];
-                    $m2 = $mejorAccion['m2'];
-                    $p2 = $mejorAccion['p2'];
-                    $tmp = $mesas[$m1][$p1];
-                    $mesas[$m1][$p1] = $mesas[$m2][$p2];
-                    $mesas[$m2][$p2] = $tmp;
-                } else {
-                    $m1 = $mejorAccion['m1'];
-                    $p1 = $mejorAccion['p1'];
-                    $bi = $mejorAccion['bi'];
-                    $sale = $mejorAccion['sale'];
-                    $mesas[$m1][$p1] = $byePool[$bi];
-                    $byePool[$bi] = $sale;
-                }
+                $m1 = $mejorAccion['m1'];
+                $b1 = $mejorAccion['b1'];
+                $m2 = $mejorAccion['m2'];
+                $b2 = $mejorAccion['b2'];
+                $t0 = $mesas[$m1][$b1];
+                $t1 = $mesas[$m1][$b1 + 1];
+                $mesas[$m1][$b1] = $mesas[$m2][$b2];
+                $mesas[$m1][$b1 + 1] = $mesas[$m2][$b2 + 1];
+                $mesas[$m2][$b2] = $t0;
+                $mesas[$m2][$b2 + 1] = $t1;
             }
         }
     }
