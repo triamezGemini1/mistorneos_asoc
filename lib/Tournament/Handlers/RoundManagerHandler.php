@@ -83,7 +83,8 @@ final class RoundManagerHandler
     public static function verificarMesasPendientes(int $torneoId): array
     {
         $pdo = \DB::pdo();
-        $stmt = $pdo->prepare('SELECT MAX(partida) as u FROM partiresul WHERE id_torneo = ?');
+        // Misma semántica que inscripción en sitio / panel: última ronda con mesas reales; CAST evita MAX lexicográfico en partida VARCHAR (p. ej. ronda 10 < ronda 9).
+        $stmt = $pdo->prepare('SELECT COALESCE(MAX(CAST(partida AS UNSIGNED)), 0) FROM partiresul WHERE id_torneo = ? AND mesa > 0');
         $stmt->execute([$torneoId]);
         $ultima_ronda = (int) $stmt->fetchColumn();
 

@@ -63,20 +63,18 @@ $has_panel_context_switch = !empty($context_switcher['items']);
 $paired_tournaments_status = isset($paired_tournaments_status) && is_array($paired_tournaments_status) ? $paired_tournaments_status : ['enabled' => false, 'items' => [], 'bloqueo' => null];
 $bloqueo_cierre_total = $paired_tournaments_status['bloqueo'] ?? null;
 
-// Lógica de bloqueo de inscripciones: equipos, parejas y parejas fijas bloquean desde ronda >=1; otros desde ronda >=2
-$torneo_bloqueado_inscripciones = false;
-if ($ultima_ronda > 0) {
-    $torneo_bloqueado_inscripciones = ($es_modalidad_equipos || $es_modalidad_parejas || $es_modalidad_parejas_fijas) ? ($ultima_ronda >= 1) : ($ultima_ronda >= 2);
-}
-
-// Variables de estado (asegurar que estén disponibles desde view_data después del extract)
-// Nota: Estas variables vienen de obtenerDatosPanel() a través de extract($view_data)
-// Usar variables con diferentes nombres para evitar conflictos con extract()
+// Variables de estado primero (extract puede no definir claves; no usar $ultima_ronda antes de normalizar)
 $ultima_ronda_val = isset($ultima_ronda) && $ultima_ronda !== null ? (int)$ultima_ronda : (isset($ultimaRonda) && $ultimaRonda !== null ? (int)$ultimaRonda : 0);
 $proxima_ronda_val = isset($proxima_ronda) && $proxima_ronda !== null ? (int)$proxima_ronda : (isset($proximaRonda) && $proximaRonda !== null ? (int)$proximaRonda : ($ultima_ronda_val + 1));
 $ultima_ronda = $ultima_ronda_val;
 $proxima_ronda = $proxima_ronda_val;
 $proximaRonda = $proxima_ronda_val;
+
+// Lógica de bloqueo de inscripciones: equipos, parejas y parejas fijas bloquean desde ronda >=1; otros desde ronda >=2
+$torneo_bloqueado_inscripciones = false;
+if ($ultima_ronda > 0) {
+    $torneo_bloqueado_inscripciones = ($es_modalidad_equipos || $es_modalidad_parejas || $es_modalidad_parejas_fijas) ? ($ultima_ronda >= 1) : ($ultima_ronda >= 2);
+}
 $ultima_ronda_tiene_resultados = isset($ultima_ronda_tiene_resultados) ? (bool)$ultima_ronda_tiene_resultados : false;
 $totalRondas = isset($torneo['rondas']) ? (int)$torneo['rondas'] : 0;
 $puede_generar_ronda = isset($puede_generar_ronda) ? (bool)$puede_generar_ronda : (isset($puedeGenerarRonda) ? (bool)$puedeGenerarRonda : true);

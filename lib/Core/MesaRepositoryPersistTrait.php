@@ -226,7 +226,7 @@ trait MesaRepositoryPersistTrait
 
     public function obtenerUltimaRonda(int $torneoId): int
     {
-        $stmt = $this->pdo->prepare('SELECT MAX(partida) as ultima_ronda FROM partiresul WHERE id_torneo = ?');
+        $stmt = $this->pdo->prepare('SELECT COALESCE(MAX(CAST(partida AS UNSIGNED)), 0) AS ultima_ronda FROM partiresul WHERE id_torneo = ? AND mesa > 0');
         $stmt->execute([$torneoId]);
         $result = $stmt->fetch(PDO::FETCH_ASSOC);
 

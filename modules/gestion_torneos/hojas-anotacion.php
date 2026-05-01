@@ -306,7 +306,7 @@ if (!empty($context_switcher['items']) && is_array($context_switcher['items'])) 
         
         .hoja-mesa {
             background: white;
-            border: 2px solid #000;
+            border: none;
             padding: 20px;
             margin-bottom: 30px;
             page-break-after: always;
@@ -564,10 +564,10 @@ if (!empty($context_switcher['items']) && is_array($context_switcher['items'])) 
         /* Espacio para anotar */
         .espacio-anotacion {
             flex: 1;
-            border: 2px solid #000;
-            margin: 20px 0;
+            border: none;
+            margin: 16px 0;
             min-height: 200px;
-            padding: 10px;
+            padding: 4px 0;
         }
         
         .espacio-anotacion-label {
@@ -582,7 +582,7 @@ if (!empty($context_switcher['items']) && is_array($context_switcher['items'])) 
             justify-content: space-between;
             margin-top: auto;
             padding-top: 20px;
-            border-top: 2px solid #000;
+            border-top: none;
         }
         
         .firma-item {
@@ -592,7 +592,7 @@ if (!empty($context_switcher['items']) && is_array($context_switcher['items'])) 
         }
         
         .firma-linea {
-            border-top: 1px solid #000;
+            border-top: none;
             margin-top: 40px;
             padding-top: 5px;
             font-size: 12px;
@@ -729,8 +729,8 @@ if (!empty($context_switcher['items']) && is_array($context_switcher['items'])) 
                     <div class="col-izq col-izq--parejas">
                         <div class="hojas-bloque-pareja">
                             <div class="hojas-pareja-titulo">Pareja <?php echo htmlspecialchars(($letras_secuencia[1] ?? 'A') . '-' . ($letras_secuencia[2] ?? 'C'), ENT_QUOTES, 'UTF-8'); ?></div>
-                            <div class="hojas-pareja-nombre"><?php echo htmlspecialchars($jugador1['nombre_completo'] ?? $jugador1['nombre'] ?? '—', ENT_QUOTES, 'UTF-8'); ?></div>
-                            <div class="hojas-pareja-nombre"><?php echo htmlspecialchars($jugador2['nombre_completo'] ?? $jugador2['nombre'] ?? '—', ENT_QUOTES, 'UTF-8'); ?></div>
+                            <div class="hojas-pareja-nombre"><?php echo htmlspecialchars(GestionTorneosViewsData::prefijoNumeroClubHoja($jugador1) . ($jugador1['nombre_completo'] ?? $jugador1['nombre'] ?? '—'), ENT_QUOTES, 'UTF-8'); ?></div>
+                            <div class="hojas-pareja-nombre"><?php echo htmlspecialchars(GestionTorneosViewsData::prefijoNumeroClubHoja($jugador2) . ($jugador2['nombre_completo'] ?? $jugador2['nombre'] ?? '—'), ENT_QUOTES, 'UTF-8'); ?></div>
                             <div class="hojas-pareja-stats"><?php echo htmlspecialchars(GestionTorneosViewsData::lineaEstadisticasParejaHoja($jugador1, $jugador2), ENT_QUOTES, 'UTF-8'); ?></div>
                             <div class="hojas-pareja-equipo"><?php echo GestionTorneosViewsData::htmlLineaNombreEquipoPareja($jugador1); ?></div>
                         </div>
@@ -745,8 +745,8 @@ if (!empty($context_switcher['items']) && is_array($context_switcher['items'])) 
                     <div class="col-der col-der--parejas">
                         <div class="hojas-bloque-pareja hojas-bloque-pareja--der">
                             <div class="hojas-pareja-titulo">Pareja <?php echo htmlspecialchars(($letras_secuencia[3] ?? 'B') . '-' . ($letras_secuencia[4] ?? 'D'), ENT_QUOTES, 'UTF-8'); ?></div>
-                            <div class="hojas-pareja-nombre"><?php echo htmlspecialchars($jugador3['nombre_completo'] ?? $jugador3['nombre'] ?? '—', ENT_QUOTES, 'UTF-8'); ?></div>
-                            <div class="hojas-pareja-nombre"><?php echo htmlspecialchars($jugador4['nombre_completo'] ?? $jugador4['nombre'] ?? '—', ENT_QUOTES, 'UTF-8'); ?></div>
+                            <div class="hojas-pareja-nombre"><?php echo htmlspecialchars(GestionTorneosViewsData::prefijoNumeroClubHoja($jugador3) . ($jugador3['nombre_completo'] ?? $jugador3['nombre'] ?? '—'), ENT_QUOTES, 'UTF-8'); ?></div>
+                            <div class="hojas-pareja-nombre"><?php echo htmlspecialchars(GestionTorneosViewsData::prefijoNumeroClubHoja($jugador4) . ($jugador4['nombre_completo'] ?? $jugador4['nombre'] ?? '—'), ENT_QUOTES, 'UTF-8'); ?></div>
                             <div class="hojas-pareja-stats"><?php echo htmlspecialchars(GestionTorneosViewsData::lineaEstadisticasParejaHoja($jugador3, $jugador4), ENT_QUOTES, 'UTF-8'); ?></div>
                             <div class="hojas-pareja-equipo"><?php echo GestionTorneosViewsData::htmlLineaNombreEquipoPareja($jugador3); ?></div>
                         </div>
@@ -756,7 +756,7 @@ if (!empty($context_switcher['items']) && is_array($context_switcher['items'])) 
                 <div class="linea-con-qr">
                     <div class="col-izq">
                         <div class="jugador-id-nombre">
-                            <span class="jugador-id"><?php echo $jugador1['id_usuario'] ?? 'N/A'; ?></span>
+                            <span class="jugador-id" title="Nº en club / id"><?php echo htmlspecialchars(GestionTorneosViewsData::numeroClubParaHoja($jugador1), ENT_QUOTES, 'UTF-8'); ?></span>
                             <span class="jugador-nombre"><?php echo htmlspecialchars($jugador1['nombre_completo'] ?? $jugador1['nombre'] ?? 'N/A'); ?> (<?php echo $letras_secuencia[1] ?? 'A'; ?>)</span>
                         </div>
                         <div class="estadisticas estadisticas-solo-izq">
@@ -809,7 +809,7 @@ if (!empty($context_switcher['items']) && is_array($context_switcher['items'])) 
                     </div>
                     <div class="col-der">
                         <div class="jugador-id-nombre">
-                            <span class="jugador-id"><?php echo $jugador3['id_usuario'] ?? 'N/A'; ?></span>
+                            <span class="jugador-id" title="Nº en club / id"><?php echo htmlspecialchars(GestionTorneosViewsData::numeroClubParaHoja($jugador3), ENT_QUOTES, 'UTF-8'); ?></span>
                             <span class="jugador-nombre"><?php echo htmlspecialchars($jugador3['nombre_completo'] ?? $jugador3['nombre'] ?? 'N/A'); ?> (<?php echo $letras_secuencia[3] ?? 'B'; ?>)</span>
                         </div>
                         <div class="estadisticas estadisticas-solo-der">
@@ -863,13 +863,13 @@ if (!empty($context_switcher['items']) && is_array($context_switcher['items'])) 
                 <div class="linea-jugadores">
                     <div class="jugador-izquierda">
                         <div class="jugador-id-nombre">
-                            <span class="jugador-id"><?php echo $jugador2['id_usuario'] ?? 'N/A'; ?></span>
+                            <span class="jugador-id" title="Nº en club / id"><?php echo htmlspecialchars(GestionTorneosViewsData::numeroClubParaHoja($jugador2), ENT_QUOTES, 'UTF-8'); ?></span>
                             <span class="jugador-nombre"><?php echo htmlspecialchars($jugador2['nombre_completo'] ?? $jugador2['nombre'] ?? 'N/A'); ?> (<?php echo $letras_secuencia[2] ?? 'C'; ?>)</span>
                         </div>
                     </div>
                     <div class="jugador-derecha">
                         <div class="jugador-id-nombre">
-                            <span class="jugador-id"><?php echo $jugador4['id_usuario'] ?? 'N/A'; ?></span>
+                            <span class="jugador-id" title="Nº en club / id"><?php echo htmlspecialchars(GestionTorneosViewsData::numeroClubParaHoja($jugador4), ENT_QUOTES, 'UTF-8'); ?></span>
                             <span class="jugador-nombre"><?php echo htmlspecialchars($jugador4['nombre_completo'] ?? $jugador4['nombre'] ?? 'N/A'); ?> (<?php echo $letras_secuencia[4] ?? 'D'; ?>)</span>
                         </div>
                     </div>

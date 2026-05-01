@@ -37,7 +37,7 @@ class GestionTorneosViewsData
         $torneo = $stmt->fetch(PDO::FETCH_ASSOC);
         $es_torneo_equipos = (int)($torneo['modalidad'] ?? 0) === 3;
         $es_torneo_parejas = (int)($torneo['modalidad'] ?? 0) === 2;
-        $stmt = $pdo->prepare("SELECT id_usuario, codigo_equipo, posicion, ganados, perdidos, efectividad, puntos, sancion, tarjeta FROM inscritos WHERE torneo_id = ? ORDER BY posicion ASC");
+        $stmt = $pdo->prepare("SELECT id_usuario, codigo_equipo, posicion, ganados, perdidos, efectividad, puntos, sancion, tarjeta, numero FROM inscritos WHERE torneo_id = ? ORDER BY posicion ASC");
         $stmt->execute([$torneo_id]);
         $inscritos = $stmt->fetchAll(PDO::FETCH_ASSOC);
         $inscritosMap = [];
@@ -72,9 +72,10 @@ class GestionTorneosViewsData
             if (!isset($mesas[$numMesa])) {
                 $mesas[$numMesa] = ['numero' => $numMesa, 'jugadores' => []];
             }
-            $inscritoData = $inscritosMap[$row['id_usuario']] ?? ['posicion' => 0, 'ganados' => 0, 'perdidos' => 0, 'efectividad' => 0, 'puntos' => 0, 'sancion' => 0, 'tarjeta' => 0, 'codigo_equipo' => null];
+            $inscritoData = $inscritosMap[$row['id_usuario']] ?? ['posicion' => 0, 'ganados' => 0, 'perdidos' => 0, 'efectividad' => 0, 'puntos' => 0, 'sancion' => 0, 'tarjeta' => 0, 'codigo_equipo' => null, 'numero' => null];
             $row['tarjeta'] = (int)($inscritoData['tarjeta'] ?? 0);
-            $row['inscrito'] = ['posicion' => (int)$inscritoData['posicion'], 'ganados' => (int)$inscritoData['ganados'], 'perdidos' => (int)$inscritoData['perdidos'], 'efectividad' => (int)$inscritoData['efectividad'], 'puntos' => (int)$inscritoData['puntos'], 'sancion' => (int)$inscritoData['sancion'], 'tarjeta' => (int)$inscritoData['tarjeta']];
+            $numClub = isset($inscritoData['numero']) && $inscritoData['numero'] !== null && $inscritoData['numero'] !== '' ? (int)$inscritoData['numero'] : 0;
+            $row['inscrito'] = ['posicion' => (int)$inscritoData['posicion'], 'ganados' => (int)$inscritoData['ganados'], 'perdidos' => (int)$inscritoData['perdidos'], 'efectividad' => (int)$inscritoData['efectividad'], 'puntos' => (int)$inscritoData['puntos'], 'sancion' => (int)$inscritoData['sancion'], 'tarjeta' => (int)$inscritoData['tarjeta'], 'numero' => $numClub];
             $codigoEquipo = $row['codigo_equipo'] ?? $inscritoData['codigo_equipo'] ?? null;
             if (($es_torneo_equipos || $es_torneo_parejas) && $codigoEquipo && isset($equiposMap[$codigoEquipo])) {
                 $row['nombre_equipo'] = $equiposMap[$codigoEquipo]['nombre_equipo'];
@@ -159,5 +160,34 @@ class GestionTorneosViewsData
             }
         }
         return $club;
+    }
+
+    /**
+     * Número interno en el club/torneo (`inscritos.numero`: consecutivo por club, pareja, etc.).
+     * Si no hay valor, se muestra el id de usuario como respaldo (compatibilidad).
+     */
+    public static function numeroClubParaHoja(?array $jugador): string
+    {
+        if (!$jugador) {
+            return 'N/A';
+        }
+        $n = (int)($jugador['inscrito']['numero'] ?? 0);
+        if ($n > 0) {
+            return (string) $n;
+        }
+        $id = (int)($jugador['id_usuario'] ?? 0);
+
+        return $id > 0 ? (string) $id : 'N/A';
+    }
+
+    /** Prefijo opcional «Nº X · » para líneas de nombre en hoja (solo si `inscritos.numero` > 0). */
+    public static function prefijoNumeroClubHoja(?array $jugador): string
+    {
+        if (!$jugador) {
+            return '';
+        }
+        $n = (int)($jugador['inscrito']['numero'] ?? 0);
+
+        return $n > 0 ? 'Nº ' . $n . ' · ' : '';
     }
 }
