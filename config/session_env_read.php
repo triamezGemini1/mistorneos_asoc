@@ -9,8 +9,8 @@ function session_read_lifetime_from_env(): array {
         'cookie' => 28800,
         'name' => 'mistorneos_session',
         'cookie_domain' => '',
-        'regenerate_after' => 28800,
-    ]; // 8 h por defecto
+        'regenerate_after' => 0,
+    ]; // regenerate_after 0 = sin session_regenerate_id periódico (estable en API/fetch)
     $envFile = dirname(__DIR__) . '/.env';
     if (!is_readable($envFile)) {
         return $defaults;
@@ -19,18 +19,20 @@ function session_read_lifetime_from_env(): array {
     $cookie = 0;
     $sessionName = '';
     $cookieDomain = '';
-    $regenerateAfter = max(3600, $defaults['gc']);
+    $regenerateAfter = 0;
     $regenerateFromEnv = false;
     $appEnv = '';
     foreach (file($envFile, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES) as $line) {
+        // BOM UTF-8 al inicio del archivo o línea rompe ^APP_ENV / ^SESSION_
+        $line = preg_replace('/^\xEF\xBB\xBF/', '', (string) $line);
         $line = trim($line);
         if ($line === '' || $line[0] === '#') {
             continue;
         }
-        if (preg_match('/^APP_ENV\s*=\s*(\w+)/i', $line, $m)) {
+        if (preg_match('/^APP_ENV\s*=\s*"?([\w\-]+)"?\s*$/i', $line, $m)) {
             $appEnv = strtolower(trim((string) $m[1]));
         }
-        if (preg_match('/^SESSION_NAME\s*=\s*([A-Za-z0-9_\-]+)/', $line, $m)) {
+        if (preg_match('/^SESSION_NAME\s*=\s*"?([A-Za-z0-9_\-]+)"?\s*$/', $line, $m)) {
             $sessionName = trim((string) $m[1]);
         }
         if (preg_match('/^SESSION_GC_MAXLIFETIME\s*=\s*(\d+)/', $line, $m)) {
@@ -71,7 +73,7 @@ function session_read_lifetime_from_env(): array {
         }
     }
     if (!$regenerateFromEnv) {
-        $regenerateAfter = max(3600, $gc); // alinear con GC (antes: 1800 s rompía sesión en XHR/subcarpeta)
+        $regenerateAfter = 0; // por defecto desactivado (evita pérdida de sesión en producción / otro navegador)
     }
 
     return [

@@ -3,7 +3,7 @@ declare(strict_types=1);
 
 /**
  * API: Parsea archivo de importación (.xlsx, .xls, .xlsm, .csv).
- * Excel: PhpSpreadsheet (composer). CSV: nativo.
+ * Usa el mismo lector que la carga masiva de equipos (CargaMasivaEquiposSitioService).
  */
 
 require_once __DIR__ . '/../../config/session_start_early.php';
@@ -11,6 +11,7 @@ require_once __DIR__ . '/../../config/bootstrap.php';
 require_once __DIR__ . '/../../config/db_config.php';
 require_once __DIR__ . '/../../config/csrf.php';
 require_once __DIR__ . '/../../config/auth.php';
+require_once __DIR__ . '/../../lib/CargaMasivaEquiposSitioService.php';
 
 header('Content-Type: application/json; charset=utf-8');
 
@@ -137,82 +138,19 @@ try {
     @ini_set('memory_limit', '256M');
     @set_time_limit(180);
 
-    $headers = [];
-    $rows = [];
-
-    if ($ext === 'csv') {
-        $content = file_get_contents($tmpPath);
-        $content = $asegurarUtf8($content) ?: $content;
-        $lines = preg_split('/\r\n|\r|\n/', $content);
-        $numHeaders = 0;
-        foreach ($lines as $i => $line) {
-            $cells = str_getcsv($line, ';');
-            if (strpos($line, ',') !== false && (count($cells) === 1 || count($cells) < 3)) {
-                $cells = str_getcsv($line, ',');
-            }
-            $cells = array_map(static function ($c) use ($asegurarUtf8) {
-                return $asegurarUtf8($c);
-            }, $cells);
-            if ($i === 0) {
-                $headers = $cells;
-                $numHeaders = count($headers);
-            } else {
-                while (count($cells) < $numHeaders) {
-                    $cells[] = '';
-                }
-                $rows[] = array_slice($cells, 0, $numHeaders);
-            }
+    $errLectura = null;
+    $allRows = CargaMasivaEquiposSitioService::leerFilasImportacionMasivaIndividual($tmpPath, $name, $errLectura);
+    if ($allRows === []) {
+        $msg = 'No se pudo leer el archivo o no tiene filas.';
+        if ($errLectura !== null && $errLectura !== '') {
+            $msg .= ' ' . $errLectura;
+        } elseif (in_array($ext, ['xlsx', 'xlsm', 'xls'], true)) {
+            $msg .= ' Si es Excel: use .xlsx, primera hoja con datos, o guarde como CSV UTF-8. En el servidor hace falta PhpSpreadsheet (composer install) para .xls/.xlsx/.xlsm.';
         }
-    } elseif (in_array($ext, ['xlsx', 'xlsm', 'xls'], true)) {
-        $autoload = dirname(__DIR__, 2) . '/vendor/autoload.php';
-        if (is_readable($autoload)) {
-            require_once $autoload;
-            if (class_exists('\PhpOffice\PhpSpreadsheet\IOFactory')) {
-                $spreadsheet = \PhpOffice\PhpSpreadsheet\IOFactory::load($tmpPath);
-                $sheet = $spreadsheet->getActiveSheet();
-                $allRows = $sheet->toArray(null, true, true, false);
-                if (!is_array($allRows)) {
-                    $allRows = [];
-                }
-                [$headers, $rows] = extract_headers_and_data_rows($allRows, $asegurarUtf8);
-            } elseif ($ext === 'xls') {
-                require_once __DIR__ . '/../../libs/SimpleXLS.php';
-                $xls = SimpleXLS::parse($tmpPath);
-                if (!$xls) {
-                    $err = SimpleXLS::parseError();
-                    throw new RuntimeException($err ?: 'Error al leer el archivo .xls');
-                }
-                $xls->setOutputEncoding('UTF-8');
-                $allRows = $xls->rows(0);
-                if (empty($allRows) || !is_array($allRows)) {
-                    throw new RuntimeException('El archivo no contiene filas');
-                }
-                [$headers, $rows] = extract_headers_and_data_rows($allRows, $asegurarUtf8);
-            } else {
-                throw new RuntimeException('Falta PhpSpreadsheet en este servidor. Ejecute: composer install (raíz del proyecto) para habilitar .xlsx/.xlsm');
-            }
-        } elseif ($ext === 'xls') {
-            require_once __DIR__ . '/../../libs/SimpleXLS.php';
-            $xls = SimpleXLS::parse($tmpPath);
-            if (!$xls) {
-                $err = SimpleXLS::parseError();
-                throw new RuntimeException($err ?: 'Error al leer el archivo .xls');
-            }
-            $xls->setOutputEncoding('UTF-8');
-            $allRows = $xls->rows(0);
-            if (empty($allRows) || !is_array($allRows)) {
-                throw new RuntimeException('El archivo no contiene filas');
-            }
-            [$headers, $rows] = extract_headers_and_data_rows($allRows, $asegurarUtf8);
-        } else {
-            throw new RuntimeException(
-                'Para abrir archivos .xlsx / .xlsm instale las dependencias en el servidor: en la carpeta del proyecto ejecute composer install'
-            );
-        }
-    } else {
-        echo json_encode(['success' => false, 'error' => 'Formato no reconocido']);
-        exit;
+        throw new RuntimeException($msg);
     }
+
+    [$headers, $rows] = extract_headers_and_data_rows($allRows, $asegurarUtf8);
 
     echo json_encode([
         'success' => true,

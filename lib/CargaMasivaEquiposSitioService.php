@@ -842,7 +842,7 @@ final class CargaMasivaEquiposSitioService
             }
             return self::normalizarFilasUtf8($rows);
         }
-        if (in_array($ext, ['xlsx'], true)) {
+        if (in_array($ext, ['xlsx', 'xlsm'], true)) {
             require_once __DIR__ . '/CargaMasivaXlsxReader.php';
             $rows = CargaMasivaXlsxReader::leerHojas($path);
             if ($rows !== []) {
@@ -910,8 +910,18 @@ final class CargaMasivaEquiposSitioService
             $errorDetalle = 'Archivo .xls requiere PhpSpreadsheet (ejecute composer install). Guarde en Excel como .xlsx o CSV.';
             return [];
         }
-        $errorDetalle = 'Extensión no soportada para lectura directa. Use .xlsx, .csv o .txt.';
+        $errorDetalle = 'Extensión no soportada para lectura directa. Use .xlsx, .xlsm, .csv o .txt.';
         return [];
+    }
+
+    /**
+     * Lectura de planilla para importación masiva individual (torneo): mismo motor que carga masiva de equipos (UTF-8, delimitadores, Xlsx nativo/PhpSpreadsheet).
+     *
+     * @return list<list<string>>
+     */
+    public static function leerFilasImportacionMasivaIndividual(string $tmpPath, string $originalName, ?string &$errorDetalle = null): array
+    {
+        return self::leerFilasDesdeArchivo($tmpPath, $originalName, $errorDetalle);
     }
 
     private static function mapearCabeceras(array $header): array

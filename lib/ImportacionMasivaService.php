@@ -10,6 +10,7 @@ declare(strict_types=1);
 require_once __DIR__ . '/InscritosHelper.php';
 require_once __DIR__ . '/UserActivationHelper.php';
 require_once __DIR__ . '/security.php';
+require_once __DIR__ . '/CargaMasivaEquiposSitioService.php';
 require_once __DIR__ . '/Repository/ClubRepository.php';
 
 use Lib\Repository\ClubRepository;
@@ -24,18 +25,11 @@ class ImportacionMasivaService
     public const TAMANO_LOTE = 20;
 
     /**
-     * Asegura que una cadena esté en UTF-8 (evita Mojibake en reportes).
+     * Mismo criterio UTF-8/BOM que la carga masiva de equipos (CargaMasivaEquiposSitioService::normalizarTextoUtf8).
      */
     private static function asegurarUtf8(string $s): string
     {
-        if ($s === '') {
-            return $s;
-        }
-        $enc = mb_detect_encoding($s, ['UTF-8', 'ISO-8859-1', 'Windows-1252'], true);
-        if ($enc && $enc !== 'UTF-8') {
-            $s = mb_convert_encoding($s, 'UTF-8', $enc);
-        }
-        return $s;
+        return CargaMasivaEquiposSitioService::normalizarTextoUtf8($s);
     }
 
     /**

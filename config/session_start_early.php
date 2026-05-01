@@ -17,7 +17,19 @@ ini_set('session.gc_maxlifetime', (string) $sessionTimes['gc']);
 
 // Usar path='/' para que la cookie se envíe en toda la ruta (evita pérdida de sesión en subcarpetas tipo /mistorneos_beta/public/)
 $path = '/';
-$secure = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') || (!empty($_SERVER['HTTP_X_FORWARDED_PROTO']) && $_SERVER['HTTP_X_FORWARDED_PROTO'] === 'https');
+// Cookie Secure: obligatorio en HTTPS; tras proxy/Nginx a veces solo viene X-Forwarded-Proto (sin HTTPS=on).
+$secure = false;
+if (!empty($_SERVER['HTTPS']) && strtolower((string) $_SERVER['HTTPS']) !== 'off') {
+    $secure = true;
+} elseif (!empty($_SERVER['HTTP_X_FORWARDED_PROTO']) && strtolower((string) $_SERVER['HTTP_X_FORWARDED_PROTO']) === 'https') {
+    $secure = true;
+} elseif (!empty($_SERVER['HTTP_X_FORWARDED_SSL']) && (string) $_SERVER['HTTP_X_FORWARDED_SSL'] === 'on') {
+    $secure = true;
+} elseif ((int) ($_SERVER['SERVER_PORT'] ?? 0) === 443) {
+    $secure = true;
+} elseif (!empty($_SERVER['HTTP_FRONT_END_HTTPS']) && strtolower((string) $_SERVER['HTTP_FRONT_END_HTTPS']) === 'on') {
+    $secure = true;
+}
 $cookieDomain = isset($sessionTimes['cookie_domain']) ? (string) $sessionTimes['cookie_domain'] : '';
 session_set_cookie_params([
     'lifetime' => $sessionTimes['cookie'],
