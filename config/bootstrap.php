@@ -93,32 +93,17 @@ if (!defined('URL_BASE')) {
 }
 
 // =================================================================
-// CONFIGURACIÓN DE SESIONES SEGURAS (anclaje a URL_BASE)
+// SESIÓN: una sola fuente de verdad (session_start_early.php: path '/', nombre y tiempos desde .env).
+// Scripts que solo incluían bootstrap (p. ej. public/api/index.php) abrían sesión con path=URL_BASE y
+// lifetime=0, distinto de login/index → cookie distinta / sesión vacía en fetch ("Sesión expirada").
 // =================================================================
-// path: debe coincidir con la URL real (ej. /pruebas/public/) para que la cookie no se pierda.
 if (session_status() === PHP_SESSION_ACTIVE && (getenv('SESSION_DEBUG') || defined('SESSION_DEBUG'))) {
-    error_log('[SESSION_DEBUG] bootstrap.php | sesión ya activa (session_start_early), no se inicia de nuevo | id=' . session_id());
+    error_log('[SESSION_DEBUG] bootstrap.php | sesión ya activa | id=' . session_id());
 }
 if (session_status() === PHP_SESSION_NONE && !headers_sent()) {
-    $cookie_path = (URL_BASE !== '' && URL_BASE !== '/') ? URL_BASE : '/';
-    session_set_cookie_params([
-        'lifetime' => 0, // Sesión expira al cerrar el navegador
-        'path' => $cookie_path,
-        'domain' => '', // Usar dominio actual
-        'secure' => $is_https, // Solo enviar cookies por HTTPS en producción
-        'httponly' => true, // Prevenir acceso desde JavaScript (protección XSS)
-        'samesite' => 'Lax' // Protección CSRF moderada
-    ]);
-    
-    session_name($GLOBALS['APP_CONFIG']['security']['session_name']);
-    session_start();
-    
-    // Regenerar ID de sesión periódicamente para prevenir session fixation
-    if (!isset($_SESSION['created'])) {
-        $_SESSION['created'] = time();
-    } elseif (time() - $_SESSION['created'] > 1800) { // 30 minutos
-        session_regenerate_id(true);
-        $_SESSION['created'] = time();
+    require_once __DIR__ . '/session_start_early.php';
+    if (session_status() === PHP_SESSION_NONE) {
+        error_log('[SESSION] bootstrap.php: session_start_early no dejó sesión activa (¿headers enviados antes?).');
     }
 }
 
