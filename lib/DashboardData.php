@@ -152,10 +152,13 @@ class DashboardData
                 if (function_exists('session_write_close')) {
                     session_write_close();
                 }
+                require_once __DIR__ . '/OrganizacionesData.php';
+                $entidadId = (int)($current_user['entidad'] ?? 0);
+                $atletasEntidad = OrganizacionesData::loadAtletasStats($entidadId > 0 ? $entidadId : null);
                 $admin_club_stats = StatisticsHelper::generateStatistics();
                 if (!isset($admin_club_stats['error'])) {
                     $result['admin_club_stats'] = $admin_club_stats;
-                    $result['stats'] = [
+                    $result['stats'] = array_merge([
                         'clubs' => (int)($admin_club_stats['total_clubes'] ?? 0),
                         'tournaments' => (int)($admin_club_stats['total_torneos'] ?? 0),
                         'registrants' => (int)($admin_club_stats['total_inscritos'] ?? 0),
@@ -163,7 +166,7 @@ class DashboardData
                         'active_tournaments' => (int)($admin_club_stats['torneos_activos'] ?? 0),
                         'pending_payments' => 0,
                         'total_revenue' => 0,
-                    ];
+                    ], $atletasEntidad);
                     $torneos_list = $admin_club_stats['torneos'] ?? [];
                 } else {
                     $result['admin_clubs_stats_error'] = $admin_club_stats['error'];
@@ -176,10 +179,11 @@ class DashboardData
             }
 
             if ($user_role === 'admin_general') {
+                require_once __DIR__ . '/OrganizacionesData.php';
                 $agStats = self::loadStatsAdminGeneral($entidad_map);
                 $result['admin_clubs_list'] = $agStats['_admin_clubs_list'] ?? [];
                 unset($agStats['_admin_clubs_list']);
-                $result['stats'] = array_merge($result['stats'], $agStats);
+                $result['stats'] = array_merge($result['stats'], $agStats, OrganizacionesData::loadAtletasStats(null));
                 $result['torneos_por_entidad_ag'] = self::loadTorneosPorEntidad($entidad_map);
                 $result['torneos_linea_ag'] = self::flattenTorneosLinea($result['torneos_por_entidad_ag']);
             }
@@ -430,7 +434,7 @@ class DashboardData
                    (SELECT COUNT(*) FROM tournaments t WHERE t.club_responsable = COALESCE(c.cod_org, c.id) AND t.estatus = 1) as torneos_count,
                    (SELECT COUNT(*) FROM inscritos i INNER JOIN tournaments t ON i.torneo_id = t.id WHERE t.club_responsable = COALESCE(c.cod_org, c.id)) as inscritos_count
             FROM clubes c
-            LEFT JOIN usuarios u ON u.club_id = c.id AND u.role = 'usuario' AND u.status = 0
+            LEFT JOIN usuarios u ON u.entidad = c.id
             WHERE c.id IN ($ph)
             GROUP BY c.id, c.nombre, c.cod_org
             ORDER BY c.nombre ASC

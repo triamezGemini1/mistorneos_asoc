@@ -65,12 +65,12 @@ try {
         $mensaje .= "✅ Crear clubes asociados\n\n";
         $mensaje .= "━━━━━━━━━━━━━━━━━━\n\n";
         $mensaje .= "🌐 *Ingresa al sistema:*\n";
-        $mensaje .= (($_ENV['APP_URL'] ?? 'http://localhost/mistorneos') . "/public/login.php") . "\n\n";
+        $mensaje .= (($_ENV['APP_URL'] ?? 'http://localhost/mistorneos_fvd') . "/public/login.php") . "\n\n";
         $mensaje .= "━━━━━━━━━━━━━━━━━━\n";
         $mensaje .= "📖 *MANUAL DE USUARIO*\n";
         $mensaje .= "━━━━━━━━━━━━━━━━━━\n\n";
         $mensaje .= "📚 Consulta el manual completo con todas las funcionalidades:\n";
-        $app_url = $_ENV['APP_URL'] ?? 'http://localhost/mistorneos';
+        $app_url = $_ENV['APP_URL'] ?? 'http://localhost/mistorneos_fvd';
         $manual_url = rtrim($app_url, '/') . '/manuales_web/manual_usuario.php';
         $mensaje .= $manual_url . "\n\n";
         $mensaje .= "⚠️ *Nota:* El manual solo está disponible para usuarios registrados. Debes iniciar sesión para acceder.\n\n";

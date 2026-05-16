@@ -349,7 +349,9 @@ if ($is_admin_general) {
                                 <div class="mt-3">
                                     <?php
                                     $base_ins = function_exists('app_base_url') ? rtrim(app_base_url(), '/') . '/public' : '';
-                                    $url_panel_ins = ($base_ins !== '' ? $base_ins . '/' : '') . 'index.php?page=torneo_gestion&action=panel&torneo_id=' . (int)$torneo_id;
+                                    $url_panel_ins = class_exists('AppHelpers')
+                                        ? AppHelpers::urlPanelTorneoReturn((int) $torneo_id)
+                                        : (($base_ins !== '' ? $base_ins . '/' : '') . 'index.php?page=torneo_gestion&action=panel&torneo_id=' . (int) $torneo_id);
                                     ?>
                                     <a href="<?= htmlspecialchars($url_panel_ins) ?>" class="btn btn-secondary"><i class="fas fa-times me-2"></i>Volver al panel</a>
                                 </div>
@@ -477,12 +479,17 @@ document.addEventListener('DOMContentLoaded', function() {
         formData.append('torneo_id', TORNEOS_ID);
         formData.append('id_usuario', idUsuario);
         if (clubId) formData.append('id_club', clubId);
-        formData.append('estatus', '1');
+        formData.append('estatus', '0');
         formData.append('csrf_token', CSRF_TOKEN);
         rowElement.style.opacity = '0.5';
         rowElement.style.pointerEvents = 'none';
-        fetch(API_URL, { method: 'POST', body: formData })
-            .then(function(r) { return r.json(); })
+        fetch(API_URL, { method: 'POST', body: formData, credentials: 'same-origin' })
+            .then(function(r) {
+                return r.text().then(function(t) {
+                    if (!r.ok) throw new Error(t || ('Error ' + r.status));
+                    try { return JSON.parse(t); } catch (e) { throw new Error(t && t.length < 300 ? t.replace(/<[^>]+>/g,' ').trim() : 'Respuesta no JSON'); }
+                });
+            })
             .then(function(data) {
                 rowElement.style.opacity = '1';
                 rowElement.style.pointerEvents = 'auto';
@@ -500,7 +507,7 @@ document.addEventListener('DOMContentLoaded', function() {
             .catch(function(err) {
                 rowElement.style.opacity = '1';
                 rowElement.style.pointerEvents = 'auto';
-                showMessage('Error al inscribir jugador: ' + err.message, 'danger');
+                showMessage('Error al inscribir jugador: ' + (err.message || err), 'danger');
             });
     }
     function desinscribirJugador(idUsuario, nombre, cedula, clubId, rowElement) {
@@ -512,8 +519,13 @@ document.addEventListener('DOMContentLoaded', function() {
         formData.append('csrf_token', CSRF_TOKEN);
         rowElement.style.opacity = '0.5';
         rowElement.style.pointerEvents = 'none';
-        fetch(API_URL, { method: 'POST', body: formData })
-            .then(function(r) { return r.json(); })
+        fetch(API_URL, { method: 'POST', body: formData, credentials: 'same-origin' })
+            .then(function(r) {
+                return r.text().then(function(t) {
+                    if (!r.ok) throw new Error(t || ('Error ' + r.status));
+                    try { return JSON.parse(t); } catch (e) { throw new Error(t && t.length < 300 ? t.replace(/<[^>]+>/g,' ').trim() : 'Respuesta no JSON'); }
+                });
+            })
             .then(function(data) {
                 rowElement.style.opacity = '1';
                 rowElement.style.pointerEvents = 'auto';

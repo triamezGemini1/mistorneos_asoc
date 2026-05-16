@@ -32,7 +32,7 @@ $error_message = '';
 
 try {
     if (!$club_id_to_use) {
-        throw new Exception('No tienes un club asignado. Selecciona un club desde Clubes de la organización.');
+        throw new Exception('No tienes una asociación asignada. Selecciónala en Asociaciones de la organización.');
     }
     
     $stmt = DB::pdo()->prepare("SELECT * FROM clubes WHERE id = ? AND estatus = 1");
@@ -48,7 +48,7 @@ try {
 }
 
 // Generar link de invitación
-$app_url = $_ENV['APP_URL'] ?? 'http://localhost/mistorneos';
+$app_url = $_ENV['APP_URL'] ?? 'http://localhost/mistorneos_fvd';
 $invitation_link = $app_url . "/public/register_by_club.php?club_id=" . $club_id_to_use;
 $admin_nombre = $current_user['nombre'] ?? $current_user['username'] ?? 'Administrador';
 

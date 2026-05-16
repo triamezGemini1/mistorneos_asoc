@@ -52,6 +52,27 @@
     var formNuevo = null;
     var usuarioEncontrado = null;
 
+    /** Evita "Unexpected token '<'" cuando el servidor devuelve HTML por un error PHP. */
+    function parseJsonResponse(r) {
+        return r.text().then(function (text) {
+            var trimmed = (text || '').trim();
+            if (!r.ok) {
+                throw new Error(trimmed.length > 0 && trimmed.length < 300 ? trimmed.replace(/<[^>]+>/g, ' ').trim() : ('Error HTTP ' + r.status));
+            }
+            if (trimmed === '') {
+                return {};
+            }
+            if (trimmed.charAt(0) !== '{' && trimmed.charAt(0) !== '[') {
+                throw new Error(trimmed.length < 300 ? trimmed.replace(/<[^>]+>/g, ' ').trim() : 'Respuesta no válida del servidor.');
+            }
+            try {
+                return JSON.parse(trimmed);
+            } catch (e) {
+                throw new Error('Respuesta no válida del servidor (JSON).');
+            }
+        });
+    }
+
     function cacheRefs() {
         mensajeForm = document.getElementById('mensaje_formulario_cedula');
         resultadoBusqueda = document.getElementById('resultado_busqueda');
@@ -214,7 +235,7 @@
         }
 
         fetch(url)
-            .then(function (r) { return r.json(); })
+            .then(parseJsonResponse)
             .then(function (data) {
                 isSearching = false;
                 busquedaEnCurso = false;
@@ -362,7 +383,7 @@
         if (btn) btn.disabled = true;
 
         fetch(API_URL, { method: 'POST', body: fd })
-            .then(function (r) { return r.json(); })
+            .then(parseJsonResponse)
             .then(function (data) {
                 if (btn) btn.disabled = false;
                 if (data.success) {
@@ -463,7 +484,7 @@
         if (btn) btn.disabled = true;
 
         fetch(API_URL, { method: 'POST', body: fd })
-            .then(function (r) { return r.json(); })
+            .then(parseJsonResponse)
             .then(function (data) {
                 if (btn) btn.disabled = false;
                 if (data.success) {

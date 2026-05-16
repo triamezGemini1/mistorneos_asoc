@@ -114,7 +114,7 @@ if ($usuario) {
     }
 }
 
-// Clubes de la organización (para formulario de registro+inscripción)
+// Asociaciones de la organización (para formulario de registro+inscripción)
 $clubes_organizacion = [];
 $mostrar_form_registro = !$usuario && isset($_GET['registrarse']) && $_GET['registrarse'] == '1';
 
@@ -240,7 +240,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
                 'torneo_id' => $torneo_id,
                 'id_club' => $club_id,
                 'estatus' => 0, // pendiente: formalizar con pago o en sitio
-                'inscrito_por' => $nuevo_user_id,
+                'inscrito_por' => FvdConfig::INSCRITO_POR_LANDING_PUBLICO,
                 'numero' => 0
             ]);
             if (file_exists(__DIR__ . '/../lib/UserActivationHelper.php')) {
@@ -300,13 +300,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
         $pdo->beginTransaction();
         
         // Obtener club del usuario (refrescar desde BD para tener afiliación actualizada)
-        $stmt_u = $pdo->prepare("SELECT id, club_id FROM usuarios WHERE id = ?");
-        $stmt_u->execute([$usuario['id']]);
-        $usuario_actual = $stmt_u->fetch(PDO::FETCH_ASSOC);
-        $club_id = !empty($usuario_actual['club_id']) && (int)$usuario_actual['club_id'] > 0
-            ? (int)$usuario_actual['club_id'] : null;
+        require_once __DIR__ . '/../lib/AsociacionAdminHelper.php';
+        $club_post = (int) ($_POST['club_id'] ?? 0);
+        $club_id = AsociacionAdminHelper::resolverIdClubInscripcion(
+            $pdo,
+            (int) $usuario['id'],
+            (int) ($usuario['id'] ?? 0),
+            $club_post > 0 ? $club_post : null,
+            null,
+            null
+        );
         if (!$club_id) {
-            throw new Exception('No tienes un club asignado. Contacta al administrador.');
+            throw new Exception('Debe seleccionar su asociación/club o tener uno asignado en su perfil.');
         }
         
         // Insertar inscripción usando función centralizada
@@ -317,7 +322,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
             'torneo_id' => $torneo_id,
             'id_club' => $club_id,
             'estatus' => 0, // pendiente: formalizar con pago o en sitio
-            'inscrito_por' => $usuario['id'],
+            'inscrito_por' => FvdConfig::INSCRITO_POR_LANDING_PUBLICO,
             'numero' => 0
         ]);
         if (file_exists(__DIR__ . '/../lib/UserActivationHelper.php')) {
@@ -351,7 +356,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
                     $telefono = '58' . $telefono;
                 }
                 
-                $app_url = $_ENV['APP_URL'] ?? (function_exists('app_base_url') ? app_base_url() : 'https://laestaciondeldomino.com/mistorneos');
+                $app_url = $_ENV['APP_URL'] ?? (function_exists('app_base_url') ? app_base_url() : FvdConfig::resolveAppUrl());
                 $pago_link = $app_url . "/public/report_payment.php?payment_id=" . $payment_id;
                 
                 $mensaje = "✅ *INSCRIPCIÓN EXITOSA*\n\n";

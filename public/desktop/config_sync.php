@@ -4,8 +4,8 @@
  * SYNC_API_KEY debe coincidir con el .env del proyecto.
  * SYNC_PUSH_URL = endpoint que recibe POST con jugadores (export_to_web.php).
  */
-define('SYNC_WEB_URL', 'https://laestaciondeldominohoy.com/mistorneos/public/api/fetch_jugadores.php');
-define('SYNC_PUSH_URL', 'https://laestaciondeldominohoy.com/mistorneos/public/api/sync_api.php');
+define('SYNC_WEB_URL', 'https://laestaciondeldominohoy.com/mistorneos_fvd/public/api/fetch_jugadores.php');
+define('SYNC_PUSH_URL', 'https://laestaciondeldominohoy.com/mistorneos_fvd/public/api/sync_api.php');
 define('SYNC_API_KEY', 'TorneoMaster2024*');
 /** Master Admin: solo este usuario puede activar/desactivar a otros en Gestión de Administradores. Definir email y/o id. */
 define('MASTER_ADMIN_EMAIL', ''); // ej: 'admin@laestaciondeldominohoy.com'

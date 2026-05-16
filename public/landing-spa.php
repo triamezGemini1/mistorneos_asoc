@@ -104,12 +104,6 @@ try {
         .slide-enter-active, .slide-leave-active { transition: transform 0.3s ease; }
         .slide-enter-from { transform: translateY(-10px); opacity: 0; }
         .slide-leave-to { transform: translateY(10px); opacity: 0; }
-        .logos-clientes-wrap { overflow: hidden; width: 100%; min-height: 120px; background: linear-gradient(to bottom, #f8fafc, #e2e8f0); padding: 1.5rem 0; }
-        .logos-clientes-row { display: flex; width: max-content; animation: marquee 45s linear infinite; }
-        .logos-clientes-row:hover { animation-play-state: paused; }
-        .logos-clientes-row .logo-item { flex-shrink: 0; display: flex; align-items: center; justify-content: center; width: 360px; height: 180px; margin: 0 2rem; padding: 1rem; background: #fff; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.08); }
-        .logos-clientes-row .logo-item img { max-width: 100%; max-height: 100%; object-fit: contain; }
-        @keyframes marquee { 0% { transform: translateX(0); } 100% { transform: translateX(-50%); } }
         /* Tarjetas y secciones con fondo claro: texto negro (especificidad alta para ganar al tema .esports-theme) */
         .esports-theme #documentos .container,
         .esports-theme section[class*="from-slate-50"] .container,
@@ -144,10 +138,8 @@ try {
         .esports-theme #documentos .text-gray-600 { color: #374151 !important; }
         .esports-theme #documentos .text-primary-700 { color: #1e40af !important; }
 
-        /* Contenedor tipo tarjeta blanca (registro, servicios, faq, comentarios): forzar sobre tema */
+        /* Contenedor tipo tarjeta blanca (faq, comentarios): forzar sobre tema */
         .esports-theme .landing-card-light,
-        .esports-theme section#registro .container.landing-card-light,
-        .esports-theme section#servicios .container.landing-card-light,
         .esports-theme section#faq .container.landing-card-light,
         .esports-theme section#comentarios .container.landing-card-light {
             background: #ffffff !important;
@@ -168,17 +160,6 @@ try {
         .esports-theme .landing-card-light label,
         .esports-theme .landing-card-light summary { color: #111827 !important; }
         /* Títulos en negro: mayor especificidad que .esports-theme section:not(#hero) .container h2/h3 */
-        .esports-theme section#registro .container.landing-card-light .text-center h2,
-        .esports-theme section#registro .container.landing-card-light h2,
-        .esports-theme section#registro .container.landing-card-light h3,
-        .esports-theme section#registro .container.landing-card-light h4,
-        .esports-theme section#registro .container.landing-card-light h5,
-        .esports-theme section#registro .container.landing-card-light h6,
-        .esports-theme section#servicios .container.landing-card-light .text-center h2,
-        .esports-theme section#servicios .container.landing-card-light h2,
-        .esports-theme section#servicios .container.landing-card-light h3,
-        .esports-theme section#servicios .container.landing-card-light h4,
-        .esports-theme section#servicios .container.landing-card-light h5,
         .esports-theme section#faq .container.landing-card-light .text-center h2,
         .esports-theme section#faq .container.landing-card-light h2,
         .esports-theme section#faq .container.landing-card-light h3,
@@ -269,11 +250,8 @@ try {
                             <div class="hidden md:flex items-center space-x-1">
                                 <a href="#documentos" class="px-4 py-2 text-slate-300 hover:text-[#00f2ff] hover:bg-white/5 rounded-lg transition-all font-medium">Documentos</a>
                                 <a href="#eventos-masivos" class="px-4 py-2 text-slate-300 hover:text-[#00f2ff] hover:bg-white/5 rounded-lg transition-all font-medium">Eventos Nacionales</a>
-                                <a href="#logos-clientes" class="px-4 py-2 text-slate-300 hover:text-[#00f2ff] hover:bg-white/5 rounded-lg transition-all font-medium">Clientes</a>
                                 <a href="#eventos" class="px-4 py-2 text-slate-300 hover:text-[#00f2ff] hover:bg-white/5 rounded-lg transition-all font-medium">Eventos</a>
                                 <a href="#calendario" class="px-4 py-2 text-slate-300 hover:text-[#00f2ff] hover:bg-white/5 rounded-lg transition-all font-medium">Calendario</a>
-                                <a href="#registro" class="px-4 py-2 text-slate-300 hover:text-[#00f2ff] hover:bg-white/5 rounded-lg transition-all font-medium">Registro</a>
-                                <a href="#servicios" class="px-4 py-2 text-slate-300 hover:text-[#00f2ff] hover:bg-white/5 rounded-lg transition-all font-medium">Servicios</a>
                                 <a href="#galeria" class="px-4 py-2 text-slate-300 hover:text-[#00f2ff] hover:bg-white/5 rounded-lg transition-all font-medium">Galería</a>
                                 <a href="#faq" class="px-4 py-2 text-slate-300 hover:text-[#00f2ff] hover:bg-white/5 rounded-lg transition-all font-medium">FAQ</a>
                                 <a href="#comentarios" class="px-4 py-2 text-slate-300 hover:text-[#00f2ff] hover:bg-white/5 rounded-lg transition-all font-medium">Comentarios</a>
@@ -294,7 +272,7 @@ try {
                             </h1>
                             <p class="text-lg md:text-xl text-slate-400 mb-10 max-w-2xl mx-auto leading-relaxed">La plataforma de torneos de dominó. Inscríbete en eventos, sigue resultados en vivo y únete a la comunidad.</p>
                             <div class="flex flex-col sm:flex-row gap-4 justify-center items-center">
-                                <a href="#registro" class="hero-cta-primary btn-accent inline-flex items-center justify-center w-full sm:w-auto px-10 py-5 text-lg"><i class="fas fa-building mr-3"></i>Solicitar Afiliación</a>
+                                <a href="#eventos" class="hero-cta-primary btn-accent inline-flex items-center justify-center w-full sm:w-auto px-10 py-5 text-lg"><i class="fas fa-calendar-check mr-3"></i>Ver eventos</a>
                                 <a href="<?= htmlspecialchars($base_url . 'login.php') ?>" class="w-full sm:w-auto px-8 py-4 text-slate-300 font-semibold rounded-xl border border-slate-500 hover:bg-white/5 hover:text-white transition-all text-center"><i class="fas fa-sign-in-alt mr-2"></i>Ya tengo cuenta</a>
                             </div>
                         </div>
@@ -338,11 +316,8 @@ try {
                         <div class="hidden md:flex items-center space-x-1">
                             <a href="#documentos" @click.prevent="scrollToSection('documentos')" class="px-4 py-2 text-slate-300 hover:text-[#00f2ff] hover:bg-white/5 rounded-lg transition-all font-medium">Documentos</a>
                             <a href="#eventos-masivos" @click.prevent="scrollToSection('eventos-masivos')" class="px-4 py-2 text-slate-300 hover:text-[#00f2ff] hover:bg-white/5 rounded-lg transition-all font-medium">Eventos Nacionales</a>
-                            <a href="#logos-clientes" @click.prevent="scrollToSection('logos-clientes')" class="px-4 py-2 text-slate-300 hover:text-[#00f2ff] hover:bg-white/5 rounded-lg transition-all font-medium">Clientes</a>
                             <a href="#eventos" @click.prevent="scrollToSection('eventos')" class="px-4 py-2 text-slate-300 hover:text-[#00f2ff] hover:bg-white/5 rounded-lg transition-all font-medium">Eventos</a>
                             <a href="#calendario" @click.prevent="scrollToSection('calendario')" class="px-4 py-2 text-slate-300 hover:text-[#00f2ff] hover:bg-white/5 rounded-lg transition-all font-medium">Calendario</a>
-                            <a href="#registro" @click.prevent="scrollToSection('registro')" class="px-4 py-2 text-slate-300 hover:text-[#00f2ff] hover:bg-white/5 rounded-lg transition-all font-medium">Registro</a>
-                            <a href="#servicios" @click.prevent="scrollToSection('servicios')" class="px-4 py-2 text-slate-300 hover:text-[#00f2ff] hover:bg-white/5 rounded-lg transition-all font-medium">Servicios</a>
                             <a href="#galeria" @click.prevent="scrollToSection('galeria')" class="px-4 py-2 text-slate-300 hover:text-[#00f2ff] hover:bg-white/5 rounded-lg transition-all font-medium">Galería</a>
                             <a href="#faq" @click.prevent="scrollToSection('faq')" class="px-4 py-2 text-slate-300 hover:text-[#00f2ff] hover:bg-white/5 rounded-lg transition-all font-medium">FAQ</a>
                             <a href="#comentarios" @click.prevent="scrollToSection('comentarios')" class="px-4 py-2 text-slate-300 hover:text-[#00f2ff] hover:bg-white/5 rounded-lg transition-all font-medium">Comentarios</a>
@@ -355,11 +330,8 @@ try {
                         <div class="flex flex-col space-y-2">
                             <a href="#" @click.prevent="scrollToSection('documentos')" class="px-4 py-2 text-slate-300 hover:text-[#00f2ff] hover:bg-white/5 rounded-lg">Documentos</a>
                             <a href="#" @click.prevent="scrollToSection('eventos-masivos')" class="px-4 py-2 text-slate-300 hover:text-[#00f2ff] hover:bg-white/5 rounded-lg">Eventos Nacionales</a>
-                            <a href="#" @click.prevent="scrollToSection('logos-clientes')" class="px-4 py-2 text-slate-300 hover:text-[#00f2ff] hover:bg-white/5 rounded-lg">Clientes</a>
                             <a href="#" @click.prevent="scrollToSection('eventos')" class="px-4 py-2 text-slate-300 hover:text-[#00f2ff] hover:bg-white/5 rounded-lg">Eventos</a>
                             <a href="#" @click.prevent="scrollToSection('calendario')" class="px-4 py-2 text-slate-300 hover:text-[#00f2ff] hover:bg-white/5 rounded-lg">Calendario</a>
-                            <a href="#" @click.prevent="scrollToSection('registro')" class="px-4 py-2 text-slate-300 hover:text-[#00f2ff] hover:bg-white/5 rounded-lg">Registro</a>
-                            <a href="#" @click.prevent="scrollToSection('servicios')" class="px-4 py-2 text-slate-300 hover:text-[#00f2ff] hover:bg-white/5 rounded-lg">Servicios</a>
                             <a href="#" @click.prevent="scrollToSection('galeria')" class="px-4 py-2 text-slate-300 hover:text-[#00f2ff] hover:bg-white/5 rounded-lg">Galería</a>
                             <a href="#" @click.prevent="scrollToSection('faq')" class="px-4 py-2 text-slate-300 hover:text-[#00f2ff] hover:bg-white/5 rounded-lg">FAQ</a>
                             <a href="#" @click.prevent="scrollToSection('comentarios')" class="px-4 py-2 text-slate-300 hover:text-[#00f2ff] hover:bg-white/5 rounded-lg">Comentarios</a>
@@ -381,7 +353,7 @@ try {
                         </h1>
                         <p class="text-lg md:text-xl text-slate-400 mb-10 max-w-2xl mx-auto leading-relaxed">La plataforma de torneos de dominó. Inscríbete en eventos, sigue resultados en vivo y únete a la comunidad.</p>
                         <div class="flex flex-col sm:flex-row gap-4 justify-center items-center">
-                            <a href="#" @click.prevent="scrollToSection('registro')" class="hero-cta-primary btn-accent inline-flex items-center justify-center w-full sm:w-auto px-10 py-5 text-lg"><i class="fas fa-building mr-3"></i>Solicitar Afiliación</a>
+                            <a href="#" @click.prevent="scrollToSection('eventos')" class="hero-cta-primary btn-accent inline-flex items-center justify-center w-full sm:w-auto px-10 py-5 text-lg"><i class="fas fa-calendar-check mr-3"></i>Ver eventos</a>
                             <a :href="baseUrl + 'login.php'" class="w-full sm:w-auto px-8 py-4 text-slate-300 font-semibold rounded-xl border border-slate-500 hover:bg-white/5 hover:text-white transition-all text-center"><i class="fas fa-sign-in-alt mr-2"></i>Ya tengo cuenta</a>
                         </div>
                     </div>
@@ -427,60 +399,6 @@ try {
                             </div>
                         </div>
                     </div>
-                </div>
-            </section>
-
-            <!-- Registro (solo afiliación, centrada) -->
-            <section id="registro" class="py-16 md:py-24 bg-gray-100">
-                <div class="container mx-auto px-4 sm:px-6 lg:px-8 flex flex-col items-center landing-card-light">
-                    <div class="text-center mb-12">
-                        <h2 class="text-3xl md:text-4xl lg:text-5xl font-bold text-primary-700 mb-4">Solicitud de Afiliación</h2>
-                        <p class="text-lg text-gray-600 max-w-2xl mx-auto">Para clubes y organizadores que desean ser parte del proyecto y administrar eventos</p>
-                    </div>
-                    <div class="w-full flex justify-center">
-                        <div class="grid grid-cols-1 gap-6 lg:gap-8 max-w-md mx-auto w-full justify-items-center">
-                            <div class="group relative w-full">
-                                <div class="absolute inset-0 bg-gradient-to-br from-red-500 to-rose-600 rounded-2xl blur opacity-75 group-hover:opacity-100 transition-opacity"></div>
-                                <div class="relative bg-gradient-to-br from-red-500 to-rose-600 rounded-2xl p-8 text-white shadow-xl hover:shadow-2xl transition-all transform hover:-translate-y-2 h-full">
-                                    <div class="text-center mb-6">
-                                        <div class="inline-flex items-center justify-center w-16 h-16 bg-white/20 rounded-xl mb-4"><i class="fas fa-building text-3xl"></i></div>
-                                        <h3 class="text-2xl font-bold mb-3">Solicitud de Afiliación</h3>
-                                        <p class="text-white/90 mb-6">Para clubes y organizadores que desean ser parte del proyecto y administrar eventos.</p>
-                                    </div>
-                                    <ul class="space-y-3 mb-6 text-left">
-                                        <li class="flex items-center"><i class="fas fa-check-circle mr-3"></i><span>Administra tu propio club</span></li>
-                                        <li class="flex items-center"><i class="fas fa-check-circle mr-3"></i><span>Crea y gestiona torneos</span></li>
-                                        <li class="flex items-center"><i class="fas fa-check-circle mr-3"></i><span>Invita jugadores a eventos</span></li>
-                                        <li class="flex items-center"><i class="fas fa-check-circle mr-3"></i><span>Reportes y estadísticas</span></li>
-                                    </ul>
-                                    <a :href="baseUrl + 'affiliate_request.php'" class="landing-btn-touch block w-full px-6 py-3 bg-white text-rose-600 font-semibold rounded-xl hover:bg-gray-100 transition-all text-center shadow-lg flex items-center justify-center"><i class="fas fa-paper-plane mr-2"></i>Solicitar Afiliación</a>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="text-center mt-10">
-                        <p class="text-gray-600 flex items-center justify-center"><i class="fas fa-info-circle mr-2 text-primary-500"></i>Las solicitudes de afiliación serán revisadas por el administrador del sistema.</p>
-                    </div>
-                </div>
-            </section>
-
-            <!-- Logos de clientes (desde carpeta de logos de clubes: upload/logos) -->
-            <section v-if="logosFila1.length || logosFila2.length" id="logos-clientes" class="logos-clientes-wrap" aria-label="Clientes y entidades que nos respaldan">
-                <div class="logos-clientes-row mb-4">
-                    <template v-for="r in 2" :key="'r1-'+r">
-                        <div v-for="(logo, idx) in logosFila1" :key="'1-'+r+'-'+idx" class="logo-item">
-                            <img :src="logo.url || (baseUrl + 'view_image.php?path=' + encodeURIComponent(logo.path))" :alt="logo.nombre" loading="lazy" @error="$event.target.style.display='none'; $event.target.nextElementSibling&&$event.target.nextElementSibling.classList.remove('hidden')">
-                            <span class="hidden text-xl font-bold text-primary-600">{{ logo.nombre }}</span>
-                        </div>
-                    </template>
-                </div>
-                <div class="logos-clientes-row">
-                    <template v-for="r in 2" :key="'r2-'+r">
-                        <div v-for="(logo, idx) in logosFila2" :key="'2-'+r+'-'+idx" class="logo-item">
-                            <img :src="logo.url || (baseUrl + 'view_image.php?path=' + encodeURIComponent(logo.path))" :alt="logo.nombre" loading="lazy" @error="$event.target.style.display='none'; $event.target.nextElementSibling&&$event.target.nextElementSibling.classList.remove('hidden')">
-                            <span class="hidden text-xl font-bold text-primary-600">{{ logo.nombre }}</span>
-                        </div>
-                    </template>
                 </div>
             </section>
 
@@ -601,42 +519,6 @@ try {
                 </div>
             </section>
 
-            <!-- Servicios -->
-            <section id="servicios" class="py-16 md:py-24 bg-gray-100">
-                <div class="container mx-auto px-4 sm:px-6 lg:px-8 landing-card-light">
-                    <div class="text-center mb-12">
-                        <h2 class="text-3xl md:text-4xl lg:text-5xl font-bold text-primary-700 mb-4">¿Qué Ofrecemos?</h2>
-                        <p class="text-lg md:text-xl text-gray-600 max-w-2xl mx-auto">Todo lo que necesitas para disfrutar del dominó de manera profesional y organizada</p>
-                    </div>
-                    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 lg:gap-8">
-                        <div class="group bg-gradient-to-br from-blue-50 to-indigo-100 rounded-2xl p-8 hover:shadow-2xl transition-all transform hover:-translate-y-2 border border-blue-100">
-                            <div class="bg-primary-500 w-16 h-16 rounded-2xl flex items-center justify-center mb-6 group-hover:scale-110 transition-transform shadow-lg"><i class="fas fa-trophy text-white text-3xl"></i></div>
-                            <h3 class="text-2xl font-bold text-gray-900 mb-3">Gestión de Torneos</h3>
-                            <p class="text-gray-600 mb-4">Sistema completo para organizar, administrar y seguir torneos de dominó con clasificaciones en tiempo real</p>
-                            <a href="#" @click.prevent="scrollToSection('eventos')" class="text-primary-600 font-semibold hover:text-primary-800 inline-flex items-center">Ver Torneos <i class="fas fa-arrow-right ml-2"></i></a>
-                        </div>
-                        <div class="group bg-gradient-to-br from-purple-50 to-pink-100 rounded-2xl p-8 hover:shadow-2xl transition-all transform hover:-translate-y-2 border border-purple-100">
-                            <div class="bg-purple-600 w-16 h-16 rounded-2xl flex items-center justify-center mb-6 group-hover:scale-110 transition-transform shadow-lg"><i class="fas fa-users text-white text-3xl"></i></div>
-                            <h3 class="text-2xl font-bold text-gray-900 mb-3">Clubes Registrados</h3>
-                            <p class="text-gray-600 mb-4">Conoce todos los clubes afiliados, sus directivos y cómo contactarlos para participar en sus actividades</p>
-                            <a href="#" @click.prevent="scrollToSection('registro')" class="text-purple-600 font-semibold hover:text-purple-800 inline-flex items-center">Explorar Clubes <i class="fas fa-arrow-right ml-2"></i></a>
-                        </div>
-                        <div class="group bg-gradient-to-br from-green-50 to-emerald-100 rounded-2xl p-8 hover:shadow-2xl transition-all transform hover:-translate-y-2 border border-green-100">
-                            <div class="bg-accent w-16 h-16 rounded-2xl flex items-center justify-center mb-6 group-hover:scale-110 transition-transform shadow-lg"><i class="fas fa-calendar-alt text-white text-3xl"></i></div>
-                            <h3 class="text-2xl font-bold text-gray-900 mb-3">Calendario Anual</h3>
-                            <p class="text-gray-600 mb-4">Mantente informado de todos los eventos, torneos y actividades durante todo el año</p>
-                            <a href="#" @click.prevent="scrollToSection('calendario')" class="text-accent font-semibold hover:text-accentDark inline-flex items-center">Ver Calendario <i class="fas fa-arrow-right ml-2"></i></a>
-                        </div>
-                        <div class="group bg-gradient-to-br from-yellow-50 to-orange-100 rounded-2xl p-8 hover:shadow-2xl transition-all transform hover:-translate-y-2 border border-yellow-100">
-                            <div class="bg-yellow-500 w-16 h-16 rounded-2xl flex items-center justify-center mb-6 group-hover:scale-110 transition-transform shadow-lg"><i class="fas fa-chart-line text-white text-3xl"></i></div>
-                            <h3 class="text-2xl font-bold text-gray-900 mb-3">Resultados en Vivo</h3>
-                            <p class="text-gray-600 mb-4">Consulta resultados de torneos realizados, estadísticas de jugadores y rankings actualizados</p>
-                            <a :href="baseUrl + 'resultados.php'" class="text-yellow-600 font-semibold hover:text-yellow-800 inline-flex items-center">Ver Resultados <i class="fas fa-arrow-right ml-2"></i></a>
-                        </div>
-                    </div>
-                </div>
-            </section>
-
             <!-- Galería -->
             <section id="galeria" class="py-16 md:py-24 bg-gray-50">
                 <div class="container mx-auto px-4 sm:px-6 lg:px-8">
@@ -662,10 +544,10 @@ try {
                     <div class="max-w-4xl mx-auto space-y-4">
                         <details class="group bg-white rounded-xl p-6 shadow-md hover:shadow-lg transition-all border border-gray-200">
                             <summary class="flex items-center justify-between cursor-pointer font-bold text-lg text-gray-900 list-none">
-                                <span><i class="fas fa-question-circle text-primary-500 mr-3"></i>¿Cómo solicito la afiliación de mi club?</span>
+                                <span><i class="fas fa-question-circle text-primary-500 mr-3"></i>¿Cómo me inscribo en un torneo?</span>
                                 <i class="fas fa-chevron-down text-primary-500 group-open:rotate-180 transition-transform"></i>
                             </summary>
-                            <p class="mt-4 text-gray-600 pl-10 leading-relaxed">Haz clic en "Solicitar Afiliación", completa el formulario de solicitud de afiliación para tu club u organización y el equipo lo revisará.</p>
+                            <p class="mt-4 text-gray-600 pl-10 leading-relaxed">En la sección <strong>Próximos eventos</strong> o <strong>Eventos nacionales</strong> elige el torneo y sigue el enlace de inscripción cuando esté habilitada la inscripción en línea; si no, contacta al organizador con los datos indicados en la ficha.</p>
                         </details>
                         <details class="group bg-white rounded-xl p-6 shadow-md hover:shadow-lg transition-all border border-gray-200">
                             <summary class="flex items-center justify-between cursor-pointer font-bold text-lg text-gray-900 list-none">

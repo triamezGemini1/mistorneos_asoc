@@ -22,6 +22,9 @@ class DB {
     public static function pdo(): PDO {
         if (self::$pdo === null) {
             self::$pdo = self::createConnection('primary');
+            if (class_exists('FvdConfig', false)) {
+                FvdConfig::warmOrganizacionMaestra();
+            }
         }
         return self::$pdo;
     }
@@ -55,7 +58,7 @@ class DB {
         } else {
             $host = Env::getDb('HOST') ?: ($cfg['host'] ?? 'localhost');
             $port = Env::getDb('PORT') ?: ($cfg['port'] ?? '3306');
-            $name = Env::getDb('DATABASE') ?: ($cfg['name'] ?? 'mistorneos');
+            $name = Env::getDb('DATABASE') ?: ($cfg['name'] ?? 'mistorneos_fvd');
             $user = Env::getDb('USERNAME') ?: ($cfg['user'] ?? 'root');
             $pass = Env::getDb('PASSWORD') ?: ($cfg['pass'] ?? '');
             $charset = $cfg['charset'] ?? 'utf8mb4';

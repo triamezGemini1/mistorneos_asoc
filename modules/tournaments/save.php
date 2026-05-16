@@ -96,7 +96,10 @@ try {
     // pareclub ahora es un entero desde 1 en adelante (jugadores por club)
     $pareclub = !empty($_POST['pareclub']) ? max(1, (int)$_POST['pareclub']) : 0;
     $estatus = (int)($_POST['estatus'] ?? 1);
-    $club_responsable = !empty($_POST['club_responsable']) ? (int)$_POST['club_responsable'] : null;
+    require_once __DIR__ . '/../../lib/FvdConfig.php';
+    $club_responsable = FvdConfig::clubResponsableTorneo(
+        !empty($_POST['club_responsable']) ? (int)$_POST['club_responsable'] : null
+    );
     $es_evento_masivo = isset($_POST['es_evento_masivo']) ? (int)$_POST['es_evento_masivo'] : 0;
     
     // Validar que es_evento_masivo sea válido (0, 1, 2, 3, o 4)
@@ -164,37 +167,17 @@ try {
             $club_responsable = (int)$orgRefData['ref'];
         }
     } else {
-        // admin_general: si especificó un club, obtener su organización
-        if ($club_responsable) {
-            // Verificar si es un ID de club o de organización
-            $orgRefData = $resolveOrgRef(DB::pdo(), (int)$club_responsable);
-            if ((int)$orgRefData['id'] > 0) {
-                $organizacion_id = (int)$orgRefData['ref'];
-                $club_responsable = (int)$orgRefData['ref'];
-            } else {
-                // Es un ID de club, obtener su organización
-                $stmt_org = DB::pdo()->prepare("SELECT cod_org FROM clubes WHERE id = ?");
-                $stmt_org->execute([$club_responsable]);
-                $organizacion_id = (int)$stmt_org->fetchColumn();
-                $orgRefData = $resolveOrgRef(DB::pdo(), $organizacion_id);
-                $organizacion_id = (int)$orgRefData['ref'];
-                $club_responsable = (int)$orgRefData['ref'];
-            }
-        }
+        $organizacion_id = FvdConfig::organizacionId();
+        $club_responsable = FvdConfig::clubResponsableTorneo();
     }
-    
-    // entidad: SIEMPRE la de la organización que organiza el torneo (nunca desde POST ni del usuario)
-    $entidad = 0;
-    if (!$organizacion_id) {
-        if ($is_admin_general && !$club_responsable) {
-            throw new Exception('Debe seleccionar la organización que organiza el torneo. Todo torneo debe estar bajo una organización con entidad definida.');
-        }
-        throw new Exception('No se puede registrar el torneo sin organización. La entidad del torneo es la de la organización que lo crea.');
+
+    $entidad = !empty($_POST['entidad']) ? (int)$_POST['entidad'] : 0;
+    if ($entidad <= 0 && $organizacion_id > 0) {
+        $orgRefData = $resolveOrgRef(DB::pdo(), (int)$organizacion_id);
+        $entidad = (int)$orgRefData['entidad'];
     }
-    $orgRefData = $resolveOrgRef(DB::pdo(), (int)$organizacion_id);
-    $entidad = (int)$orgRefData['entidad'];
-    if ($entidad <= 0) {
-        throw new Exception('La organización seleccionada no tiene entidad definida. No se puede crear el torneo hasta que un administrador asigne la entidad a la organización.');
+    if ($entidad <= 0 && $is_admin_general) {
+        $entidad = 0;
     }
     
     // Insertar en la base de datos (primero sin archivos para obtener el ID)
@@ -494,7 +477,19 @@ try {
     
     // Obtener el ID del torneo reci�n creado
     $tournament_id = (int)DB::pdo()->lastInsertId();
-    
+
+    // Notificar a delegados de cada asociación (club) para inscripción / afiliación / carnets
+    if ($tournament_id > 0 && in_array($user_role, ['admin_club', 'admin_general'], true)) {
+        try {
+            require_once __DIR__ . '/../../lib/TournamentCreatedNotifier.php';
+            TournamentCreatedNotifier::notifyAssociationDelegates(DB::pdo(), $tournament_id, $user_id);
+        } catch (Throwable $e) {
+            if (function_exists('error_log')) {
+                error_log('notifyAssociationDelegates: ' . $e->getMessage());
+            }
+        }
+    }
+
     // Actualizar permite_inscripcion_linea y publicar_landing si las columnas existen (para branches que no las incluyen en INSERT)
     if ($tiene_permite_inscripcion) {
         $stmt_perm = DB::pdo()->prepare("UPDATE tournaments SET permite_inscripcion_linea = ? WHERE id = ?");

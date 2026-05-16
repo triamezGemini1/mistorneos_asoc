@@ -1,2 +1,22 @@
 .env
+.env.local
+.env.*.local
 /vendor/
+
+# Subidas y caché local (no versionar)
+/upload/
+/uploads/
+/storage/cache/
+
+# Volcados de BD locales
+/database/*.sql
+*.sql.gz
+
+# IDE / SO
+.idea/
+.vscode/
+Thumbs.db
+desktop.ini
+
+# Dependencias Node (si aplica)
+/node_modules/

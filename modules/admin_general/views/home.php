@@ -16,7 +16,7 @@ $stats = $stats ?? [];
                 <i class="fas fa-user-circle me-2"></i>Bienvenido de vuelta, <strong><?= htmlspecialchars($current_user['username'] ?? '') ?></strong>
             </p>
             <p class="text-muted mb-0 small">
-                <i class="fas fa-globe me-1"></i>Estadísticas generales del sistema
+                <i class="fas fa-globe me-1"></i>Estadísticas nacionales — Federación Venezolana de Dominó (FVD)
             </p>
         </div>
         <div class="d-flex align-items-center gap-2 flex-wrap">
@@ -56,7 +56,7 @@ $stats = $stats ?? [];
     <!-- Stats Cards -->
     <div class="row g-4 mb-5 fade-in">
         <div class="col-12 mb-3">
-            <h4 class="text-muted"><i class="fas fa-chart-line me-2"></i>Estadísticas Globales del Sistema</h4>
+            <h4 class="text-muted"><i class="fas fa-chart-line me-2"></i>Estadísticas nacionales FVD</h4>
         </div>
         <div class="col-xl-2 col-lg-3 col-md-4 col-sm-6 col-12">
             <div class="stat-card primary">
@@ -73,17 +73,7 @@ $stats = $stats ?? [];
                 <div class="d-flex flex-column align-items-start">
                     <div class="w-100">
                         <h3 class="mb-1"><?= number_format($stats['total_entidades'] ?? 0) ?></h3>
-                        <p class="mb-0"><i class="fas fa-map-marked-alt me-1"></i>Entidades</p>
-                    </div>
-                </div>
-            </div>
-        </div>
-        <div class="col-xl-2 col-lg-3 col-md-4 col-sm-6 col-12">
-            <div class="stat-card info">
-                <div class="d-flex flex-column align-items-start">
-                    <div class="w-100">
-                        <h3 class="mb-1"><?= number_format($stats['total_organizaciones'] ?? 0) ?></h3>
-                        <p class="mb-0"><i class="fas fa-sitemap me-1"></i>Organizaciones</p>
+                        <p class="mb-0"><i class="fas fa-map-marked-alt me-1"></i>Asociaciones</p>
                     </div>
                 </div>
             </div>
@@ -98,46 +88,7 @@ $stats = $stats ?? [];
                 </div>
             </div>
         </div>
-        <div class="col-xl-2 col-lg-3 col-md-4 col-sm-6 col-12">
-            <div class="stat-card success">
-                <div class="d-flex flex-column align-items-start">
-                    <div class="w-100">
-                        <h3 class="mb-1"><?= number_format($stats['total_clubs'] ?? 0) ?></h3>
-                        <p class="mb-0"><i class="fas fa-building me-1"></i>Clubes Afiliados</p>
-                    </div>
-                </div>
-            </div>
-        </div>
-        <div class="col-xl-2 col-lg-3 col-md-4 col-sm-6 col-12">
-            <div class="stat-card warning">
-                <div class="d-flex flex-column align-items-start">
-                    <div class="w-100">
-                        <h3 class="mb-1"><?= number_format($stats['total_afiliados'] ?? 0) ?></h3>
-                        <p class="mb-0"><i class="fas fa-user-check me-1"></i>Total Afiliados</p>
-                    </div>
-                </div>
-            </div>
-        </div>
-        <div class="col-xl-2 col-lg-3 col-md-4 col-sm-6 col-12">
-            <div class="stat-card danger">
-                <div class="d-flex flex-column align-items-start">
-                    <div class="w-100">
-                        <h3 class="mb-1"><?= number_format($stats['total_hombres'] ?? 0) ?></h3>
-                        <p class="mb-0"><i class="fas fa-mars me-1"></i>Hombres</p>
-                    </div>
-                </div>
-            </div>
-        </div>
-        <div class="col-xl-2 col-lg-3 col-md-4 col-sm-6 col-12">
-            <div class="stat-card purple">
-                <div class="d-flex flex-column align-items-start">
-                    <div class="w-100">
-                        <h3 class="mb-1"><?= number_format($stats['total_mujeres'] ?? 0) ?></h3>
-                        <p class="mb-0"><i class="fas fa-venus me-1"></i>Mujeres</p>
-                    </div>
-                </div>
-            </div>
-        </div>
+        <?php include __DIR__ . '/../../../public/includes/views/dashboard/_atletas_stat_cards.php'; ?>
         <div class="col-xl-2 col-lg-3 col-md-4 col-sm-6 col-12">
             <div class="stat-card secondary">
                 <div class="d-flex flex-column align-items-start">
@@ -159,4 +110,7 @@ $stats = $stats ?? [];
             </div>
         </div>
     </div>
+
+    <?php include __DIR__ . '/_panel_operativo.php'; ?>
 </div>
+

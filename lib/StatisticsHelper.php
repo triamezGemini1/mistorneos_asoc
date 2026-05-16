@@ -324,7 +324,7 @@ class StatisticsHelper {
                     SUM(CASE WHEN u.sexo = 'F' OR UPPER(u.sexo) = 'F' THEN 1 ELSE 0 END) as mujeres,
                     SUM(CASE WHEN u.sexo IS NULL OR u.sexo = '' THEN 1 ELSE 0 END) as sin_genero
                 FROM clubes c
-                LEFT JOIN usuarios u ON u.club_id = c.id AND u.role = 'usuario' AND u.status = 0
+                LEFT JOIN usuarios u ON u.entidad = c.id
                 WHERE c.id IN ($placeholders) AND c.estatus = 1
                 GROUP BY c.id, c.nombre, c.delegado, c.telefono, c.cod_org
                 ORDER BY c.nombre ASC
@@ -534,9 +534,7 @@ class StatisticsHelper {
                                 SUM(CASE WHEN sexo = 'M' THEN 1 ELSE 0 END) as hombres,
                                 SUM(CASE WHEN sexo = 'F' THEN 1 ELSE 0 END) as mujeres
                             FROM usuarios
-                            WHERE club_id IN ($placeholders) 
-                              AND role = 'usuario' 
-                              AND status = 0
+                            WHERE entidad IN ($placeholders)
                         ");
                         $stmt->execute($supervised_club_ids);
                         $user_stats = $stmt->fetch(PDO::FETCH_ASSOC) ?: $user_stats;
@@ -559,7 +557,7 @@ class StatisticsHelper {
                                     SUM(CASE WHEN u.sexo = 'M' THEN 1 ELSE 0 END) as hombres,
                                     SUM(CASE WHEN u.sexo = 'F' THEN 1 ELSE 0 END) as mujeres
                                 FROM clubes c
-                                LEFT JOIN usuarios u ON u.club_id = c.id AND u.role = 'usuario' AND u.status = 0
+                                LEFT JOIN usuarios u ON u.entidad = c.id
                                 WHERE c.id = ?
                                 GROUP BY c.id, c.nombre
                             ");
@@ -575,7 +573,7 @@ class StatisticsHelper {
                                     SUM(CASE WHEN u.sexo = 'M' THEN 1 ELSE 0 END) as hombres,
                                     SUM(CASE WHEN u.sexo = 'F' THEN 1 ELSE 0 END) as mujeres
                                 FROM clubes c
-                                LEFT JOIN usuarios u ON u.club_id = c.id AND u.role = 'usuario' AND u.status = 0
+                                LEFT JOIN usuarios u ON u.entidad = c.id
                                 WHERE c.id = ?
                                 GROUP BY c.id, c.nombre
                             ");

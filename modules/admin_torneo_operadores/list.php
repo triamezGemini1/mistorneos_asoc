@@ -74,7 +74,7 @@ $current_tab = $tab ?? 'admin_torneo';
     <?php 
     $tiene_clubes_para_listar = $is_admin_club ? !empty($club_ids) : ($club_id > 0);
     if (!$tiene_clubes_para_listar): ?>
-        <div class="alert alert-info"><?= $is_admin_club ? 'No hay clubes en su organización. Cree clubes en Clubes de la organización.' : 'Seleccione un club para ver administradores de torneo y operadores.' ?></div>
+        <div class="alert alert-info"><?= $is_admin_club ? 'No hay asociaciones en su organización. Regístrelas en Asociaciones de la organización.' : 'Seleccione una asociación para ver administradores de torneo y operadores.' ?></div>
     <?php else: ?>
 
     <!-- Bloque: Administrador de Torneo -->

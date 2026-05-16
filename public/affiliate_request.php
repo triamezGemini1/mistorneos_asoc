@@ -18,6 +18,17 @@ function usuarioTieneOrganizacionActiva(PDO $pdo, int $userId): bool {
     if ($userId <= 0) {
         return false;
     }
+    if (class_exists('FvdConfig', false) && FvdConfig::isOrganizacionOperativa(FvdConfig::ORGANIZACION_ID)) {
+        try {
+            $stmt = $pdo->prepare('SELECT id FROM organizaciones WHERE id = ? AND admin_user_id = ? AND estatus = 1 LIMIT 1');
+            $stmt->execute([FvdConfig::ORGANIZACION_ID, $userId]);
+            if ($stmt->fetch(PDO::FETCH_ASSOC)) {
+                return true;
+            }
+        } catch (Exception $e) {
+            // seguir con comprobación legacy
+        }
+    }
     try {
         $stmt = $pdo->prepare("SELECT id FROM organizaciones WHERE admin_user_id = ? AND estatus = 1 LIMIT 1");
         $stmt->execute([$userId]);

@@ -44,11 +44,11 @@ class ImageHelper {
         if (function_exists('app_base_url')) {
             $full = app_base_url();
             $parsed = parse_url($full);
-            $base_path = $parsed['path'] ?? '/mistorneos';
+            $base_path = $parsed['path'] ?? (class_exists('AppHelpers', false) ? AppHelpers::getProjectPath() : '/mistorneos_fvd');
         } elseif (strpos($script_name, '/public/') !== false) {
             $base_path = substr($script_name, 0, strpos($script_name, '/public/'));
         } else {
-            $base_path = '/mistorneos';
+            $base_path = class_exists('AppHelpers', false) ? AppHelpers::getProjectPath() : '/mistorneos_fvd';
         }
         
         return $protocol . '://' . $host . $base_path;

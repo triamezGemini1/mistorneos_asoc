@@ -12,6 +12,33 @@ require_once __DIR__ . '/../config/db.php';
 class ClubHelper {
     private static ?bool $hasCodOrgColumn = null;
 
+    /**
+     * Afiliados de un club: misma condición que en SQL manual `WHERE entidad = <id del club>`.
+     * `usuarios.entidad` = PK `clubes.id`. Sin CAST, sin club_id/id_club, sin filtro de rol aquí.
+     *
+     * @return array{0: string, 1: list<mixed>}
+     */
+    public static function afiliadosMatchSqlAndParams(PDO $pdo, array $clubRow, int $clubId): array
+    {
+        return [
+            '(u.entidad = ?)',
+            [(int) $clubId],
+        ];
+    }
+
+    /**
+     * JOIN para conteos en listados de clubes (alias c = clubes).
+     */
+    public static function sqlJoinUsuariosAfiliadosOnClub(PDO $pdo, string $clubAlias = 'c'): string
+    {
+        if (! preg_match('/^[a-zA-Z_][a-zA-Z0-9_]*$/', $clubAlias)) {
+            $clubAlias = 'c';
+        }
+        $c = $clubAlias;
+
+        return "u.entidad = {$c}.id";
+    }
+
     private static function hasCodOrg(): bool
     {
         if (self::$hasCodOrgColumn !== null) {

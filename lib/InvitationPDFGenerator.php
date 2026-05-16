@@ -82,7 +82,7 @@ class InvitationPDFGenerator {
             }
             
             // Generar link de invitación
-            $app_url = $_ENV['APP_URL'] ?? (function_exists('app_base_url') ? app_base_url() : 'https://laestaciondeldomino.com/mistorneos');
+            $app_url = $_ENV['APP_URL'] ?? (function_exists('app_base_url') ? app_base_url() : FvdConfig::resolveAppUrl());
             $invitation_link = $app_url . "/public/tournament_register.php?torneo_id=" . $tournament_id;
             
             // Generar contenido HTML
@@ -199,7 +199,7 @@ class InvitationPDFGenerator {
      * Genera HTML para invitación al club
      */
     private static function generateClubInvitationHTML(array $club_data, ?array $admin_data): string {
-        $app_url = $_ENV['APP_URL'] ?? 'http://localhost/mistorneos';
+        $app_url = $_ENV['APP_URL'] ?? 'http://localhost/mistorneos_fvd';
         $invitation_link = $app_url . "/public/register_by_club.php?club_id=" . $club_data['id'];
         $logo_path = self::getLogoPath($club_data['logo'] ?? null);
         
@@ -1030,7 +1030,7 @@ class InvitationPDFGenerator {
     ): string {
         // Obtener logo de La Estación del Dominó
         $logo_path = self::getEstacionLogoPath();
-        $app_url = function_exists('app_base_url') ? app_base_url() : 'https://laestaciondeldominohoy.com/mistorneos';
+        $app_url = function_exists('app_base_url') ? app_base_url() : FvdConfig::resolveAppUrl();
         $register_url = $app_url . '/public/affiliate_request.php';
         
         $html = '<!DOCTYPE html>

@@ -8,17 +8,23 @@
 $script_actual = basename($_SERVER['PHP_SELF'] ?? '');
 $use_standalone = in_array($script_actual, ['admin_torneo.php', 'panel_torneo.php']);
 $base_url = $use_standalone ? $script_actual : 'index.php?page=torneo_gestion';
-
 extract($view_data ?? []);
 
 $torneo = $torneo ?? null;
 $usuarios_disponibles = $usuarios_disponibles ?? [];
 $usuarios_inscritos = $usuarios_inscritos ?? [];
+$inscripcion_operativo_asoc = !empty($inscripcion_operativo_asoc);
+$club_forzado_id = (int) ($club_forzado_id ?? 0);
+$club_forzado_nombre = (string) ($club_forzado_nombre ?? '');
 
 if (empty($torneo) || !is_array($torneo) || !isset($torneo['id'])) {
     echo '<div class="alert alert-danger">Error: No se encontró el torneo o no se pudieron cargar los datos. <a href="' . htmlspecialchars($base_url) . '">Volver a Gestión de Torneos</a>.</div>';
     return;
 }
+$tid_torneo_nav = (int) $torneo['id'];
+$url_panel_torneo = class_exists('AppHelpers')
+    ? AppHelpers::urlPanelTorneoReturn($tid_torneo_nav)
+    : ($base_url . ($use_standalone ? '?' : '&') . 'action=panel&torneo_id=' . $tid_torneo_nav);
 
 require_once __DIR__ . '/../../lib/InscritosHelper.php';
 // Base absoluta public/ para formularios y APIs (evitar que el navegador se pierda en subcarpetas)
@@ -40,7 +46,7 @@ if ($base_public_abs === '' && !empty($_SERVER['HTTP_HOST'])) {
             <nav aria-label="breadcrumb">
                 <ol class="breadcrumb">
                     <li class="breadcrumb-item"><a href="<?php echo $base_url; ?>">Gestión de Torneos</a></li>
-                    <li class="breadcrumb-item"><a href="<?php echo $base_url . ($use_standalone ? '?' : '&'); ?>action=panel&torneo_id=<?php echo $torneo['id']; ?>"><?php echo htmlspecialchars($torneo['nombre']); ?></a></li>
+                    <li class="breadcrumb-item"><a href="<?php echo htmlspecialchars($url_panel_torneo); ?>"><?php echo htmlspecialchars($torneo['nombre']); ?></a></li>
                     <li class="breadcrumb-item active">Inscribir en Sitio</li>
                 </ol>
             </nav>
@@ -49,7 +55,7 @@ if ($base_public_abs === '' && !empty($_SERVER['HTTP_HOST'])) {
 
     <div class="row mb-3">
         <div class="col-12">
-            <a href="<?php echo $base_url . ($use_standalone ? '?' : '&'); ?>action=panel&torneo_id=<?php echo $torneo['id']; ?>" class="btn btn-secondary btn-sm">
+            <a href="<?php echo htmlspecialchars($url_panel_torneo); ?>" class="btn btn-secondary btn-sm">
                 <i class="fas fa-arrow-left mr-2"></i> Retornar al Panel
             </a>
         </div>
@@ -86,13 +92,18 @@ if ($base_public_abs === '' && !empty($_SERVER['HTTP_HOST'])) {
                     <input type="text" id="input_cedula" class="form-control form-control-sm" placeholder="Números, ID o nombre" maxlength="80" autocomplete="off" spellcheck="false">
                 </div>
                 <div class="insc-sitio-campo insc-sitio-club">
-                    <label class="form-label small mb-0">Club</label>
+                    <label class="form-label small mb-0">Asociación</label>
+                    <?php if ($inscripcion_operativo_asoc && $club_forzado_id > 0): ?>
+                        <input type="hidden" id="select_club_cedula" value="<?= $club_forzado_id ?>">
+                        <div class="form-control form-control-sm bg-light" readonly><?= htmlspecialchars($club_forzado_nombre) ?></div>
+                    <?php else: ?>
                     <select id="select_club_cedula" class="form-select form-select-sm">
                         <option value="">-- Usar club del usuario --</option>
                         <?php foreach ($clubes_disponibles ?? [] as $club): ?>
                             <option value="<?= $club['id'] ?>"><?= htmlspecialchars($club['nombre']) ?></option>
                         <?php endforeach; ?>
                     </select>
+                    <?php endif; ?>
                 </div>
                 <div class="insc-sitio-campo insc-sitio-resultado d-none" id="wrap_acciones_cedula">
                     <label class="form-label small mb-0">Nombre</label>
@@ -126,7 +137,15 @@ if ($base_public_abs === '' && !empty($_SERVER['HTTP_HOST'])) {
                         <div class="insc-sitio-campo"><label class="form-label small mb-0">Sexo</label><select id="form_sexo" class="form-select form-select-sm"><option value="M">M</option><option value="F">F</option><option value="O">O</option></select></div>
                         <div class="insc-sitio-campo"><label class="form-label small mb-0">Tel.</label><input type="text" id="form_telefono" class="form-control form-control-sm"></div>
                         <div class="insc-sitio-campo"><label class="form-label small mb-0">Email</label><input type="email" id="form_email" class="form-control form-control-sm"></div>
-                        <div class="insc-sitio-campo"><label class="form-label small mb-0">Club <span class="text-danger">*</span></label><select id="form_club" class="form-select form-select-sm"><option value="">-- Seleccione --</option><?php foreach ($clubes_disponibles ?? [] as $c): ?><option value="<?= $c['id'] ?>"><?= htmlspecialchars($c['nombre']) ?></option><?php endforeach; ?></select></div>
+                        <div class="insc-sitio-campo">
+                            <label class="form-label small mb-0">Asociación <?php if (!$inscripcion_operativo_asoc): ?><span class="text-danger">*</span><?php endif; ?></label>
+                            <?php if ($inscripcion_operativo_asoc && $club_forzado_id > 0): ?>
+                                <input type="hidden" id="form_club" value="<?= $club_forzado_id ?>">
+                                <div class="form-control form-control-sm bg-light" readonly><?= htmlspecialchars($club_forzado_nombre) ?></div>
+                            <?php else: ?>
+                            <select id="form_club" class="form-select form-select-sm"><option value="">-- Seleccione --</option><?php foreach ($clubes_disponibles ?? [] as $c): ?><option value="<?= $c['id'] ?>"><?= htmlspecialchars($c['nombre']) ?></option><?php endforeach; ?></select>
+                            <?php endif; ?>
+                        </div>
                         <div class="insc-sitio-campo d-flex align-items-end">
                             <button type="button" class="btn btn-warning btn-sm" id="btn_registrar_inscribir"><i class="fas fa-user-plus me-1"></i>Registrar e inscribir</button>
                             <button type="button" class="btn btn-outline-secondary btn-sm ms-1" id="btn_cancelar_form_nuevo">Cancelar</button>
@@ -140,7 +159,7 @@ if ($base_public_abs === '' && !empty($_SERVER['HTTP_HOST'])) {
                 <div class="col-md-6">
                     <div class="card">
                         <div class="card-header py-1 bg-primary text-white">
-                            <span class="small">Atletas Disponibles (club 13)</span>
+                            <span class="small">Atletas disponibles<?= $inscripcion_operativo_asoc && $club_forzado_nombre !== '' ? ' · ' . htmlspecialchars($club_forzado_nombre) : '' ?></span>
                             <span class="badge bg-light text-dark ms-1" id="count_disponibles"><?= count($usuarios_disponibles) ?></span>
                         </div>
                         <div class="card-body p-2" style="max-height: 320px; overflow-y: auto;">
@@ -212,6 +231,7 @@ if ($base_public_abs === '' && !empty($_SERVER['HTTP_HOST'])) {
 (function() {
     var BASE_PUBLIC = <?= json_encode($base_public_abs ? $base_public_abs . '/' : '') ?>;
     var TORNEOS_ID = <?= (int)$torneo['id'] ?>;
+    var CLUB_FORZADO_ID = <?= $club_forzado_id > 0 ? (int)$club_forzado_id : 'null' ?>;
     var CSRF_TOKEN = '<?= htmlspecialchars(CSRF::token(), ENT_QUOTES) ?>';
     var API_URL = BASE_PUBLIC + 'tournament_admin_toggle_inscripcion.php';
     var BUSCAR_API = BASE_PUBLIC + 'api/search_persona.php';
@@ -219,6 +239,12 @@ if ($base_public_abs === '' && !empty($_SERVER['HTTP_HOST'])) {
     var usuarioEncontrado = null;
 
     function $(id) { return document.getElementById(id); }
+    function clubIdInscripcion(fallback) {
+        if (CLUB_FORZADO_ID) return String(CLUB_FORZADO_ID);
+        var el = $('select_club_cedula') || $('form_club');
+        if (el && el.value) return el.value;
+        return fallback || '';
+    }
     function msg(html, type) {
         var el = $('mensaje_formulario_cedula');
         if (!el) return;
@@ -406,8 +432,9 @@ if ($base_public_abs === '' && !empty($_SERVER['HTTP_HOST'])) {
         fd.append('action', 'inscribir');
         fd.append('torneo_id', TORNEOS_ID);
         fd.append('id_usuario', idUsuario);
-        if (clubId) fd.append('id_club', clubId);
-        fd.append('estatus', '1');
+        var cid = clubId || clubIdInscripcion();
+        if (cid) fd.append('id_club', cid);
+        fd.append('estatus', '0');
         fd.append('csrf_token', CSRF_TOKEN);
         if (rowEl) { rowEl.style.opacity = '0.5'; rowEl.style.pointerEvents = 'none'; }
         fetch(API_URL, { method: 'POST', body: fd, credentials: 'same-origin' })
@@ -489,13 +516,13 @@ if ($base_public_abs === '' && !empty($_SERVER['HTTP_HOST'])) {
                     showMessage('Busque primero por cédula.', 'warning');
                     return;
                 }
-                var clubId = ($('select_club_cedula') && $('select_club_cedula').value) || '';
+                var clubId = clubIdInscripcion();
                 var fd = new FormData();
                 fd.append('action', 'inscribir');
                 fd.append('torneo_id', TORNEOS_ID);
                 fd.append('id_usuario', usuarioEncontrado.id);
                 fd.append('id_club', clubId);
-                fd.append('estatus', '1');
+                fd.append('estatus', '0');
                 fd.append('csrf_token', CSRF_TOKEN);
                 fetch(API_URL, { method: 'POST', body: fd, credentials: 'same-origin' })
                     .then(function(r) {
@@ -527,9 +554,9 @@ if ($base_public_abs === '' && !empty($_SERVER['HTTP_HOST'])) {
                     showMessage('Cédula (mín. 4 dígitos) y nombre obligatorios.', 'warning');
                     return;
                 }
-                var clubId = ($('form_club') && $('form_club').value) || '';
+                var clubId = clubIdInscripcion();
                 if (!clubId) {
-                    showMessage('Seleccione un club.', 'warning');
+                    showMessage('Seleccione una asociación.', 'warning');
                     return;
                 }
                 var fd = new FormData();
@@ -544,7 +571,7 @@ if ($base_public_abs === '' && !empty($_SERVER['HTTP_HOST'])) {
                 fd.append('telefono', ($('form_telefono') && $('form_telefono').value) || '');
                 fd.append('email', ($('form_email') && $('form_email').value) || '');
                 fd.append('id_club', clubId);
-                fd.append('estatus', 1);
+                fd.append('estatus', 0);
                 fetch(API_URL, { method: 'POST', body: fd, credentials: 'same-origin' })
                     .then(function(r) {
                         if (!r.ok) return r.text().then(function(t) { throw new Error(t || 'Error ' + r.status); });
@@ -572,7 +599,7 @@ if ($base_public_abs === '' && !empty($_SERVER['HTTP_HOST'])) {
             tbodyDisp.addEventListener('click', function(e) {
                 var row = e.target.closest('tr');
                 if (row && row.dataset.id) {
-                    inscribirJugador(parseInt(row.dataset.id), row.dataset.nombre, row.dataset.cedula || '', row.dataset.clubId || '', row);
+                    inscribirJugador(parseInt(row.dataset.id), row.dataset.nombre, row.dataset.cedula || '', clubIdInscripcion(row.dataset.clubId || ''), row);
                 }
             });
         }

@@ -2,10 +2,11 @@
 /**
  * Helper para manejo de estatus de inscritos
  *
- * Solo tres estatus en uso:
- * - pendiente: inscrito en línea sin confirmación de pago
- * - confirmado: inscrito en línea con pago verificado, o inscripción en sitio
- * - retirado: retirado del torneo
+ * Estatus en uso (numérico, FVD):
+ * - 0 pendiente: debe pagar (inscripción nueva)
+ * - 1 pagado: pago validado / confirmado para jugar
+ * - 4 retirado: retirado del torneo
+ * Legacy: 2 se trata como pagado (migración a 1).
  *
  * Los valores legacy 'solvente' y 'no_solvente' se obvian; migrar a 'confirmado' si existen.
  */
@@ -17,8 +18,11 @@ class InscritosHelper {
     const ESTATUS_CONFIRMADO = 'confirmado';
     const ESTATUS_RETIRADO = 'retirado';
 
-    /** Valor numérico para confirmado (columna INT en producción). */
+    const ESTATUS_PENDIENTE_NUM = 0;
+    /** Pagado / confirmado para participar. */
     const ESTATUS_CONFIRMADO_NUM = 1;
+    /** Alias explícito del estatus pagado. */
+    const ESTATUS_PAGADO_NUM = 1;
 
     /** Valor numérico para retirado (columna INT). */
     const ESTATUS_RETIRADO_NUM = 4;
@@ -27,7 +31,7 @@ class InscritosHelper {
      * Condición SQL: solo inscritos confirmados (cuentan para participar en el torneo).
      * Compatible con columna INT y ENUM.
      */
-    const SQL_WHERE_SOLO_CONFIRMADO = "(estatus = 1 OR estatus = 'confirmado')";
+    const SQL_WHERE_SOLO_CONFIRMADO = "(estatus = 1 OR estatus = 2 OR estatus = 'confirmado' OR estatus IN ('solvente'))";
 
     /**
      * Misma condición que SQL_WHERE_SOLO_CONFIRMADO con alias de tabla.
@@ -35,7 +39,7 @@ class InscritosHelper {
     public static function sqlWhereSoloConfirmadoConAlias($alias = '')
     {
         $e = $alias ? $alias . '.' : '';
-        return "(" . $e . "estatus = 1 OR " . $e . "estatus = 'confirmado')";
+        return "(" . $e . "estatus = 1 OR " . $e . "estatus = 2 OR " . $e . "estatus = 'confirmado' OR " . $e . "estatus = 'solvente')";
     }
 
     /**
@@ -48,7 +52,7 @@ class InscritosHelper {
 
     /**
      * Condición SQL: inscrito activo para conteo y rondas (no retirado).
-     * Incluye pendiente (0), confirmado (1), solvente (2), no_solvente (3); excluye retirado (4).
+     * Incluye pendiente (0), pagado (1) y legacy (2); excluye retirado (4).
      *
      * Importante (MySQL modo estricto): NO mezclar `estatus IN (0,1,2,3) OR estatus IN ('pendiente',...)`
      * cuando la columna es INT/TINYINT: MySQL puede convertir 'pendiente' a DOUBLE y disparar 1292.
@@ -73,12 +77,12 @@ class InscritosHelper {
     const SQL_WHERE_CONFIRMADO = "estatus = 'confirmado'";
 
     /**
-     * Mapeo numérico (API/legacy) a enum. Solo 0, 1, 4 en uso.
+     * Mapeo numérico (API/legacy) a enum. 0, 1, 4 en uso.
      */
     const ESTATUS_MAP = [
         0 => 'pendiente',
         1 => 'confirmado',
-        4 => 'retirado'
+        4 => 'retirado',
     ];
 
     /** Para lectura legacy: solvente/no_solvente se muestran como confirmado */
@@ -93,7 +97,8 @@ class InscritosHelper {
     const ESTATUS_REVERSE_MAP = [
         'pendiente' => 0,
         'confirmado' => 1,
-        'retirado' => 4
+        'pagado' => 1,
+        'retirado' => 4,
     ];
 
     /**
@@ -148,7 +153,7 @@ class InscritosHelper {
             return self::ESTATUS_REVERSE_MAP[$estatus_texto];
         }
         if (in_array($estatus_texto, ['solvente', 'no_solvente'], true)) {
-            return 1;
+            return self::ESTATUS_CONFIRMADO_NUM;
         }
         return 0;
     }
@@ -193,9 +198,36 @@ class InscritosHelper {
     /** Indica si el valor (string o int) es un estatus confirmado (puede jugar). */
     public static function esConfirmado($estatus): bool {
         if (is_numeric($estatus)) {
-            return (int)$estatus === 1;
+            $n = (int) $estatus;
+
+            return $n === self::ESTATUS_CONFIRMADO_NUM || $n === 2;
         }
-        return $estatus === self::ESTATUS_CONFIRMADO || $estatus === 'solvente';
+
+        return $estatus === self::ESTATUS_CONFIRMADO || $estatus === 'solvente' || $estatus === 'pagado';
+    }
+
+    public static function esPendiente($estatus): bool
+    {
+        if (is_numeric($estatus)) {
+            return (int) $estatus === self::ESTATUS_PENDIENTE_NUM;
+        }
+
+        return $estatus === self::ESTATUS_PENDIENTE;
+    }
+
+    public static function esRetirado($estatus): bool
+    {
+        if (is_numeric($estatus)) {
+            return (int) $estatus === self::ESTATUS_RETIRADO_NUM;
+        }
+
+        return $estatus === self::ESTATUS_RETIRADO;
+    }
+
+    /** @deprecated Cancelado no se usa en FVD (0/1/4). */
+    public static function esCancelado($estatus): bool
+    {
+        return false;
     }
     
     /**
@@ -217,9 +249,10 @@ class InscritosHelper {
      */
     public static function getEstatusClaseCSS(int $estatus_num): string {
         $clases = [
-            0 => 'bg-secondary text-white',  // pendiente
-            1 => 'bg-success text-white',   // confirmado
-            4 => 'bg-dark text-white'        // retirado
+            0 => 'bg-warning text-dark',
+            1 => 'bg-success text-white',
+            2 => 'bg-success text-white',
+            4 => 'bg-dark text-white',
         ];
         return $clases[$estatus_num] ?? $clases[0];
     }
@@ -274,14 +307,13 @@ class InscritosHelper {
         // id_usuario en inscritos se mantiene como id interno de usuario para todos los torneos.
         $id_usuario_guardar = $id_usuario;
         
-        // Validar estatus: solo pendiente, confirmado, retirado
-        $estatusRaw = $datos['estatus'] ?? 1;
+        $estatusRaw = $datos['estatus'] ?? self::ESTATUS_PENDIENTE_NUM;
         if (is_numeric($estatusRaw)) {
-            $estatusNum = (int)$estatusRaw;
-            $estatus = self::ESTATUS_MAP[$estatusNum] ?? self::ESTATUS_CONFIRMADO;
+            $estatusNum = (int) $estatusRaw;
+            $estatus = self::ESTATUS_MAP[$estatusNum] ?? (in_array($estatusNum, [2], true) ? self::ESTATUS_CONFIRMADO : self::ESTATUS_PENDIENTE);
         } else {
             $estatus = in_array($estatusRaw, [self::ESTATUS_PENDIENTE, self::ESTATUS_CONFIRMADO, self::ESTATUS_RETIRADO], true)
-                ? $estatusRaw : self::ESTATUS_CONFIRMADO;
+                ? $estatusRaw : self::ESTATUS_PENDIENTE;
         }
         
         // Campos opcionales con valores por defecto
@@ -327,10 +359,10 @@ class InscritosHelper {
             throw new Exception('Este usuario ya está inscrito en el torneo');
         }
         
-        // estatus siempre numérico (1 = confirmado)
-        $estatus_for_db = is_numeric($estatus) && isset(self::ESTATUS_MAP[(int)$estatus])
-            ? (int)$estatus
-            : (int) self::getEstatusNumero(is_string($estatus) ? $estatus : 'confirmado');
+        // estatus numérico: 0 pendiente, 1 pagado, 4 retirado
+        $estatus_for_db = is_numeric($estatus) && (isset(self::ESTATUS_MAP[(int)$estatus]) || (int)$estatus === 2)
+            ? ((int)$estatus === 2 ? self::ESTATUS_CONFIRMADO_NUM : (int)$estatus)
+            : (int) self::getEstatusNumero(is_string($estatus) ? $estatus : 'pendiente');
 
         // INSERT alineado al esquema real (evita 1136 si faltan/sobran columnas vs VALUES fijos)
         $colNames = $pdo->query('SHOW COLUMNS FROM inscritos')->fetchAll(PDO::FETCH_COLUMN);
@@ -397,10 +429,11 @@ class InscritosHelper {
         }
         $push('estatus', '?', $estatus_for_db);
         if ($H('entidad_id')) {
-            $ent = 0;
-            if (class_exists('DB', false) && method_exists('DB', 'getEntidadId')) {
+            $ent = isset($datos['entidad_id']) ? (int)$datos['entidad_id'] : 0;
+            if ($ent <= 0 && class_exists('DB', false) && method_exists('DB', 'getEntidadId')) {
                 $ent = (int) DB::getEntidadId();
-            } elseif (defined('DESKTOP_ENTIDAD_ID')) {
+            }
+            if ($ent <= 0 && defined('DESKTOP_ENTIDAD_ID')) {
                 $ent = (int) constant('DESKTOP_ENTIDAD_ID');
             }
             if ($ent > 0) {

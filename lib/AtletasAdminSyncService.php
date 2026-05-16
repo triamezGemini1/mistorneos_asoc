@@ -177,16 +177,23 @@ final class AtletasAdminSyncService
                 'fechnac' => self::normalizarFecha($a['fechnac'] ?? null),
                 'club_id' => $clubId,
                 'entidad' => $entidad,
-                'cod_org' => $organizacionId,
                 '_allow_club_for_usuario' => true,
             ];
+            if (self::usuariosTieneCodOrg($pdoMain)) {
+                $data['cod_org'] = $organizacionId;
+            }
 
             $create = Security::createUser($data);
             if (!empty($create['success'])) {
                 $newUserId = (int)($create['user_id'] ?? 0);
                 if ($newUserId > 0) {
-                    $upd = $pdoMain->prepare("UPDATE usuarios SET numfvd = ?, cod_org = ? WHERE id = ?");
-                    $upd->execute([$numfvd, $organizacionId, $newUserId]);
+                    if (self::usuariosTieneCodOrg($pdoMain)) {
+                        $upd = $pdoMain->prepare('UPDATE usuarios SET numfvd = ?, cod_org = ? WHERE id = ?');
+                        $upd->execute([$numfvd, $organizacionId, $newUserId]);
+                    } else {
+                        $upd = $pdoMain->prepare('UPDATE usuarios SET numfvd = ? WHERE id = ?');
+                        $upd->execute([$numfvd, $newUserId]);
+                    }
                 }
                 $reporte['creados']++;
                 $cedulasUsuarios[$cedula] = true;
@@ -274,8 +281,13 @@ final class AtletasAdminSyncService
      */
     public static function sincronizarUsuariosDesdeAtletas(PDO $pdoMain, string $csvDir): array
     {
+        $hasUsuarioCodOrg = self::usuariosTieneCodOrg($pdoMain);
+        $selectUsuCols = $hasUsuarioCodOrg
+            ? 'id, cedula, sexo, numfvd, club_id, entidad, cod_org, celular, email, fechnac'
+            : 'id, cedula, sexo, numfvd, club_id, entidad, celular, email, fechnac';
+
         $usuarios = $pdoMain->query(
-            "SELECT id, cedula, sexo, numfvd, club_id, entidad, cod_org, celular, email, fechnac FROM usuarios"
+            "SELECT {$selectUsuCols} FROM usuarios"
         )->fetchAll(PDO::FETCH_ASSOC);
 
         $usuariosPorCedula = [];
@@ -310,11 +322,17 @@ final class AtletasAdminSyncService
 
         $noEncontradas = [];
 
-        $stmtUpdate = $pdoMain->prepare(
-            "UPDATE usuarios
+        $stmtUpdate = $hasUsuarioCodOrg
+            ? $pdoMain->prepare(
+                "UPDATE usuarios
              SET sexo = ?, numfvd = ?, club_id = ?, entidad = ?, cod_org = ?, celular = ?, email = ?, fechnac = ?
              WHERE id = ?"
-        );
+            )
+            : $pdoMain->prepare(
+                "UPDATE usuarios
+             SET sexo = ?, numfvd = ?, club_id = ?, entidad = ?, celular = ?, email = ?, fechnac = ?
+             WHERE id = ?"
+            );
 
         $pdoMain->beginTransaction();
         try {
@@ -347,7 +365,7 @@ final class AtletasAdminSyncService
                 $oldNumfvd = (int)($u['numfvd'] ?? 0);
                 $oldClubId = (int)($u['club_id'] ?? 0);
                 $oldEntidad = (int)($u['entidad'] ?? 0);
-                $oldOrganizacionId = (int)($u['cod_org'] ?? 0);
+                $oldOrganizacionId = $hasUsuarioCodOrg ? (int)($u['cod_org'] ?? 0) : 0;
                 $oldCel = self::nullableString($u['celular'] ?? null);
                 $oldEmail = self::nullableString($u['email'] ?? null);
                 $oldFechnac = self::normalizarFecha($u['fechnac'] ?? null);
@@ -369,7 +387,7 @@ final class AtletasAdminSyncService
                     $reporte['entidad_actualizados']++;
                     $huboCambio = true;
                 }
-                if ($oldOrganizacionId !== $nuevaOrganizacionId) {
+                if ($hasUsuarioCodOrg && $oldOrganizacionId !== $nuevaOrganizacionId) {
                     $reporte['cod_org_actualizados']++;
                     $huboCambio = true;
                 }
@@ -404,17 +422,30 @@ final class AtletasAdminSyncService
                     continue;
                 }
 
-                $stmtUpdate->execute([
-                    $nuevoSexo,
-                    $nuevoNumfvd,
-                    $nuevoClubId,
-                    $nuevaEntidad,
-                    $nuevaOrganizacionId,
-                    $nuevoCel,
-                    $nuevoEmail,
-                    $nuevaFechnac,
-                    $uid,
-                ]);
+                if ($hasUsuarioCodOrg) {
+                    $stmtUpdate->execute([
+                        $nuevoSexo,
+                        $nuevoNumfvd,
+                        $nuevoClubId,
+                        $nuevaEntidad,
+                        $nuevaOrganizacionId,
+                        $nuevoCel,
+                        $nuevoEmail,
+                        $nuevaFechnac,
+                        $uid,
+                    ]);
+                } else {
+                    $stmtUpdate->execute([
+                        $nuevoSexo,
+                        $nuevoNumfvd,
+                        $nuevoClubId,
+                        $nuevaEntidad,
+                        $nuevoCel,
+                        $nuevoEmail,
+                        $nuevaFechnac,
+                        $uid,
+                    ]);
+                }
                 if ($stmtUpdate->rowCount() > 0) {
                     $reporte['actualizados']++;
                 }
@@ -431,6 +462,22 @@ final class AtletasAdminSyncService
         ksort($reporte['por_club']);
         $reporte['csv_path'] = self::guardarCsvNoEncontradas($csvDir, $noEncontradas);
         return $reporte;
+    }
+
+    private static function usuariosTieneCodOrg(PDO $pdo): bool
+    {
+        static $cached = [];
+        $key = spl_object_hash($pdo);
+        if (array_key_exists($key, $cached)) {
+            return $cached[$key];
+        }
+        try {
+            $cached[$key] = (bool)$pdo->query("SHOW COLUMNS FROM usuarios LIKE 'cod_org'")->fetch(PDO::FETCH_ASSOC);
+        } catch (Throwable $ignored) {
+            $cached[$key] = false;
+        }
+
+        return $cached[$key];
     }
 
     private static function getColumns(PDO $pdo, string $table): array

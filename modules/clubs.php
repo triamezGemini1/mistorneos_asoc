@@ -34,6 +34,7 @@ if ($current_user['role'] === 'admin_club' && !Auth::isAdminGeneral()) {
 $id = $_GET['id'] ?? null;
 $success_message = $_GET['success'] ?? null;
 $error_message = $_GET['error'] ?? null;
+$info_message = isset($_GET['info']) ? (string)$_GET['info'] : null;
 $has_cod_org = false;
 try {
     $has_cod_org = (bool)DB::pdo()->query("SHOW COLUMNS FROM organizaciones LIKE 'cod_org'")->fetch(PDO::FETCH_ASSOC);
@@ -101,16 +102,15 @@ if ($action === 'afiliado_detail') {
             $club = $stmt->fetch(PDO::FETCH_ASSOC);
             
             if ($club) {
-                // Obtener datos del afiliado
+                [$scopeSqlAf, $scopeParamsAf] = ClubHelper::afiliadosMatchSqlAndParams(DB::pdo(), $club, $club_id);
                 $stmt = DB::pdo()->prepare("
                     SELECT u.*,
-                           COUNT(DISTINCT i.torneo_id) as total_torneos
+                           (SELECT COUNT(DISTINCT i2.torneo_id) FROM inscritos i2 WHERE i2.id_usuario = u.id) AS total_torneos
                     FROM usuarios u
-                    LEFT JOIN inscritos i ON i.id_usuario = u.id
-                    WHERE u.id = ? AND u.club_id = ? AND u.role = 'usuario'
-                    GROUP BY u.id
+                    WHERE u.id = ?
+                      AND ({$scopeSqlAf})
                 ");
-                $stmt->execute([$user_id, $club_id]);
+                $stmt->execute(array_merge([$user_id], $scopeParamsAf));
                 $afiliado_detail = $stmt->fetch(PDO::FETCH_ASSOC);
                 
                 if (!$afiliado_detail) {
@@ -192,27 +192,28 @@ if (($action === 'edit' || $action === 'view' || $action === 'detail') && $id) {
                 $club_stats = [];
                 $pagination_afiliados = null;
                 
-                // Obtener parámetro de género para filtrar
-                $genero_filter = isset($_GET['genero']) ? strtoupper($_GET['genero']) : null;
+                $genero_filter = isset($_GET['genero']) ? strtoupper((string) $_GET['genero']) : null;
+                if ($genero_filter !== 'M' && $genero_filter !== 'F') {
+                    $genero_filter = null;
+                }
                 
                 // Obtener parámetro de origen para el redirect
                 $from_page = isset($_GET['from']) ? $_GET['from'] : null;
                 $from_admin_id = isset($_GET['admin_id']) ? (int)$_GET['admin_id'] : null;
+
+                $club_pk = (int) ($club['id'] ?? 0);
+                [$afiliados_scope_sql, $afiliados_scope_params] = ClubHelper::afiliadosMatchSqlAndParams(DB::pdo(), $club, $club_pk);
                 
-                // Construir query base para contar total de afiliados
+                // Total: usuarios donde entidad = id del club (sin filtrar rol ni status)
                 $count_query = "
                     SELECT COUNT(DISTINCT u.id)
                     FROM usuarios u
-                    WHERE u.club_id = ? 
-                      AND u.role = 'usuario' 
-                      AND u.status = 0
+                    WHERE {$afiliados_scope_sql}
                 ";
                 
-                $count_params = [(int)$id];
-                
-                // Agregar filtro por género si se especifica
-                if ($genero_filter === 'M' || $genero_filter === 'F') {
-                    $count_query .= " AND u.sexo = ?";
+                $count_params = $afiliados_scope_params;
+                if ($genero_filter !== null) {
+                    $count_query .= ' AND u.sexo = ?';
                     $count_params[] = $genero_filter;
                 }
                 
@@ -225,53 +226,45 @@ if (($action === 'edit' || $action === 'view' || $action === 'detail') && $id) {
                 $per_page = isset($_GET['per_page']) ? max(10, min(100, (int)$_GET['per_page'])) : 25;
                 $pagination_afiliados = new Pagination($total_afiliados, $current_page, $per_page);
                 
-                // Construir query para obtener afiliados con paginación
                 $afiliados_query = "
                     SELECT 
                         u.*,
-                        COUNT(DISTINCT i.torneo_id) as total_torneos
+                        (SELECT COUNT(DISTINCT i2.torneo_id) FROM inscritos i2 WHERE i2.id_usuario = u.id) AS total_torneos
                     FROM usuarios u
-                    LEFT JOIN inscritos i ON i.id_usuario = u.id
-                    WHERE u.club_id = ? 
-                      AND u.role = 'usuario' 
-                      AND u.status = 0
+                    WHERE {$afiliados_scope_sql}
                 ";
                 
-                $afiliados_params = [(int)$id];
-                
-                // Agregar filtro por género si se especifica
-                if ($genero_filter === 'M' || $genero_filter === 'F') {
-                    $afiliados_query .= " AND u.sexo = ?";
+                $afiliados_params = $afiliados_scope_params;
+                if ($genero_filter !== null) {
+                    $afiliados_query .= ' AND u.sexo = ?';
                     $afiliados_params[] = $genero_filter;
                 }
                 
-                $afiliados_query .= " GROUP BY u.id ORDER BY u.nombre ASC LIMIT {$pagination_afiliados->getLimit()} OFFSET {$pagination_afiliados->getOffset()}";
+                $afiliados_query .= " ORDER BY u.status ASC, u.nombre ASC LIMIT {$pagination_afiliados->getLimit()} OFFSET {$pagination_afiliados->getOffset()}";
                 
                 $stmt = DB::pdo()->prepare($afiliados_query);
                 $stmt->execute($afiliados_params);
                 $club_afiliados = $stmt->fetchAll(PDO::FETCH_ASSOC);
                 
-                // Obtener estadísticas del club (sin filtro de paginación, todos los registros)
+                // Estadísticas (mismo universo que el listado; género solo si filtro activo)
                 $stats_query = "
                     SELECT 
                         COUNT(*) as total_afiliados,
-                        SUM(CASE WHEN sexo = 'M' THEN 1 ELSE 0 END) as hombres,
-                        SUM(CASE WHEN sexo = 'F' THEN 1 ELSE 0 END) as mujeres
-                    FROM usuarios
-                    WHERE club_id = ? 
-                      AND role = 'usuario' 
-                      AND status = 0
+                        SUM(CASE WHEN u.status = 0 THEN 1 ELSE 0 END) as total_activos,
+                        SUM(CASE WHEN u.sexo = 'M' THEN 1 ELSE 0 END) as hombres,
+                        SUM(CASE WHEN u.sexo = 'F' THEN 1 ELSE 0 END) as mujeres
+                    FROM usuarios u
+                    WHERE {$afiliados_scope_sql}
                 ";
                 
-                // Si hay filtro de género, aplicar también a las estadísticas
-                if ($genero_filter === 'M' || $genero_filter === 'F') {
-                    $stats_query .= " AND sexo = ?";
-                    $stmt = DB::pdo()->prepare($stats_query);
-                    $stmt->execute([(int)$id, $genero_filter]);
-                } else {
-                    $stmt = DB::pdo()->prepare($stats_query);
-                    $stmt->execute([(int)$id]);
+                $stats_params = $afiliados_scope_params;
+                if ($genero_filter !== null) {
+                    $stats_query .= ' AND u.sexo = ?';
+                    $stats_params[] = $genero_filter;
                 }
+                
+                $stmt = DB::pdo()->prepare($stats_query);
+                $stmt->execute($stats_params);
                 
                 $club_stats = $stmt->fetch(PDO::FETCH_ASSOC);
             }
@@ -346,7 +339,7 @@ if ($action === 'list') {
                 SUM(CASE WHEN u.sexo = 'F' THEN 1 ELSE 0 END) as mujeres
             FROM clubes c
             LEFT JOIN usuarios admin ON c.admin_club_id = admin.id AND admin.role = 'admin_club'
-            LEFT JOIN usuarios u ON u.club_id = c.id AND u.role = 'usuario' AND u.status = 0
+            LEFT JOIN usuarios u ON u.entidad = c.id
             GROUP BY c.id
             ORDER BY admin.entidad ASC, admin.nombre ASC, c.nombre ASC
         ";
@@ -469,6 +462,13 @@ if ($action === 'list') {
                     <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
                 </div>
             <?php endif; ?>
+
+            <?php if ($info_message !== null && $info_message !== ''): ?>
+                <div class="alert alert-info alert-dismissible fade show" role="alert">
+                    <i class="fas fa-info-circle me-2"></i><?= htmlspecialchars($info_message) ?>
+                    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                </div>
+            <?php endif; ?>
             
             <?php if ($action === 'list' && !empty($clubs_by_entidad)): ?>
             <!-- Tabla Resumen: Entidad → Admin Organización → Clubes Registrados -->
@@ -567,8 +567,8 @@ if ($action === 'list') {
                 </div>
             <?php else: ?>
                 <?php foreach ($clubs_by_entidad as $entidad_id => $entidad_data): ?>
-                    <!-- Cabecera de Entidad -->
-                    <div class="mb-4">
+                    <!-- Cabecera de Entidad (id para enlaces desde “asociación” → clubes) -->
+                    <div class="mb-4" id="asociacion-<?= (int)$entidad_id ?>">
                         <div class="py-3 px-4 rounded-top" style="background: linear-gradient(90deg, #0d6efd 0%, #0a58ca 100%); color: white;">
                             <div class="d-flex justify-content-between align-items-center">
                                 <div>
@@ -727,13 +727,30 @@ if ($action === 'list') {
         </div>
     </div>
 
+<?php
+$clubs_scroll_entidad = ($action === 'list' && !empty($_GET['entidad_id'])) ? (int)$_GET['entidad_id'] : 0;
+if ($clubs_scroll_entidad > 0):
+?>
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    var el = document.getElementById('asociacion-<?= $clubs_scroll_entidad ?>');
+    if (el) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+});
+</script>
+<?php endif; ?>
+
 <?php elseif ($action === 'detail'): ?>
     <!-- Vista de Detalle del Club con Afiliados -->
     <?php 
     // Asegurar que las variables estén definidas
     $from_page = isset($from_page) ? $from_page : (isset($_GET['from']) ? $_GET['from'] : null);
     $from_admin_id = isset($from_admin_id) ? $from_admin_id : (isset($_GET['admin_id']) ? (int)$_GET['admin_id'] : null);
-    $genero_filter = isset($_GET['genero']) ? strtoupper($_GET['genero']) : null;
+    if (!isset($genero_filter) || ($genero_filter !== 'M' && $genero_filter !== 'F')) {
+        $g = isset($_GET['genero']) ? strtoupper((string) $_GET['genero']) : '';
+        $genero_filter = ($g === 'M' || $g === 'F') ? $g : null;
+    }
     $filtro_activo = $genero_filter === 'M' ? 'Hombres' : ($genero_filter === 'F' ? 'Mujeres' : 'Todos');
     
     // Determinar URL de retorno según el origen
@@ -743,22 +760,22 @@ if ($action === 'list') {
     } elseif ($from_page === 'home') {
         // Si viene del dashboard (home), volver al dashboard
         $return_url = 'index.php?page=home';
+    } elseif ($from_page === 'clubes_asociados') {
+        $return_url = 'index.php?page=clubes_asociados';
     }
     
-    // Construir URL base para los filtros de género
-    $base_url = 'index.php?page=clubs&action=detail&id=' . $club['id'];
+    $base_detail_sin_genero = 'index.php?page=clubs&action=detail&id=' . (int) ($club['id'] ?? 0);
     if ($from_page) {
-        $base_url .= '&from=' . urlencode($from_page);
+        $base_detail_sin_genero .= '&from=' . urlencode((string) $from_page);
     }
     if ($from_admin_id) {
-        $base_url .= '&admin_id=' . $from_admin_id;
+        $base_detail_sin_genero .= '&admin_id=' . (int) $from_admin_id;
     }
-    // Preservar filtro de género si existe
-    if ($genero_filter) {
-        $base_url .= '&genero=' . urlencode($genero_filter);
-    }
+    $url_genero_m = $base_detail_sin_genero . '&genero=M';
+    $url_genero_f = $base_detail_sin_genero . '&genero=F';
+    
     ?>
-    <div class="d-flex justify-content-between align-items-center mb-4">
+    <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
         <div>
             <a href="<?= htmlspecialchars($return_url) ?>" class="btn btn-outline-secondary btn-sm mb-2">
                 <i class="fas fa-arrow-left me-1"></i>Volver
@@ -767,41 +784,36 @@ if ($action === 'list') {
                 <i class="fas fa-building me-2"></i><?= htmlspecialchars($club['nombre'] ?? 'Club sin nombre') ?>
             </h2>
             <small class="text-muted">
-                Lista de Afiliados
-                <?php if ($genero_filter): ?>
-                    - Filtrado: <span class="badge bg-<?= $genero_filter === 'M' ? 'primary' : 'danger' ?>"><?= $filtro_activo ?></span>
-                <?php endif; ?>
+                Listado: filas de <code>usuarios</code> con <code>entidad</code> = <code>id</code> de este club. Orden: estatus, nombre.
+                <?php if ($genero_filter): ?> · <span class="badge bg-<?= $genero_filter === 'M' ? 'primary' : 'danger' ?>"><?= htmlspecialchars($filtro_activo) ?></span><?php endif; ?>
             </small>
         </div>
-        <div>
-            <div class="btn-group" role="group">
-                <a href="<?= htmlspecialchars($base_url) ?>" 
-                   class="btn btn-sm <?= !$genero_filter ? 'btn-primary' : 'btn-outline-primary' ?>">
-                    <i class="fas fa-users me-1"></i>Todos
-                </a>
-                <a href="<?= htmlspecialchars($base_url . '&genero=M') ?>" 
-                   class="btn btn-sm <?= $genero_filter === 'M' ? 'btn-primary' : 'btn-outline-primary' ?>">
-                    <i class="fas fa-mars me-1"></i>Hombres
-                </a>
-                <a href="<?= htmlspecialchars($base_url . '&genero=F') ?>" 
-                   class="btn btn-sm <?= $genero_filter === 'F' ? 'btn-primary' : 'btn-outline-primary' ?>">
-                    <i class="fas fa-venus me-1"></i>Mujeres
-                </a>
-            </div>
+        <div class="btn-group" role="group">
+            <a href="<?= htmlspecialchars($base_detail_sin_genero) ?>" class="btn btn-sm <?= !$genero_filter ? 'btn-primary' : 'btn-outline-primary' ?>">Todos</a>
+            <a href="<?= htmlspecialchars($url_genero_m) ?>" class="btn btn-sm <?= $genero_filter === 'M' ? 'btn-primary' : 'btn-outline-primary' ?>">Hombres</a>
+            <a href="<?= htmlspecialchars($url_genero_f) ?>" class="btn btn-sm <?= $genero_filter === 'F' ? 'btn-primary' : 'btn-outline-primary' ?>">Mujeres</a>
         </div>
     </div>
     
     <!-- Estadísticas del Club -->
     <div class="row mb-4">
-        <div class="col-md-4">
+        <div class="col-6 col-md-3">
             <div class="card text-center bg-primary text-white">
                 <div class="card-body">
                     <h2 class="mb-0"><?= (int)($club_stats['total_afiliados'] ?? 0) ?></h2>
-                    <small>Total Afiliados</small>
+                    <small>Total</small>
                 </div>
             </div>
         </div>
-        <div class="col-md-4">
+        <div class="col-6 col-md-3">
+            <div class="card text-center bg-success text-white">
+                <div class="card-body">
+                    <h2 class="mb-0"><?= (int)($club_stats['total_activos'] ?? 0) ?></h2>
+                    <small>Activos</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-6 col-md-3">
             <div class="card text-center bg-info text-white">
                 <div class="card-body">
                     <h2 class="mb-0"><?= (int)($club_stats['hombres'] ?? 0) ?></h2>
@@ -809,7 +821,7 @@ if ($action === 'list') {
                 </div>
             </div>
         </div>
-        <div class="col-md-4">
+        <div class="col-6 col-md-3">
             <div class="card text-center bg-danger text-white">
                 <div class="card-body">
                     <h2 class="mb-0"><?= (int)($club_stats['mujeres'] ?? 0) ?></h2>
@@ -837,6 +849,7 @@ if ($action === 'list') {
                             <tr>
                                 <th>ID Usuario</th>
                                 <th>Nombre</th>
+                                <th>Estado</th>
                                 <th>Sexo</th>
                                 <th>Email</th>
                                 <th>Celular</th>
@@ -849,6 +862,17 @@ if ($action === 'list') {
                                 <tr>
                                     <td><code><?= htmlspecialchars($afiliado['id'] ?? 'N/A') ?></code></td>
                                     <td><strong><?= htmlspecialchars($afiliado['nombre'] ?? 'N/A') ?></strong></td>
+                                    <td>
+                                        <?php
+                                        $st = $afiliado['status'] ?? null;
+                                        $esActivo = ($st === 0 || $st === '0');
+                                        ?>
+                                        <?php if ($esActivo): ?>
+                                            <span class="badge bg-success">Activo</span>
+                                        <?php else: ?>
+                                            <span class="badge bg-secondary">Inactivo</span>
+                                        <?php endif; ?>
+                                    </td>
                                     <td>
                                         <?php if ($afiliado['sexo'] === 'M'): ?>
                                             <span class="badge bg-primary">Masculino</span>
@@ -872,8 +896,7 @@ if ($action === 'list') {
                                         if (isset($from_admin_id) && $from_admin_id) {
                                             $afiliado_detail_url .= '&admin_id=' . $from_admin_id;
                                         }
-                                        // Preservar filtro de género si existe
-                                        if (isset($genero_filter) && $genero_filter) {
+                                        if (!empty($genero_filter)) {
                                             $afiliado_detail_url .= '&genero=' . urlencode($genero_filter);
                                         }
                                         ?>
@@ -898,121 +921,78 @@ if ($action === 'list') {
         </div>
     </div>
 
-<?php elseif ($action === 'view'): ?>
-    <!-- Vista Individual -->
+<?php elseif ($action === 'new' || $action === 'edit' || $action === 'view'): ?>
+    <?php $club_form_readonly = ($action === 'view'); ?>
+    <!-- Formulario (mismo diseño en alta, edición y consulta) -->
     <div class="card">
-        <div class="card-header bg-primary text-white">
+        <div class="card-header bg-<?= $club_form_readonly ? 'info' : ($action === 'edit' ? 'warning' : 'success') ?> text-white">
             <h5 class="card-title mb-0">
-                <i class="fas fa-building me-2"></i>Ver Club: <?= htmlspecialchars($club['nombre'] ?? 'Club sin nombre') ?>
-            </h5>
-        </div>
-        <div class="card-body">
-            <div class="row">
-                <div class="col-md-8">
-                    <div class="mb-3">
-                        <label class="form-label fw-bold"><i class="fas fa-tag me-2 text-primary"></i>Nombre del Club</label>
-                        <p class="form-control-plaintext"><?= htmlspecialchars($club['nombre'] ?? 'Club sin nombre') ?></p>
-                    </div>
-                    
-                    <div class="mb-3">
-                        <label class="form-label fw-bold"><i class="fas fa-user me-2 text-primary"></i>Delegado</label>
-                        <p class="form-control-plaintext"><?= htmlspecialchars($club['delegado'] ?? 'No especificado') ?></p>
-                    </div>
-                    
-                    <div class="mb-3">
-                        <label class="form-label fw-bold"><i class="fas fa-phone me-2 text-primary"></i>Teléfono</label>
-                        <p class="form-control-plaintext"><?= htmlspecialchars($club['telefono'] ?? 'No especificado') ?></p>
-                    </div>
-                    
-                    <?php if (!empty($club['email'])): ?>
-                    <div class="mb-3">
-                        <label class="form-label fw-bold"><i class="fas fa-envelope me-2 text-primary"></i>Email</label>
-                        <p class="form-control-plaintext"><?= htmlspecialchars($club['email']) ?></p>
-                    </div>
-                    <?php endif; ?>
-                    
-                    <div class="mb-3">
-                        <label class="form-label fw-bold"><i class="fas fa-map-marker-alt me-2 text-primary"></i>Direcci�n</label>
-                        <p class="form-control-plaintext"><?= htmlspecialchars($club['direccion'] ?? 'No especificada') ?></p>
-                    </div>
-                    
-                    <div class="mb-3">
-                        <label class="form-label fw-bold"><i class="fas fa-toggle-on me-2 text-primary"></i>Estado</label>
-                        <p class="form-control-plaintext">
-                            <span class="badge bg-<?= $club['estatus'] ? 'success' : 'secondary' ?>">
-                                <?= $club['estatus'] ? 'Activo' : 'Inactivo' ?>
-                            </span>
-                        </p>
-                    </div>
-                    <?php if (isset($club['permite_inscripcion_linea'])): ?>
-                    <div class="mb-3">
-                        <label class="form-label fw-bold"><i class="fas fa-globe me-2 text-primary"></i>Inscripciones en línea</label>
-                        <p class="form-control-plaintext">
-                            <span class="badge bg-<?= ($club['permite_inscripcion_linea'] ?? 1) ? 'info' : 'secondary' ?>">
-                                <?= ($club['permite_inscripcion_linea'] ?? 1) ? 'Permitido' : 'Solo en sitio' ?>
-                            </span>
-                        </p>
-                    </div>
-                    <?php endif; ?>
-                </div>
-                
-                <div class="col-md-4">
-                    <div class="mb-3">
-                        <label class="form-label fw-bold"><i class="fas fa-image me-2 text-primary"></i>Logo del Club</label>
-                        <div class="text-center">
-                            <?= displayClubLogoView($club) ?>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-        <div class="card-footer">
-            <a href="index.php?page=clubs" class="btn btn-secondary">
-                <i class="fas fa-arrow-left me-2"></i>Volver a la Lista
-            </a>
-            <a href="index.php?page=clubs&action=edit&id=<?= $club['id'] ?>" class="btn btn-primary">
-                <i class="fas fa-edit me-2"></i>Editar
-            </a>
-            <button type="button" class="btn btn-success" onclick="openInvitationModal(<?= $club['id'] ?>, '<?= htmlspecialchars($club['nombre'] ?? 'Club sin nombre', ENT_QUOTES) ?>')">
-                <i class="fas fa-paper-plane me-2"></i>Enviar Invitaci�n
-            </button>
-        </div>
-    </div>
-
-<?php elseif ($action === 'new' || $action === 'edit'): ?>
-    <!-- Formulario -->
-    <div class="card">
-        <div class="card-header bg-<?= $action === 'edit' ? 'warning' : 'success' ?> text-white">
-            <h5 class="card-title mb-0">
-                <i class="fas fa-<?= $action === 'edit' ? 'edit' : 'plus-circle' ?> me-2"></i>
-                <?= $action === 'edit' ? 'Editar' : 'Nuevo' ?> Club
-            </h5>
-        </div>
-        <div class="card-body">
-            <form method="POST" action="index.php?page=clubs&action=<?= $action === 'edit' ? 'update' : 'save' ?>" enctype="multipart/form-data">
-                <?= CSRF::input(); ?>
-                <?php if ($action === 'edit'): ?>
-                    <input type="hidden" name="id" value="<?= (int)$club['id'] ?>">
+                <i class="fas fa-<?= $club_form_readonly ? 'eye' : ($action === 'edit' ? 'edit' : 'plus-circle') ?> me-2"></i>
+                <?php if ($club_form_readonly): ?>
+                    Consultar asociación
+                <?php elseif ($action === 'edit'): ?>
+                    Editar asociación
+                <?php else: ?>
+                    Nueva asociación
                 <?php endif; ?>
+            </h5>
+        </div>
+        <div class="card-body">
+            <form method="POST"
+                  action="<?= $club_form_readonly ? '#' : 'index.php?page=clubs&action=' . ($action === 'edit' ? 'update' : 'save') ?>"
+                  enctype="multipart/form-data"
+                  <?= $club_form_readonly ? ' onsubmit="return false;"' : '' ?>>
+                <?php if (!$club_form_readonly): ?>
+                    <?= CSRF::input(); ?>
+                    <?php if ($action === 'edit'): ?>
+                        <input type="hidden" name="id" value="<?= (int)$club['id'] ?>">
+                    <?php endif; ?>
+                <?php endif; ?>
+                <?php if ($club_form_readonly): ?>
+                <fieldset disabled class="border-0 m-0 p-0 ms-1 me-1 mb-3">
+                    <legend class="visually-hidden">Datos del club (solo lectura)</legend>
+                <?php endif; ?>
+
                 <?php if ($action === 'new'): ?>
                     <?php if (Auth::isAdminGeneral()): ?>
-                        <?php if (!empty($organizaciones_list)): ?>
                             <div class="mb-3">
-                                <label for="organizacion_id" class="form-label">Organización (entidad territorial) *</label>
-                                <select class="form-select" id="organizacion_id" name="organizacion_id" required>
-                                    <option value="">-- Seleccione organización --</option>
-                                    <?php foreach ($organizaciones_list as $org): ?>
-                                        <option value="<?= (int)$org['id'] ?>"><?= htmlspecialchars($org['nombre']) ?></option>
+                                <input type="hidden" name="organizacion_id" value="<?= (int)(class_exists('FvdConfig') ? FvdConfig::organizacionId() : 1) ?>">
+                                <?php
+                                $entidades_club_form = [];
+                                try {
+                                    $entidades_club_form = DB::pdo()->query("SELECT id, nombre FROM entidad ORDER BY nombre ASC")->fetchAll(PDO::FETCH_ASSOC);
+                                } catch (Throwable $e) {
+                                    try {
+                                        $entidades_club_form = DB::pdo()->query("SELECT codigo AS id, nombre FROM entidad ORDER BY nombre ASC")->fetchAll(PDO::FETCH_ASSOC);
+                                    } catch (Throwable $e2) {
+                                        $entidades_club_form = [];
+                                    }
+                                }
+                                ?>
+                                <label for="entidad" class="form-label">Asociación (estado/región) *</label>
+                                <select class="form-select" id="entidad" name="entidad" required>
+                                    <option value="">-- Seleccione asociación --</option>
+                                    <?php foreach ($entidades_club_form as $entRow): ?>
+                                        <option value="<?= (int)$entRow['id'] ?>"><?= htmlspecialchars($entRow['nombre']) ?></option>
                                     <?php endforeach; ?>
                                 </select>
-                                <small class="form-text text-muted">Todo club debe pertenecer a una organización con entidad definida.</small>
                             </div>
-                        <?php else: ?>
-                            <div class="alert alert-warning">No hay organizaciones registradas. Cree una desde <a href="index.php?page=mi_organizacion">Mi Organización</a> antes de dar de alta un club.</div>
-                        <?php endif; ?>
-                    <?php elseif ($current_user['role'] === 'admin_torneo' && $organizacion_id_new): ?>
-                        <input type="hidden" name="organizacion_id" value="<?= (int)$organizacion_id_new ?>">
+                    <?php elseif ($current_user['role'] === 'admin_torneo'): ?>
+                        <input type="hidden" name="organizacion_id" value="<?= (int)(class_exists('FvdConfig') ? FvdConfig::organizacionId() : 1) ?>">
                     <?php endif; ?>
+                <?php endif; ?>
+
+                <?php if ($action === 'edit' || $action === 'view'): ?>
+                    <?php
+                    $entClubId = (int)($club['entidad'] ?? 0);
+                    $entClubNombre = ($entClubId > 0)
+                        ? (string)($entidad_map[$entClubId] ?? $entidad_map[(string)$entClubId] ?? ('Asociación #' . $entClubId))
+                        : '—';
+                    ?>
+                    <div class="mb-3">
+                        <label class="form-label" for="entidad_consulta">Asociación (estado/región)</label>
+                        <input type="text" class="form-control bg-light" id="entidad_consulta" readonly value="<?= htmlspecialchars($entClubNombre) ?>">
+                    </div>
                 <?php endif; ?>
                 
                 <div class="row">
@@ -1020,45 +1000,47 @@ if ($action === 'list') {
                         <div class="mb-3">
                             <label for="nombre" class="form-label">Nombre del Club *</label>
                             <input type="text" class="form-control" id="nombre" name="nombre" 
-                                   value="<?= htmlspecialchars($action === 'edit' ? $club['nombre'] : '') ?>" 
-                                   required placeholder="Ej: Club de Domin� Central">
+                                   value="<?= htmlspecialchars(($action === 'edit' || $action === 'view') ? ($club['nombre'] ?? '') : '') ?>" 
+                                   <?= !$club_form_readonly ? 'required' : '' ?> placeholder="Ej: Club de Dominó Central">
                         </div>
                         
                         <div class="mb-3">
                             <label for="delegado" class="form-label">Delegado</label>
                             <input type="text" class="form-control" id="delegado" name="delegado" 
-                                   value="<?= htmlspecialchars($action === 'edit' ? ($club['delegado'] ?? '') : '') ?>" 
+                                   value="<?= htmlspecialchars(($action === 'edit' || $action === 'view') ? ($club['delegado'] ?? '') : '') ?>" 
                                    placeholder="Nombre del delegado">
                         </div>
                         
                         <div class="mb-3">
                             <label for="telefono" class="form-label">Teléfono</label>
                             <input type="tel" class="form-control" id="telefono" name="telefono" 
-                                   value="<?= htmlspecialchars($action === 'edit' ? ($club['telefono'] ?? '') : '') ?>" 
+                                   value="<?= htmlspecialchars(($action === 'edit' || $action === 'view') ? ($club['telefono'] ?? '') : '') ?>" 
                                    placeholder="Ej: 04XX-XXXXXXX">
                         </div>
                         
                         <div class="mb-3">
                             <label for="email" class="form-label">Email</label>
                             <input type="email" class="form-control" id="email" name="email" 
-                                   value="<?= htmlspecialchars($action === 'edit' ? ($club['email'] ?? '') : '') ?>" 
+                                   value="<?= htmlspecialchars(($action === 'edit' || $action === 'view') ? ($club['email'] ?? '') : '') ?>" 
                                    placeholder="Ej: club@ejemplo.com">
                         </div>
                     </div>
                     
-                    <div class="col-md-6"><div class="mb-3"><label for="direccion" class="form-label">Direcci�n</label>
+                    <div class="col-md-6"><div class="mb-3"><label for="direccion" class="form-label">Dirección</label>
                             <textarea class="form-control" id="direccion" name="direccion" rows="3" 
-                                      placeholder="Direcci�n completa del club"><?= htmlspecialchars($action === 'edit' ? ($club['direccion'] ?? '') : '') ?></textarea>
+                                      placeholder="Dirección completa del club"><?= htmlspecialchars(($action === 'edit' || $action === 'view') ? ($club['direccion'] ?? '') : '') ?></textarea>
                         </div>
                         
                         <div class="mb-3">
                             <label for="logo" class="form-label">Logo del Club</label>
+                            <?php if (!$club_form_readonly): ?>
                             <input type="file" class="form-control" id="logo" name="logo" accept="image/*" data-preview-target="club-logo-preview">
-                            <small class="form-text text-muted">Formatos permitidos: JPG, PNG, GIF (m�x. 5MB)</small>
+                            <small class="form-text text-muted">Formatos permitidos: JPG, PNG, GIF (máx. 5MB)</small>
                             <div id="club-logo-preview"></div>
-                            <?php if ($action === 'edit' && !empty($club['logo'])): ?>
+                            <?php endif; ?>
+                            <?php if (($action === 'edit' || $action === 'view') && !empty($club['logo'])): ?>
                                 <div class="mt-2">
-                                    <small class="text-muted">Logo actual:</small><br>
+                                    <small class="text-muted">Logo<?= $club_form_readonly ? '' : ' actual' ?>:</small><br>
                                     <?= displayClubLogoEdit($club) ?>
                                 </div>
                             <?php endif; ?>
@@ -1071,7 +1053,7 @@ if ($action === 'list') {
                         <div class="mb-3">
                             <div class="form-check form-switch">
                                 <input class="form-check-input" type="checkbox" id="permite_inscripcion_linea" name="permite_inscripcion_linea" value="1"
-                                    <?= ($action === 'edit' ? (($club['permite_inscripcion_linea'] ?? 1) == 1) : true) ? ' checked' : '' ?>>
+                                    <?= (($action === 'edit' || $action === 'view') ? (($club['permite_inscripcion_linea'] ?? 1) == 1) : true) ? ' checked' : '' ?>>
                                 <label class="form-check-label" for="permite_inscripcion_linea">
                                     <i class="fas fa-globe me-1"></i>Permitir inscripciones en línea
                                 </label>
@@ -1082,22 +1064,40 @@ if ($action === 'list') {
                     <div class="col-md-6">
                         <div class="mb-3">
                             <label for="estatus" class="form-label">Estado *</label>
-                            <select class="form-select" id="estatus" name="estatus" required>
-                                <option value="1"<?= ($action === 'edit' && ($club['estatus'] ?? 1) == 1) ? ' selected' : ' selected' ?>>Activo</option>
-                                <option value="0"<?= ($action === 'edit' && ($club['estatus'] ?? 1) == 0) ? ' selected' : '' ?>>Inactivo</option>
+                            <select class="form-select" id="estatus" name="estatus" <?= !$club_form_readonly ? 'required' : '' ?>>
+                                <option value="1"<?= (($action === 'edit' || $action === 'view') && (int)($club['estatus'] ?? 1) === 1) || $action === 'new' ? ' selected' : '' ?>>Activo</option>
+                                <option value="0"<?= ($action === 'edit' || $action === 'view') && (int)($club['estatus'] ?? 1) === 0 ? ' selected' : '' ?>>Inactivo</option>
                             </select>
                             <small class="form-text text-muted">Los clubs inactivos no aparecerán en listados públicos</small>
                         </div>
                     </div>
                 </div>
+
+                <?php if ($club_form_readonly): ?>
+                </fieldset>
+                <?php endif; ?>
                 
-                <div class="d-flex justify-content-between mt-4 pt-3 border-top">
+                <div class="d-flex flex-wrap gap-2 justify-content-between mt-4 pt-3 border-top">
                     <a href="index.php?page=clubs" class="btn btn-secondary">
-                        <i class="fas fa-times me-2"></i>Cancelar
+                        <i class="fas fa-arrow-left me-2"></i><?= $club_form_readonly ? 'Volver al listado' : 'Cancelar' ?>
                     </a>
-                    <button type="submit" class="btn btn-<?= $action === 'edit' ? 'warning' : 'success' ?>">
-                        <i class="fas fa-save me-2"></i><?= $action === 'edit' ? 'Actualizar Club' : 'Crear Club' ?>
-                    </button>
+                    <div class="d-flex flex-wrap gap-2">
+                    <?php if ($club_form_readonly): ?>
+                        <a href="index.php?page=clubs&action=edit&id=<?= (int)$club['id'] ?>" class="btn btn-primary">
+                            <i class="fas fa-edit me-2"></i>Editar
+                        </a>
+                        <a href="index.php?page=clubs&action=detail&id=<?= (int)$club['id'] ?>" class="btn btn-outline-primary">
+                            <i class="fas fa-users me-2"></i>Ver afiliados
+                        </a>
+                        <button type="button" class="btn btn-success" onclick="openInvitationModal(<?= (int)$club['id'] ?>, '<?= htmlspecialchars($club['nombre'] ?? 'Club sin nombre', ENT_QUOTES) ?>')">
+                            <i class="fas fa-paper-plane me-2"></i>Enviar invitación
+                        </button>
+                    <?php else: ?>
+                        <button type="submit" class="btn btn-<?= $action === 'edit' ? 'warning' : 'success' ?>">
+                            <i class="fas fa-save me-2"></i><?= $action === 'edit' ? 'Actualizar club' : 'Crear club' ?>
+                        </button>
+                    <?php endif; ?>
+                    </div>
                 </div>
             </form>
         </div>
@@ -1109,16 +1109,17 @@ if ($action === 'list') {
     // Determinar URL de retorno
     $from_page = isset($_GET['from']) ? $_GET['from'] : null;
     $from_admin_id = isset($_GET['admin_id']) ? (int)$_GET['admin_id'] : null;
-    $genero_filter_afiliado = isset($_GET['genero']) ? strtoupper($_GET['genero']) : null;
     $return_url_detail = 'index.php?page=clubs&action=detail&id=' . $club['id'];
     if ($from_page === 'admin_clubs' && $from_admin_id) {
         $return_url_detail .= '&from=admin_clubs&admin_id=' . $from_admin_id;
     } elseif ($from_page === 'home') {
         $return_url_detail .= '&from=home';
+    } elseif ($from_page === 'clubes_asociados') {
+        $return_url_detail .= '&from=clubes_asociados';
     }
-    // Preservar filtro de género si existe
-    if ($genero_filter_afiliado) {
-        $return_url_detail .= '&genero=' . urlencode($genero_filter_afiliado);
+    $gBack = isset($_GET['genero']) ? strtoupper((string) $_GET['genero']) : '';
+    if ($gBack === 'M' || $gBack === 'F') {
+        $return_url_detail .= '&genero=' . urlencode($gBack);
     }
     ?>
     <div class="d-flex justify-content-between align-items-center mb-4">

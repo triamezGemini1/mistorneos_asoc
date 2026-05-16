@@ -1,7 +1,7 @@
-﻿<?php
+<?php
 /**
  * Script de prueba para verificar que los logs funcionan correctamente
- * Acceder a: http://localhost/mistorneos/public/api/test_logs.php
+ * Acceder a: http://localhost/mistorneos_fvd/public/api/test_logs.php
  */
 
 error_log("=== TEST LOGS - INICIO ===");

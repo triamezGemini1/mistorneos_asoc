@@ -1,6 +1,7 @@
 <?php
 require_once __DIR__ . '/../../config/auth.php';
 require_once __DIR__ . '/../../config/db.php';
+require_once __DIR__ . '/../../lib/OrganizacionDashboardStats.php';
 
 Auth::requireRole(['admin_general']);
 
@@ -20,11 +21,34 @@ try {
     // Cargar nombre de la entidad
     $entidad_map = [];
     $pdo = DB::pdo();
+    $flags = OrganizacionDashboardStats::columnFlags($pdo);
+    $has_usuario_cod_org = $flags['has_usuario_cod_org'] ?? false;
+
     $has_cod_org = false;
     try {
         $has_cod_org = (bool)$pdo->query("SHOW COLUMNS FROM organizaciones LIKE 'cod_org'")->fetch(PDO::FETCH_ASSOC);
     } catch (Throwable $ignored) {
         $has_cod_org = false;
+    }
+
+    try {
+        $club_misma_org_sql = OrganizacionDashboardStats::sqlClubMismaFederacionQueOrg($pdo, 'cx', 'o');
+    } catch (Throwable $ignored) {
+        $club_misma_org_sql = 'cx.cod_org = o.id';
+    }
+
+    /** Usuarios vinculados a la organización o (sin columna usuarios.cod_org: por club con misma federación). */
+    if ($has_usuario_cod_org) {
+        $ux_org_scope = 'ux.cod_org = o.id AND ux.entidad = ?';
+    } else {
+        try {
+            $club_uc_match = OrganizacionDashboardStats::sqlClubMismaFederacionQueOrg($pdo, 'uc', 'o');
+        } catch (Throwable $ignored) {
+            $club_uc_match = 'uc.cod_org = o.id';
+        }
+        $ux_org_scope = "ux.entidad = ? AND EXISTS (
+            SELECT 1 FROM clubes uc WHERE uc.id = ux.club_id AND uc.estatus = 1 AND ({$club_uc_match})
+        )";
     }
     $cols = $pdo->query("SHOW COLUMNS FROM entidad")->fetchAll(PDO::FETCH_ASSOC);
     $codeCol = null;
@@ -59,10 +83,10 @@ try {
             u.email as admin_email,
             o.telefono as club_telefono,
             o.responsable as club_delegado,
-            (SELECT COUNT(*) FROM clubes cx WHERE cx.cod_org = o.id AND cx.entidad = ? AND cx.estatus = 1) as supervised_clubs_count,
-            (SELECT COUNT(*) FROM usuarios ux WHERE ux.cod_org = o.id AND ux.entidad = ?) as total_afiliados,
-            (SELECT COUNT(*) FROM usuarios ux WHERE ux.cod_org = o.id AND ux.entidad = ? AND UPPER(COALESCE(ux.sexo,'M')) = 'M') as hombres,
-            (SELECT COUNT(*) FROM usuarios ux WHERE ux.cod_org = o.id AND ux.entidad = ? AND UPPER(COALESCE(ux.sexo,'M')) = 'F') as mujeres,
+            (SELECT COUNT(*) FROM clubes cx WHERE cx.estatus = 1 AND cx.entidad = ? AND ({$club_misma_org_sql})) as supervised_clubs_count,
+            (SELECT COUNT(*) FROM usuarios ux WHERE {$ux_org_scope}) as total_afiliados,
+            (SELECT COUNT(*) FROM usuarios ux WHERE {$ux_org_scope} AND UPPER(COALESCE(ux.sexo,'M')) = 'M') as hombres,
+            (SELECT COUNT(*) FROM usuarios ux WHERE {$ux_org_scope} AND UPPER(COALESCE(ux.sexo,'M')) = 'F') as mujeres,
             (SELECT COUNT(*) FROM tournaments t WHERE " . ($has_cod_org ? "(t.club_responsable = o.id OR t.club_responsable = o.cod_org)" : "t.club_responsable = o.id") . " AND t.estatus = 1) as total_torneos
         FROM organizaciones o
         LEFT JOIN usuarios u ON u.id = o.admin_user_id

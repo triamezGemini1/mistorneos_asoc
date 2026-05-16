@@ -19,7 +19,7 @@ $etiqueta_equipo = $es_parejas ? 'Pareja' : 'Equipo';
 $etiqueta_equipos = $es_parejas ? 'Parejas' : 'Equipos';
 
 /** Base URL hacia public/api/ — obligatoria para buscar_jugador, obtener_equipo, eliminar_equipo */
-$api_base_path = (function_exists('AppHelpers') ? AppHelpers::getPublicPath() : '/mistorneos/public/') . 'api/';
+$api_base_path = (function_exists('AppHelpers') ? AppHelpers::getPublicPath() : '/mistorneos_fvd/public/') . 'api/';
 
 // Determinar si el torneo ya inició (tiene rondas)
 $torneo_iniciado = false;
@@ -481,7 +481,7 @@ $api_guardar_equipo = $base_url . ($use_standalone ? '?' : '&') . 'action=guarda
                         </div>
                         <?php if (empty($clubes_disponibles) && !empty($is_admin_club ?? false)): ?>
                             <small class="text-muted d-block mb-2">
-                                <a href="<?php echo (function_exists('AppHelpers') ? AppHelpers::dashboard('clubes_asociados') : 'index.php?page=clubes_asociados'); ?>">Crear club</a> en Clubes de la organización
+                                <a href="<?php echo (function_exists('AppHelpers') ? AppHelpers::dashboard('clubes_asociados') : 'index.php?page=clubes_asociados'); ?>">Registrar asociación</a> en Asociaciones de la organización
                             </small>
                         <?php endif; ?>
 

@@ -19,7 +19,7 @@ return [
     'db' => [
         'host' => $env('DB_HOST', 'localhost'),
         'port' => $env('DB_PORT', '3306'),
-        'name' => $env('DB_DATABASE', 'mistorneos'),
+        'name' => $env('DB_DATABASE', 'mistorneos_fvd'),
         'user' => $env('DB_USERNAME', 'root'),
         'pass' => $env('DB_PASSWORD', ''),
         'charset' => $env('DB_CHARSET', 'utf8mb4'),

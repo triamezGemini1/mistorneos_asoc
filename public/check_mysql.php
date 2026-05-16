@@ -40,11 +40,12 @@ try {
     echo "✅ Conexión a MySQL exitosa\n";
     
     // Verificar base de datos
-    $stmt = $pdo->query("SHOW DATABASES LIKE 'mistorneos'");
+    $dbName = class_exists('Env') ? (Env::get('DB_DATABASE') ?: 'mistorneos_fvd') : 'mistorneos_fvd';
+    $stmt = $pdo->query("SHOW DATABASES LIKE " . $pdo->quote($dbName));
     if ($stmt->rowCount() > 0) {
-        echo "✅ Base de datos 'mistorneos' existe\n";
+        echo "✅ Base de datos '{$dbName}' existe\n";
     } else {
-        echo "⚠️  Base de datos 'mistorneos' NO existe\n";
+        echo "⚠️  Base de datos '{$dbName}' NO existe\n";
         echo "   Necesitas crearla o importar el schema\n";
     }
     

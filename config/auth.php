@@ -1,6 +1,7 @@
 <?php
 if (!defined('APP_BOOTSTRAPPED')) { require __DIR__ . '/bootstrap.php'; }
 require_once __DIR__ . '/db.php';
+require_once __DIR__ . '/../lib/FvdConfig.php';
 
 class Auth {
   private static $has_cod_org_column = null;
@@ -50,8 +51,10 @@ class Auth {
         'uuid' => $user['uuid'],
         'photo_path' => $user['photo_path'],
         'club_id' => $user['club_id'],
-        'entidad' => isset($user['entidad']) ? (int)$user['entidad'] : 0
+        'entidad' => isset($user['entidad']) ? (int)$user['entidad'] : 0,
+        'organizacion_id' => FvdConfig::ORGANIZACION_ID,
       ];
+      FvdConfig::anchorSession();
       // No regenerar ID aquí: el navegador ya envió una cookie (session_id); si regeneramos,
       // la nueva cookie no llega a la siguiente petición en entornos con subcarpeta y se pierde la sesión.
       return true;
@@ -108,6 +111,7 @@ class Auth {
     if (!$u || !is_array($u)) {
       return $u;
     }
+    FvdConfig::ensureSessionAnchorIfAuthenticated();
     $u['role'] = self::normalizeRole((string)($u['role'] ?? ''));
     if (!isset($u['role_original']) || $u['role_original'] === '') {
       $u['role_original'] = $u['role'] ?? '';
@@ -280,6 +284,43 @@ class Auth {
   }
 
   /**
+   * Delegado / admin operativo de una asociación (alcance provincial, sin gestión de torneos).
+   */
+  public static function isOperativoSoloAsociacion(): bool
+  {
+    if (self::isAdminGeneral()) {
+      return false;
+    }
+    $u = self::user();
+    if (!$u) {
+      return false;
+    }
+    require_once __DIR__ . '/../lib/AsociacionAdminHelper.php';
+
+    return AsociacionAdminHelper::esOperativoSoloAsociacion(
+      DB::pdo(),
+      self::id(),
+      (string) ($u['role'] ?? '')
+    );
+  }
+
+  /**
+   * Club de la asociación del usuario operativo.
+   *
+   * @return array<string, mixed>|null
+   */
+  public static function clubOperativoAsociacion(): ?array
+  {
+    $u = self::user();
+    if (!$u) {
+      return null;
+    }
+    require_once __DIR__ . '/../lib/AsociacionAdminHelper.php';
+
+    return AsociacionAdminHelper::clubOperativo(DB::pdo(), self::id(), (string) ($u['role'] ?? ''));
+  }
+
+  /**
    * Obtiene el club_id del usuario actual
    * @return int|null
    */
@@ -303,9 +344,24 @@ class Auth {
       return self::$cached_dashboard_organizacion;
     }
     $u = self::user();
-    if (!$u || $u['role'] === 'admin_general') {
+    if (!$u) {
       self::$cached_dashboard_organizacion = null;
       return null;
+    }
+    $maestra = FvdConfig::getOrganizacionMaestra();
+    if ($maestra !== null) {
+      self::$cached_dashboard_organizacion = [
+        'nombre' => (string)($maestra['nombre'] ?? FvdConfig::ORGANIZACION_NOMBRE),
+        'logo' => !empty($maestra['logo']) ? (string)$maestra['logo'] : null,
+      ];
+      return self::$cached_dashboard_organizacion;
+    }
+    if ($u['role'] === 'admin_general') {
+      self::$cached_dashboard_organizacion = [
+        'nombre' => FvdConfig::ORGANIZACION_NOMBRE,
+        'logo' => null,
+      ];
+      return self::$cached_dashboard_organizacion;
     }
     try {
       if ($u['role'] === 'admin_club') {
@@ -358,54 +414,12 @@ class Auth {
    * @return int|null
    */
   public static function getUserOrganizacionId(): ?int {
-    if (self::$cached_organizacion_id !== null) {
-      return self::$cached_organizacion_id;
-    }
     $u = self::user();
-    if (!$u || $u['role'] !== 'admin_club') {
-      self::$cached_organizacion_id = null;
+    if (!$u) {
       return null;
     }
-    try {
-      // IMPORTANTE: este método devuelve SIEMPRE el ID físico (PK) de organizaciones
-      // para mantener compatibilidad con módulos legacy.
-      $stmt = DB::pdo()->prepare("SELECT id FROM organizaciones WHERE admin_user_id = ? AND estatus = 1 ORDER BY id ASC LIMIT 1");
-      $stmt->execute([self::id()]);
-      $org_id = $stmt->fetchColumn();
-      if (!$org_id) {
-        // Fallback: resolver por club del usuario cuando la org no tiene admin_user_id enlazado.
-        $club_id = (int)($u['club_id'] ?? 0);
-        if ($club_id > 0) {
-          if (self::hasCodOrg()) {
-            $stmt2 = DB::pdo()->prepare("
-              SELECT o.id
-              FROM clubes c
-              INNER JOIN organizaciones o
-                ON c.cod_org = COALESCE(NULLIF(o.cod_org, 0), NULLIF(o.entidad, 0))
-                AND o.estatus = 1
-              WHERE c.id = ?
-              ORDER BY o.id ASC
-              LIMIT 1
-            ");
-          } else {
-            $stmt2 = DB::pdo()->prepare("
-              SELECT o.id
-              FROM clubes c
-              INNER JOIN organizaciones o ON c.cod_org = o.id
-              WHERE c.id = ? AND o.estatus = 1
-              LIMIT 1
-            ");
-          }
-          $stmt2->execute([$club_id]);
-          $org_id = $stmt2->fetchColumn();
-        }
-      }
-      self::$cached_organizacion_id = $org_id ? (int)$org_id : null;
-      return self::$cached_organizacion_id;
-    } catch (Exception $e) {
-      self::$cached_organizacion_id = null;
-      return null;
-    }
+    self::$cached_organizacion_id = FvdConfig::ORGANIZACION_ID;
+    return self::$cached_organizacion_id;
   }
 
   /**
@@ -413,20 +427,10 @@ class Auth {
    */
   public static function getUserOrganizacionRef(): ?int {
     $u = self::user();
-    if (!$u || $u['role'] !== 'admin_club') {
+    if (!$u) {
       return null;
     }
-    try {
-      if (self::hasCodOrg()) {
-        $stmt = DB::pdo()->prepare("SELECT COALESCE(NULLIF(cod_org, 0), id) FROM organizaciones WHERE admin_user_id = ? AND estatus = 1 ORDER BY id ASC LIMIT 1");
-        $stmt->execute([self::id()]);
-        $ref = $stmt->fetchColumn();
-        return $ref ? (int)$ref : null;
-      }
-      return self::getUserOrganizacionId();
-    } catch (Exception $e) {
-      return null;
-    }
+    return FvdConfig::ORGANIZACION_ID;
   }
 
   /**
@@ -435,26 +439,18 @@ class Auth {
    */
   public static function getUserOrganizacionCodOrg(): ?int {
     $u = self::user();
-    if (!$u || $u['role'] !== 'admin_club') {
+    if (!$u) {
       return null;
     }
-    $pk = self::getUserOrganizacionId();
-    if ($pk === null || $pk <= 0) {
-      return null;
-    }
-    try {
-      if (self::hasCodOrg()) {
-        $stmt = DB::pdo()->prepare("SELECT COALESCE(NULLIF(cod_org, 0), NULLIF(entidad, 0)) FROM organizaciones WHERE id = ? AND estatus = 1 LIMIT 1");
-        $stmt->execute([$pk]);
-        $v = (int) $stmt->fetchColumn();
+    return FvdConfig::ORGANIZACION_ID;
+  }
 
-        return $v > 0 ? $v : null;
-      }
-
-      return $pk;
-    } catch (Throwable $e) {
-      return null;
-    }
+  /**
+   * Validación institucional: la FVD (id 1) siempre está activa y sin bloqueo por suscripción.
+   */
+  public static function isOrganizacionActivaYAlDia(?int $organizacionId = null): bool {
+    $id = FvdConfig::resolveOrganizacionId($organizacionId);
+    return FvdConfig::isOrganizacionOperativa($id);
   }
 
   /**
@@ -502,6 +498,9 @@ class Auth {
   public static function userIsInOrganizacion(int $org_id): bool {
     $u = self::user();
     if (!$u || $org_id <= 0) return false;
+    if ($org_id === FvdConfig::ORGANIZACION_ID) {
+      return true;
+    }
     if (self::isAdminGeneral()) return true;
     if (self::getUserOrganizacionId() === $org_id) return true;
     // Usuario es responsable de la organización (admin_user_id) aunque no tenga rol admin_club
@@ -541,6 +540,17 @@ class Auth {
     // Admin general puede acceder a todo
     if (self::isAdminGeneral()) {
       return true;
+    }
+
+    if (self::isOperativoSoloAsociacion()) {
+      $club = self::clubOperativoAsociacion();
+      if (!$club) {
+        return false;
+      }
+      require_once __DIR__ . '/../lib/AsociacionAdminHelper.php';
+      $orgFvd = class_exists('FvdConfig') ? (int) FvdConfig::ORGANIZACION_ID : 1;
+
+      return AsociacionAdminHelper::torneoVisibleParaClub(DB::pdo(), $tournament_id, $club, $orgFvd);
     }
     
     // Admin club: alineado con getTournamentFilterForRole / OrganizacionDashboardStats (torneo por org)
@@ -641,6 +651,10 @@ class Auth {
     // Admin general puede modificar todo
     if (self::isAdminGeneral()) {
       return true;
+    }
+
+    if (self::isOperativoSoloAsociacion()) {
+      return false;
     }
     
     // Admin torneo y admin organización tienen restricciones

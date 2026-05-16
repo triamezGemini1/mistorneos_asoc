@@ -45,7 +45,7 @@ if (file_exists($config_file)) {
         'db' => [
             'host' => 'localhost',
             'port' => 3306,
-            'name' => 'mistorneos',
+            'name' => 'mistorneos_fvd',
             'user' => 'root',
             'pass' => '',
             'charset' => 'utf8mb4'

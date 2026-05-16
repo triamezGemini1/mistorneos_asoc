@@ -51,9 +51,7 @@ try {
     $vigencia = date('d/m/Y', strtotime($inv['acceso1'])) . ' al ' . date('d/m/Y', strtotime($inv['acceso2']));
     
     // URL base del sistema
-    $protocol = isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on' ? 'https' : 'http';
-    $host = $_SERVER['HTTP_HOST'];
-    $url_base = $protocol . '://' . $host . '/mistorneos/';
+    $url_base = rtrim(FvdConfig::resolvePublicUrl(), '/') . '/';
     
     // Limpiar n�mero para WhatsApp
     $telefono_limpio = preg_replace('/[^0-9]/', '', $telefono);

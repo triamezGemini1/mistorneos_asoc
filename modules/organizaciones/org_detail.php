@@ -161,7 +161,7 @@ $stats_admin_torneo = isset($stats_admin_torneo) ? (int)$stats_admin_torneo : 0;
 
     <div class="card shadow-sm" id="lista-clubes-org">
         <div class="card-header bg-light d-flex flex-wrap justify-content-between align-items-center gap-2">
-            <h5 class="mb-0"><i class="fas fa-sitemap me-2"></i>Clubes de la organización</h5>
+            <h5 class="mb-0"><i class="fas fa-sitemap me-2"></i>Asociaciones de la organización</h5>
             <?php if (empty($is_admin_general)): ?>
                 <a href="<?= htmlspecialchars(class_exists('AppHelpers') ? AppHelpers::dashboard('clubes_asociados') : 'index.php?page=clubes_asociados') ?>" class="btn btn-sm btn-outline-primary">
                     <i class="fas fa-cog me-1"></i>Gestionar altas de clubes

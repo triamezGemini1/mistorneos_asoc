@@ -8,8 +8,9 @@ if (!defined('APP_BOOTSTRAPPED')) {
 }
 require_once __DIR__ . '/../config/auth.php';
 require_once __DIR__ . '/../config/db.php';
+require_once __DIR__ . '/../lib/FvdConfig.php';
 
-Auth::requireRole(['admin_club', 'admin_general']);
+Auth::requireRole(['admin_club', 'admin_general', 'admin_torneo']);
 
 $current_user = Auth::user();
 $is_admin_general = Auth::isAdminGeneral();
@@ -64,10 +65,12 @@ if ($organizacion_id && $club_id) {
         }
     } else {
         $org_id_user = (int) Auth::getUserOrganizacionId();
+        $roleUser = (string) ($current_user['role'] ?? '');
+        $orgAdminLike = in_array($roleUser, ['admin_club', 'admin_torneo'], true);
         $stmtChk = $pdo->prepare('SELECT id FROM organizaciones WHERE id = ? AND estatus = 1 LIMIT 1');
         $stmtChk->execute([(int) $organizacion_id]);
         $orgPkResuelto = (int) $stmtChk->fetchColumn();
-        if ($org_id_user > 0 && $orgPkResuelto > 0 && $orgPkResuelto === $org_id_user) {
+        if ($org_id_user > 0 && $orgPkResuelto > 0 && $orgPkResuelto === $org_id_user && $orgAdminLike) {
             $stmt = $pdo->prepare("
                 SELECT o.*, e.nombre as entidad_nombre
                 FROM organizaciones o
@@ -97,11 +100,6 @@ if ($organizacion_id && $club_id) {
         }
     }
     if ($club && $organizacion) {
-        $org_scope_ref = (int)($organizacion['cod_org'] ?? 0);
-        if ($org_scope_ref <= 0) {
-            $org_scope_ref = (int)($organizacion['id'] ?? $organizacion_id);
-        }
-        $org_scope_entidad = (int)($organizacion['entidad'] ?? 0);
         $afiliados_page = max(1, (int)($_GET['afiliados_page'] ?? 1));
         $afiliados_per_page = 15;
         $sexo = strtolower(trim((string)($_GET['sexo'] ?? 'todos')));
@@ -111,9 +109,9 @@ if ($organizacion_id && $club_id) {
         $sexoSql = '';
         $sexoParams = [];
         if ($sexo === 'm') {
-            $sexoSql = " AND UPPER(COALESCE(u.sexo,'M')) = 'M'";
+            $sexoSql = " AND UPPER(TRIM(COALESCE(CAST(u.sexo AS CHAR), ''))) = 'M'";
         } elseif ($sexo === 'f') {
-            $sexoSql = " AND UPPER(COALESCE(u.sexo,'M')) = 'F'";
+            $sexoSql = " AND UPPER(TRIM(COALESCE(CAST(u.sexo AS CHAR), ''))) = 'F'";
         }
 
         $orderAfiliadosSql = "(CASE WHEN u.status = 0 OR u.status = 'approved' OR u.status = 1 OR TRIM(CAST(u.status AS CHAR)) = '1' THEN 0 ELSE 1 END) ASC, COALESCE(u.created_at, FROM_UNIXTIME(0)) DESC, u.nombre ASC";
@@ -128,45 +126,31 @@ if ($organizacion_id && $club_id) {
         } catch (Throwable $ignored) {
         }
 
-        $normalizar = static function (string $s): string {
-            $s = trim($s);
-            $s = strtr($s, [
-                'Á' => 'A', 'É' => 'E', 'Í' => 'I', 'Ó' => 'O', 'Ú' => 'U', 'Ñ' => 'N',
-                'á' => 'a', 'é' => 'e', 'í' => 'i', 'ó' => 'o', 'ú' => 'u', 'ñ' => 'n',
-            ]);
-            return strtoupper($s);
-        };
-        $esFvd = strpos($normalizar((string)($organizacion['nombre'] ?? '')), 'FEDERACION VENEZOLANA DE DOMINO') !== false;
+        // Misma regla que clubes_asociados / clubs: afiliados = usuarios.entidad = PK clubes.id
+        [$scopeSql, $scopeParams] = ClubHelper::afiliadosMatchSqlAndParams($pdo, $club, (int) ($club['id'] ?? 0));
 
-        if ($esFvd) {
-            $entidadClub = (int)($club['entidad'] ?? 0);
-            // En este dominio, el id del club no identifica la asociación.
-            // El vínculo correcto se hace por entidad (común entre club y asociación).
-            $scopeSql = "" . $usuarios_territorio_expr . " = ? AND COALESCE(u.entidad, 0) = ? AND COALESCE(u.numfvd, 0) > 0";
-            $scopeParams = [$org_scope_entidad, $entidadClub];
-
-            $stResumen = $pdo->prepare("
+        $stResumen = $pdo->prepare("
                 SELECT
                     COUNT(*) AS total,
-                    SUM(CASE WHEN UPPER(COALESCE(u.sexo,'M'))='M' THEN 1 ELSE 0 END) AS hombres,
-                    SUM(CASE WHEN UPPER(COALESCE(u.sexo,'M'))='F' THEN 1 ELSE 0 END) AS mujeres
+                    SUM(CASE WHEN UPPER(TRIM(COALESCE(CAST(u.sexo AS CHAR), ''))) = 'M' THEN 1 ELSE 0 END) AS hombres,
+                    SUM(CASE WHEN UPPER(TRIM(COALESCE(CAST(u.sexo AS CHAR), ''))) = 'F' THEN 1 ELSE 0 END) AS mujeres
                 FROM usuarios u
                 WHERE {$scopeSql}
             ");
-            $stResumen->execute($scopeParams);
-            $afiliados_resumen = $stResumen->fetch(PDO::FETCH_ASSOC) ?: ['total' => 0, 'hombres' => 0, 'mujeres' => 0];
+        $stResumen->execute($scopeParams);
+        $afiliados_resumen = $stResumen->fetch(PDO::FETCH_ASSOC) ?: ['total' => 0, 'hombres' => 0, 'mujeres' => 0];
 
-            $stmtCount = $pdo->prepare("
+        $stmtCount = $pdo->prepare("
                 SELECT COUNT(*)
                 FROM usuarios u
                 WHERE {$scopeSql}
                   {$sexoSql}
             ");
-            $stmtCount->execute(array_merge($scopeParams, $sexoParams));
-            $afiliados_total_rows = (int)$stmtCount->fetchColumn();
+        $stmtCount->execute(array_merge($scopeParams, $sexoParams));
+        $afiliados_total_rows = (int) $stmtCount->fetchColumn();
 
-            $offset = ($afiliados_page - 1) * $afiliados_per_page;
-            $stmt = $pdo->prepare("
+        $offset = ($afiliados_page - 1) * $afiliados_per_page;
+        $stmt = $pdo->prepare("
                 SELECT u.id, u.cedula, u.nombre, u.email, u.celular, u.status, u.created_at
                 FROM usuarios u
                 WHERE {$scopeSql}
@@ -174,56 +158,14 @@ if ($organizacion_id && $club_id) {
                 ORDER BY {$orderAfiliadosSql}
                 LIMIT ? OFFSET ?
             ");
-            $bindPos = 1;
-            foreach ($scopeParams as $p) {
-                $stmt->bindValue($bindPos++, (int)$p, PDO::PARAM_INT);
-            }
-            $stmt->bindValue($bindPos++, $afiliados_per_page, PDO::PARAM_INT);
-            $stmt->bindValue($bindPos++, $offset, PDO::PARAM_INT);
-            $stmt->execute();
-            $afiliados = $stmt->fetchAll(PDO::FETCH_ASSOC);
-        } else {
-            $entidadClub = (int)($club['entidad'] ?? 0);
-            $entidadFiltro = $entidadClub > 0 ? $entidadClub : $org_scope_entidad;
-            $stResumen = $pdo->prepare("
-                SELECT
-                    COUNT(*) AS total,
-                    SUM(CASE WHEN UPPER(COALESCE(u.sexo,'M'))='M' THEN 1 ELSE 0 END) AS hombres,
-                    SUM(CASE WHEN UPPER(COALESCE(u.sexo,'M'))='F' THEN 1 ELSE 0 END) AS mujeres
-                FROM usuarios u
-                WHERE " . $usuarios_territorio_expr . " = ?
-                  AND COALESCE(u.entidad, 0) = ?
-            ");
-            $stResumen->execute([$org_scope_entidad, $entidadFiltro]);
-            $afiliados_resumen = $stResumen->fetch(PDO::FETCH_ASSOC) ?: ['total' => 0, 'hombres' => 0, 'mujeres' => 0];
-
-            $stmtCount = $pdo->prepare("
-                SELECT COUNT(*)
-                FROM usuarios u
-                WHERE " . $usuarios_territorio_expr . " = ?
-                  AND COALESCE(u.entidad, 0) = ?
-                  {$sexoSql}
-            ");
-            $stmtCount->execute(array_merge([$org_scope_entidad, $entidadFiltro], $sexoParams));
-            $afiliados_total_rows = (int)$stmtCount->fetchColumn();
-
-            $offset = ($afiliados_page - 1) * $afiliados_per_page;
-            $stmt = $pdo->prepare("
-                SELECT u.id, u.cedula, u.nombre, u.email, u.celular, u.status, u.created_at
-                FROM usuarios u
-                WHERE " . $usuarios_territorio_expr . " = ?
-                  AND COALESCE(u.entidad, 0) = ?
-                  {$sexoSql}
-                ORDER BY {$orderAfiliadosSql}
-                LIMIT ? OFFSET ?
-            ");
-            $stmt->bindValue(1, $org_scope_entidad, PDO::PARAM_INT);
-            $stmt->bindValue(2, $entidadFiltro, PDO::PARAM_INT);
-            $stmt->bindValue(3, $afiliados_per_page, PDO::PARAM_INT);
-            $stmt->bindValue(4, $offset, PDO::PARAM_INT);
-            $stmt->execute();
-            $afiliados = $stmt->fetchAll(PDO::FETCH_ASSOC);
+        $bindPos = 1;
+        foreach ($scopeParams as $p) {
+            $stmt->bindValue($bindPos++, (int) $p, PDO::PARAM_INT);
         }
+        $stmt->bindValue($bindPos++, $afiliados_per_page, PDO::PARAM_INT);
+        $stmt->bindValue($bindPos++, $offset, PDO::PARAM_INT);
+        $stmt->execute();
+        $afiliados = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
         $afiliados_total_pages = max(1, (int)ceil($afiliados_total_rows / $afiliados_per_page));
         if ($afiliados_page > $afiliados_total_pages) {
@@ -260,7 +202,8 @@ if ($organizacion_id) {
         $organizacion = $stmt->fetch(PDO::FETCH_ASSOC);
     } else {
         $org_id = (int) Auth::getUserOrganizacionId();
-        if ($org_id > 0 && $org_id === (int) $organizacion_id) {
+        $roleUser = (string) ($current_user['role'] ?? '');
+        if ($org_id > 0 && $org_id === (int) $organizacion_id && in_array($roleUser, ['admin_club', 'admin_torneo'], true)) {
             $stmt = $pdo->prepare("
                 SELECT o.*, e.nombre as entidad_nombre, u.nombre as admin_nombre, u.email as admin_email
                 FROM organizaciones o
@@ -280,7 +223,7 @@ if ($organizacion_id) {
     if ($organizacion_ref <= 0) {
         $organizacion_ref = (int)($organizacion['id'] ?? $organizacion_id);
     }
-    $organizacion_entidad_ref = (int)($organizacion['entidad'] ?? 0);
+    $organizacion_entidad_ref = FvdConfig::entidadTerritorioEfectivaOrganizacion($organizacion);
     $clubes_page = max(1, (int)($_GET['clubes_page'] ?? 1));
     $clubes_per_page = 15;
     $hasUsuariosOrganizacionId = false;
@@ -332,7 +275,8 @@ if ($organizacion_id) {
             : [$organizacion_entidad_ref, $organizacion_ref]);
         $clubes = $stmt->fetchAll(PDO::FETCH_ASSOC);
     } else {
-        $org_entidad_where = ((int)($organizacion['entidad'] ?? 0) > 0) ? " AND COALESCE(c.entidad, 0) = " . (int)$organizacion['entidad'] : "";
+        $org_entidad_eff = FvdConfig::entidadTerritorioEfectivaOrganizacion($organizacion);
+        $org_entidad_where = $org_entidad_eff > 0 ? " AND COALESCE(c.entidad, 0) = {$org_entidad_eff}" : "";
         [$clubWhere, $clubParams] = OrganizacionDashboardStats::clubScopeWhereForOrganizacion($pdo, $organizacion);
         $stmt = $pdo->prepare("
             SELECT c.id, c.nombre, c.delegado, c.telefono, c.direccion, c.estatus, c.entidad

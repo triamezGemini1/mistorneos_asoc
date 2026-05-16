@@ -24,7 +24,7 @@ if (file_exists(__DIR__ . '/../.env')) {
 
 // Conectar directamente a la base de datos
 $db_host = $_ENV['DB_HOST'] ?? 'localhost';
-$db_name = $_ENV['DB_NAME'] ?? 'mistorneos';
+$db_name = $_ENV['DB_NAME'] ?? $_ENV['DB_DATABASE'] ?? 'mistorneos_fvd';
 $db_user = $_ENV['DB_USER'] ?? 'root';
 $db_pass = $_ENV['DB_PASS'] ?? '';
 

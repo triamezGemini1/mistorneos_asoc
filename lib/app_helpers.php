@@ -32,9 +32,41 @@ class AppHelpers {
     
     /**
      * Obtiene la URL base de la aplicación (raíz del proyecto, sin /public).
-     * Detecta automáticamente localhost vs producción: en localhost usa /mistorneos
+     * Detecta automáticamente localhost vs producción: en localhost usa /mistorneos_fvd
      * si APP_URL no está definida; en producción se recomienda definir APP_URL en .env.
      */
+    public static function getProjectFolder(): string
+    {
+        return class_exists('FvdConfig', false) ? FvdConfig::APP_FOLDER : 'mistorneos_fvd';
+    }
+
+    /**
+     * Path del proyecto bajo el host (ej. /mistorneos_fvd).
+     */
+    public static function getProjectPath(): string
+    {
+        $folder = self::getProjectFolder();
+        if (isset($_SERVER['REQUEST_URI'])) {
+            $uriPath = parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH);
+            if ($uriPath && preg_match('#/' . preg_quote($folder, '#') . '(/|$)#', $uriPath)) {
+                return '/' . $folder;
+            }
+        }
+        if (!empty($_SERVER['SCRIPT_NAME'])) {
+            $scriptDir = str_replace('\\', '/', dirname($_SERVER['SCRIPT_NAME']));
+            if (preg_match('#/' . preg_quote($folder, '#') . '(/|$)#', $scriptDir)) {
+                return '/' . $folder;
+            }
+            if (str_ends_with($scriptDir, '/public') || strpos($scriptDir, '/public/') !== false) {
+                $derived = $scriptDir === '/public' ? '' : rtrim(preg_replace('#/public/?$#', '', $scriptDir), '/');
+                if ($derived !== '' && str_contains($derived, $folder)) {
+                    return $derived[0] === '/' ? $derived : '/' . $derived;
+                }
+            }
+        }
+        return '/' . $folder;
+    }
+
     public static function getBaseUrl(): string {
         if (self::$base_url === null) {
             $fromEnv = class_exists('Env') ? Env::get('APP_URL') : null;
@@ -52,41 +84,21 @@ class AppHelpers {
                     self::$base_url = rtrim($cfg, '/');
                 }
             }
-            // Si la petición es bajo /pruebas o /beta, forzar la base a ese subpath (evita estructura rota cuando APP_URL no está en .env beta)
-            if (isset($_SERVER['REQUEST_URI'])) {
-                $uriPath = parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH);
-                if ($uriPath && $uriPath !== '/' && preg_match('#^/(pruebas|beta)(/|$)#', $uriPath, $m)) {
-                    $subpath = '/' . $m[1];
-                    $protocol = isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on' ? 'https' : 'http';
-                    $host = $_SERVER['HTTP_HOST'] ?? 'localhost';
-                    $correctBase = $protocol . '://' . $host . $subpath;
-                    if (strpos(self::$base_url ?? '', $subpath) === false) {
-                        self::$base_url = $correctBase;
-                    }
-                }
-            }
             if (self::$base_url === null) {
-                // Auto-detección: localhost → /mistorneos; subpath /pruebas o /beta → usar ese path; resto → raíz
                 $protocol = isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on' ? 'https' : 'http';
                 $host = $_SERVER['HTTP_HOST'] ?? 'localhost';
                 $hostLower = strtolower($host);
                 $isLocalhost = ($hostLower === 'localhost' || $hostLower === '127.0.0.1'
                     || strpos($hostLower, 'localhost:') === 0 || strpos($hostLower, '127.0.0.1:') === 0);
-                $path = $isLocalhost ? '/mistorneos' : '';
-                // Entorno de pruebas bajo subpath: si la petición viene de /pruebas (o /beta), usar ese path para assets y enlaces
-                if ($path === '' && isset($_SERVER['REQUEST_URI'])) {
-                    $uriPath = parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH);
-                    if ($uriPath && $uriPath !== '/' && preg_match('#^/(pruebas|beta)(/|$)#', $uriPath, $m)) {
-                        $path = '/' . $m[1];
-                    }
-                }
-                // Subcarpeta tipo /mistorneos_beta/public: derivar base desde SCRIPT_NAME para que redirects y assets funcionen
-                if ($path === '' && !empty($_SERVER['SCRIPT_NAME'])) {
+                $path = $isLocalhost ? self::getProjectPath() : self::getProjectPath();
+                if ($path === '/' && !empty($_SERVER['SCRIPT_NAME'])) {
                     $scriptDir = str_replace('\\', '/', dirname($_SERVER['SCRIPT_NAME']));
-                    if ($scriptDir !== '.' && $scriptDir !== '' && $scriptDir !== '/' && (str_ends_with($scriptDir, '/public') || strpos($scriptDir, '/public/') !== false)) {
-                        $path = $scriptDir === '/public' ? '' : rtrim(preg_replace('#/public/?$#', '', $scriptDir), '/');
-                        if ($path !== '' && $path[0] !== '/') {
-                            $path = '/' . $path;
+                    if ($scriptDir !== '.' && $scriptDir !== '' && $scriptDir !== '/') {
+                        if (str_ends_with($scriptDir, '/public') || strpos($scriptDir, '/public/') !== false) {
+                            $path = $scriptDir === '/public' ? '' : rtrim(preg_replace('#/public/?$#', '', $scriptDir), '/');
+                            if ($path !== '' && $path[0] !== '/') {
+                                $path = '/' . $path;
+                            }
                         }
                     }
                 }
@@ -173,6 +185,23 @@ class AppHelpers {
             'torneo_id' => $torneoId,
         ], $extra));
     }
+
+    /**
+     * URL para "Volver al panel" según rol (operativo asociación → asociacion_panel).
+     */
+    public static function urlPanelTorneoReturn(int $torneoId = 0, array $extra = []): string
+    {
+        if (class_exists('Auth') && Auth::isOperativoSoloAsociacion()) {
+            $params = $extra;
+            if ($torneoId > 0) {
+                $params['torneo_id'] = $torneoId;
+            }
+
+            return self::dashboard('asociacion_panel', $params);
+        }
+
+        return self::torneoGestionUrl('panel', $torneoId, $extra);
+    }
     
     /**
      * Genera URL para archivos espec�ficos
@@ -226,7 +255,7 @@ class AppHelpers {
     public static function getPublicPath(): string {
         $base = self::getBaseUrl();
         $parsed = parse_url($base);
-        $path = $parsed['path'] ?? '/mistorneos';
+        $path = $parsed['path'] ?? self::getProjectPath();
         return rtrim($path, '/') . '/public/';
     }
     

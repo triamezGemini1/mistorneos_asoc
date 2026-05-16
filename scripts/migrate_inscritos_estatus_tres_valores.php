@@ -26,7 +26,7 @@ try {
         echo "Si ejecutas en LOCAL, revisa tu archivo .env:\n";
         echo "  - APP_ENV=development\n";
         echo "  - DB_HOST=localhost\n";
-        echo "  - DB_DATABASE=mistorneos (o el nombre de tu BD local)\n";
+        echo "  - DB_DATABASE=mistorneos_fvd (o el nombre de tu BD local)\n";
         echo "  - DB_USERNAME=root (o tu usuario MySQL local)\n";
         echo "  - DB_PASSWORD= (contraseña de MySQL local)\n\n";
         echo "El usuario actual en .env parece de producción; en local usa credenciales de tu WAMP/XAMPP.\n";

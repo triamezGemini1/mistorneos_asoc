@@ -11,7 +11,7 @@ require_once __DIR__ . '/../../../../lib/OrganizacionesData.php';
 $resumen_entidades = OrganizacionesData::loadResumenEntidades();
 $entidades_crud = [];
 try {
-    $stmt = DB::pdo()->query("SELECT id, nombre, estado FROM entidad ORDER BY id ASC");
+    $stmt = DB::pdo()->query('SELECT id, nombre, estado FROM entidad ORDER BY id ASC');
     $entidades_crud = $stmt->fetchAll(PDO::FETCH_ASSOC);
 } catch (Throwable $e) {
     error_log('entidades/actions/index: ' . $e->getMessage());

@@ -16,7 +16,7 @@ return [
     // ============================================
     'APP_ENV' => 'production',
     'APP_DEBUG' => false,
-    'APP_URL' => 'https://laestaciondeldominohoy.com/mistorneos',
+    'APP_URL' => 'https://laestaciondeldominohoy.com/mistorneos_fvd',
     
     // ============================================
     // BASE DE DATOS PRINCIPAL - MISTORNEOS
@@ -24,7 +24,7 @@ return [
     // ============================================
     'DB_HOST' => 'localhost',
     'DB_PORT' => '3306',
-    'DB_DATABASE' => 'mistorneos',
+    'DB_DATABASE' => 'mistorneos_fvd',
     'DB_USERNAME' => 'TU_USUARIO_AQUI',      // ⚠️ CAMBIAR
     'DB_PASSWORD' => 'TU_PASSWORD_AQUI',     // ⚠️ CAMBIAR
     'DB_CHARSET' => 'utf8mb4',

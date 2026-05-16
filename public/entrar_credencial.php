@@ -68,7 +68,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $jugador) {
                 'photo_path' => $user['photo_path'] ?? null,
                 'club_id' => $user['club_id'] ?? null,
                 'entidad' => isset($user['entidad']) ? (int)$user['entidad'] : 0,
+                'organizacion_id' => defined('ORGANIZACION_ID') ? ORGANIZACION_ID : 1,
             ];
+            if (class_exists('FvdConfig', false)) {
+                FvdConfig::anchorSession();
+            }
             if (function_exists('session_regenerate_id')) {
                 session_regenerate_id(true);
             }

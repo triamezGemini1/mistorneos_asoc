@@ -103,6 +103,18 @@
             enviarNotificacionInvitacionFormal(datos, opts);
             return;
         }
+        if (datos && datos.tipo === 'inscripcion_torneo_confirmada') {
+            enviarNotificacionInscripcionTorneo(datos, opts);
+            return;
+        }
+        if (datos && datos.tipo === 'inscripcion_pago_validado') {
+            enviarNotificacionPagoValidado(datos, opts);
+            return;
+        }
+        if (datos && datos.tipo === 'inscripcion_recordatorio_pago') {
+            enviarNotificacionRecordatorioPago(datos, opts);
+            return;
+        }
 
         var urlDestino = opts.urlDestino || '#';
         var autoClose = typeof opts.autoClose === 'number' ? opts.autoClose : 8000;
@@ -347,6 +359,155 @@
         if (!urlInscripcion) aInsc.setAttribute('title', 'En notificaciones reales enlaza al formulario de inscripción');
         actions.appendChild(aInsc);
 
+        card.querySelector('.btn-close-notif').addEventListener('click', function () { cerrarNotificacion(id); });
+        setTimeout(function () { card.classList.add('show'); }, 100);
+        if (autoClose > 0) setTimeout(function () { cerrarNotificacion(id); }, autoClose);
+    }
+
+    /**
+     * Tarjeta "Inscripción confirmada" (landing / inscripción en sitio por asociación).
+     */
+    function enviarNotificacionInscripcionTorneo(datos, opts) {
+        opts = opts || {};
+        var org = datos.organizacion_nombre || 'FVD';
+        var nombre = datos.nombre || '';
+        var torneo = datos.torneo || '';
+        var lugar = datos.lugar_torneo || '';
+        var fecha = datos.fecha_torneo || '';
+        var asoc = datos.asociacion || '';
+        var costo = datos.costo || '';
+        var urlPago = (datos.url_pago && datos.url_pago !== '#') ? ensureAbsoluteUrl(String(datos.url_pago)) : '';
+        var autoClose = typeof opts.autoClose === 'number' ? opts.autoClose : 12000;
+
+        if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
+            try { new Notification('Inscripción exitosa', { body: nombre + ' · ' + torneo }); } catch (e) {}
+        }
+
+        var container = document.getElementById('notification-container');
+        if (!container) return;
+
+        var id = 'notif-' + Date.now();
+        var card = document.createElement('div');
+        card.id = id;
+        card.className = 'notification-card notification-card-inscripcion-torneo';
+
+        var lineaAsoc = asoc ? '<div class="notif-invitacion-lugar text-center">Asociación: ' + escapeHtml(asoc) + '</div>' : '';
+        var lineaCosto = costo ? '<div class="notif-invitacion-lugar text-center fw-bold">Costo: $' + escapeHtml(costo) + '</div>' : '';
+
+        card.innerHTML =
+            '<div class="notification-card-content">' +
+            '<button type="button" class="btn-close-notif" aria-label="Cerrar">&times;</button>' +
+            '<div class="notif-invitacion-org text-center">✅ Inscripción exitosa</div>' +
+            '<div class="notif-invitacion-saludo text-center">Hola ' + escapeHtml(nombre) + '</div>' +
+            '<div class="notif-invitacion-torneo text-center">' + escapeHtml(torneo) + '</div>' +
+            '<div class="notif-invitacion-lugar text-center">' + escapeHtml(lugar) + (lugar && fecha ? ' · ' : '') + escapeHtml(fecha) + '</div>' +
+            lineaAsoc + lineaCosto +
+            '<div class="notification-card-actions"></div>' +
+            '<div class="notif-invitacion-org text-center small text-muted mt-1">' + escapeHtml(org) + '</div>' +
+            '</div>';
+        container.appendChild(card);
+
+        var actions = card.querySelector('.notification-card-actions');
+        if (urlPago) {
+            var aPago = document.createElement('a');
+            aPago.href = urlPago;
+            aPago.className = 'btn-ver';
+            aPago.innerHTML = 'Reportar pago';
+            actions.appendChild(aPago);
+        }
+
+        card.querySelector('.btn-close-notif').addEventListener('click', function () { cerrarNotificacion(id); });
+        setTimeout(function () { card.classList.add('show'); }, 100);
+        if (autoClose > 0) setTimeout(function () { cerrarNotificacion(id); }, autoClose);
+    }
+
+    /**
+     * Tarjeta "Pago validado" tras confirmación administrativa.
+     */
+    function enviarNotificacionRecordatorioPago(datos, opts) {
+        opts = opts || {};
+        var org = datos.organizacion_nombre || 'FVD';
+        var nombre = datos.nombre || '';
+        var torneo = datos.torneo || '';
+        var lugar = datos.lugar_torneo || '';
+        var fecha = datos.fecha_torneo || '';
+        var fechaLimite = datos.fecha_limite_pago || '';
+        var asoc = datos.asociacion || '';
+        var costo = datos.costo || '';
+        var nota = datos.nota || '';
+        var autoClose = typeof opts.autoClose === 'number' ? opts.autoClose : 14000;
+
+        if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
+            try { new Notification('Recordatorio de pago', { body: nombre + ' · ' + torneo }); } catch (e) {}
+        }
+
+        var container = document.getElementById('notification-container');
+        if (!container) return;
+
+        var id = 'notif-' + Date.now();
+        var card = document.createElement('div');
+        card.id = id;
+        card.className = 'notification-card notification-card-inscripcion-torneo';
+
+        var lineaAsoc = asoc ? '<div class="notif-invitacion-lugar text-center">Asociación: ' + escapeHtml(asoc) + '</div>' : '';
+        var lineaCosto = costo ? '<div class="notif-invitacion-lugar text-center fw-bold text-warning">Pendiente: $' + escapeHtml(costo) + '</div>' : '';
+        var lineaLimite = fechaLimite ? '<div class="notif-invitacion-lugar text-center text-danger">Fecha límite de pago: ' + escapeHtml(fechaLimite) + '</div>' : '';
+
+        card.innerHTML =
+            '<div class="notification-card-content">' +
+            '<button type="button" class="btn-close-notif" aria-label="Cerrar">&times;</button>' +
+            '<div class="notif-invitacion-org text-center text-warning fw-bold">⏰ Recordatorio de pago</div>' +
+            '<div class="notif-invitacion-saludo text-center">Hola ' + escapeHtml(nombre) + '</div>' +
+            '<div class="notif-invitacion-torneo text-center">' + escapeHtml(torneo) + '</div>' +
+            '<div class="notif-invitacion-lugar text-center">' + escapeHtml(lugar) + (lugar && fecha ? ' · ' : '') + escapeHtml(fecha) + '</div>' +
+            lineaAsoc + lineaCosto + lineaLimite +
+            (nota ? '<p class="text-center small mb-0 mt-2">' + escapeHtml(nota) + '</p>' : '') +
+            '<div class="notif-invitacion-org text-center small text-muted mt-1">' + escapeHtml(org) + '</div>' +
+            '</div>';
+        container.appendChild(card);
+        card.querySelector('.btn-close-notif').addEventListener('click', function () { cerrarNotificacion(id); });
+        setTimeout(function () { card.classList.add('show'); }, 100);
+        if (autoClose > 0) setTimeout(function () { cerrarNotificacion(id); }, autoClose);
+    }
+
+    function enviarNotificacionPagoValidado(datos, opts) {
+        opts = opts || {};
+        var org = datos.organizacion_nombre || 'FVD';
+        var nombre = datos.nombre || '';
+        var torneo = datos.torneo || '';
+        var lugar = datos.lugar_torneo || '';
+        var fecha = datos.fecha_torneo || '';
+        var asoc = datos.asociacion || '';
+        var monto = datos.monto || '';
+        var autoClose = typeof opts.autoClose === 'number' ? opts.autoClose : 12000;
+
+        if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
+            try { new Notification('Pago validado', { body: nombre + ' · ' + torneo }); } catch (e) {}
+        }
+
+        var container = document.getElementById('notification-container');
+        if (!container) return;
+
+        var id = 'notif-' + Date.now();
+        var card = document.createElement('div');
+        card.id = id;
+        card.className = 'notification-card notification-card-inscripcion-torneo';
+
+        var lineaAsoc = asoc ? '<motion.div class="notif-invitacion-lugar text-center">Asociación: ' + escapeHtml(asoc) + '</motion.div>' : ''.replace(/motion\./g, '');
+        var lineaMonto = monto ? '<div class="notif-invitacion-lugar text-center fw-bold text-success">Monto validado: $' + escapeHtml(monto) + '</div>' : '';
+
+        card.innerHTML =
+            '<div class="notification-card-content">' +
+            '<button type="button" class="btn-close-notif" aria-label="Cerrar">&times;</button>' +
+            '<div class="notif-invitacion-org text-center text-success fw-bold">✅ Pago validado</div>' +
+            '<div class="notif-invitacion-saludo text-center">Hola ' + escapeHtml(nombre) + '</div>' +
+            '<div class="notif-invitacion-torneo text-center">' + escapeHtml(torneo) + '</div>' +
+            '<div class="notif-invitacion-lugar text-center">' + escapeHtml(lugar) + (lugar && fecha ? ' · ' : '') + escapeHtml(fecha) + '</div>' +
+            lineaAsoc + lineaMonto +
+            '<p class="text-center small mb-0 mt-2">Su inscripción quedó <strong>confirmada</strong>.</p>' +
+            '<div class="notif-invitacion-org text-center small text-muted mt-1">' + escapeHtml(org) + '</div>' +
+            '</div>';
+        container.appendChild(card);
         card.querySelector('.btn-close-notif').addEventListener('click', function () { cerrarNotificacion(id); });
         setTimeout(function () { card.classList.add('show'); }, 100);
         if (autoClose > 0) setTimeout(function () { cerrarNotificacion(id); }, autoClose);

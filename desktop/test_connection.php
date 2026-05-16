@@ -51,7 +51,7 @@ $preview = is_string($body) ? substr(strip_tags($body), 0, 200) : '';
 
 if ($httpCode === 404 || (is_array($data) && isset($data['error']) && $data['error'] === 'Not Found')) {
     echo "RESULTADO: 404 Not Found." . $br;
-    echo "La ruta del API no existe en el servidor. Comprueba SYNC_WEB_URL (base: https://laestaciondeldominohoy.com/mistorneos/public/)." . $br;
+    echo "La ruta del API no existe en el servidor. Comprueba SYNC_WEB_URL (base: https://laestaciondeldominohoy.com/mistorneos_fvd/public/)." . $br;
     echo "Respuesta: " . $preview . $br;
     exit(1);
 }

@@ -12,7 +12,13 @@ if (!$user || !is_array($user)) {
     return;
 }
 require_once __DIR__ . '/../../config/auth.php';
+if (!class_exists('FvdConfig', false) && is_file(__DIR__ . '/../../lib/FvdConfig.php')) {
+    require_once __DIR__ . '/../../lib/FvdConfig.php';
+}
 $current_page = (isset($page) && $page !== '') ? $page : ($_GET['page'] ?? 'home');
+/** Panel operativo asociación: sin barra lateral (ancho completo) */
+$layout_operativo_asoc = Auth::isOperativoSoloAsociacion();
+$layout_hide_sidebar = ($current_page === 'asociacion_panel') || $layout_operativo_asoc;
 $layout_nav_action = trim((string) ($_GET['action'] ?? ''));
 require_once __DIR__ . '/../../lib/ReportReturnNavigation.php';
 ReportReturnNavigation::updateSessionFromRequest($current_page, $layout_nav_action);
@@ -75,15 +81,7 @@ $role_original_layout = (string)($user['role_original'] ?? $user['role'] ?? '');
 $role_activo_layout = (string)($user['role'] ?? '');
 $is_admin_general_base = ($role_original_layout === 'admin_general');
 
-// Contar solicitudes pendientes (visible para admin_general base, incluso en modo prueba)
 $solicitudes_pendientes = 0;
-if ($is_admin_general_base) {
-    try {
-        $solicitudes_pendientes = DB::pdo()->query("SELECT COUNT(*) FROM solicitudes_afiliacion WHERE estatus = 'pendiente'")->fetchColumn();
-    } catch (Exception $e) {
-        $solicitudes_pendientes = 0;
-    }
-}
 
 // Contar actas pendientes de verificación (admin_club, admin_general y admin_torneo)
 $actas_pendientes_count = 0;
@@ -96,7 +94,17 @@ if (in_array($user['role'], ['admin_club', 'admin_general', 'admin_torneo'], tru
     }
 }
 
-$header_title = $dashboard_org ? 'Dashboard - ' . htmlspecialchars($dashboard_org['nombre']) : 'Dashboard - La Estación del Dominó';
+$show_link_panel_asociacion = false;
+try {
+    require_once __DIR__ . '/../../config/db.php';
+    require_once __DIR__ . '/../../lib/AsociacionAdminHelper.php';
+    $show_link_panel_asociacion = (Auth::isOperativoSoloAsociacion() || AsociacionAdminHelper::usuarioEsDelegadoAsociacion(DB::pdo(), (int) ($user['id'] ?? 0)))
+        && ($current_page ?? '') !== 'asociacion_panel';
+} catch (Throwable $e) {
+    $show_link_panel_asociacion = false;
+}
+
+$header_title = $dashboard_org ? 'Dashboard - ' . htmlspecialchars($dashboard_org['nombre']) : 'Dashboard - FVD';
 $modo_prueba_activo = ($role_original_layout === 'admin_general' && $role_activo_layout !== 'admin_general');
 $role_human = [
   'admin_general' => 'Admin General',
@@ -175,7 +183,7 @@ if ($current_page === 'estadisticas_torneos') {
     $body_page_extra .= ' page-estadisticas-torneos';
 }
 ?>
-<body class="bg-light<?= $is_panel_control_torneos ? ' page-panel-control-torneos' : '' ?><?= htmlspecialchars($body_page_extra, ENT_QUOTES, 'UTF-8') ?>"<?= $nav_origin !== '' ? ' data-nav-origin="' . $nav_origin . '"' : '' ?>>
+<body class="bg-light<?= $is_panel_control_torneos ? ' page-panel-control-torneos' : '' ?><?= !empty($layout_hide_sidebar) ? ' layout-no-sidebar' : '' ?><?= htmlspecialchars($body_page_extra, ENT_QUOTES, 'UTF-8') ?>"<?= $nav_origin !== '' ? ' data-nav-origin="' . $nav_origin . '"' : '' ?>>
   <!-- Contenedor para notificaciones toast (Push + tarjeta visual) -->
   <div id="notification-container" aria-live="polite"></div>
 
@@ -214,6 +222,7 @@ if ($current_page === 'estadisticas_torneos') {
 
   <div class="d-flex" id="wrapper">
     
+    <?php if (empty($layout_hide_sidebar)): ?>
     <!-- Sidebar -->
     <nav id="sidebar" class="bg-dark text-white border-end shadow d-flex flex-column" style="height: 100vh;">
       <div class="sidebar-header p-4 border-bottom">
@@ -280,18 +289,14 @@ if ($current_page === 'estadisticas_torneos') {
             <span class="nav-text">Torneos</span>
           </a>
         </li>
+        <?php if (!empty($show_link_panel_asociacion) || (($user['role'] ?? '') === 'admin_club' && (int) ($user['entidad'] ?? 0) > 0)): ?>
         <li class="mb-2">
-          <?php
-          $href_clubes_org = ($admin_club_org_id ?? 0) > 0
-            ? ($dashboard_href('organizaciones', ['id' => (int) $admin_club_org_id]) . '#lista-clubes-org')
-            : $dashboard_href('clubes_asociados');
-          $active_clubes_org = (($current_page === 'organizaciones' && (int)($_GET['id'] ?? 0) === (int)($admin_club_org_id ?? 0)) || $current_page === 'clubes_asociados');
-          ?>
-          <a href="<?= htmlspecialchars($href_clubes_org) ?>" class="nav-link <?= $active_clubes_org ? 'active' : '' ?>">
-            <i class="fas fa-sitemap me-3"></i>
-            <span class="nav-text">Clubes de la organización</span>
+          <a href="<?= htmlspecialchars($dashboard_href('finanzas/resumen_asociacion')) ?>" class="nav-link <?= $current_page === 'finanzas/resumen_asociacion' ? 'active' : '' ?>">
+            <i class="fas fa-coins me-3"></i>
+            <span class="nav-text">Finanzas asociación</span>
           </a>
         </li>
+        <?php endif; ?>
         <li class="mb-2">
           <a href="<?= htmlspecialchars($dashboard_href('admin_torneo_operadores')) ?>" class="nav-link <?= $current_page === 'admin_torneo_operadores' ? 'active' : '' ?>">
             <i class="fas fa-user-cog me-3"></i>
@@ -338,8 +343,7 @@ if ($current_page === 'estadisticas_torneos') {
         <?php if (Auth::isAdminGeneral()): ?>
         <?php
         $is_inicio_open = in_array($current_page, ['home', 'calendario']);
-        $is_estructura_open = in_array($current_page, ['entidades', 'organizaciones', 'clubs', 'directorio_clubes']);
-        $is_afiliaciones_open = in_array($current_page, ['admin_clubs', 'affiliate_requests']);
+        $is_estructura_open = in_array($current_page, ['clubs', 'directorio_clubes']);
         $is_comunicacion_open = in_array($current_page, ['notificaciones_masivas', 'whatsapp_config', 'comments']);
         $is_integraciones_open = in_array($current_page, ['admin_atletas_sync', 'importacion_torneo_externo', 'torneo_split_ranking']);
         ?>
@@ -367,7 +371,19 @@ if ($current_page === 'estadisticas_torneos') {
             </li>
           </ul>
         </li>
-        <!-- 2. Estructura (acordeón: Entidades, Organizaciones, Clubes) -->
+        <?php
+        $nav_fvd_org_id = class_exists('FvdConfig') ? FvdConfig::ORGANIZACION_ID : 1;
+        $nav_mi_org_href = $dashboard_href('organizaciones', ['id' => $nav_fvd_org_id]);
+        $nav_mi_org_active = in_array($current_page, ['organizaciones', 'mi_organizacion'], true)
+            && (int) ($_GET['id'] ?? $nav_fvd_org_id) === $nav_fvd_org_id;
+        ?>
+        <li class="mb-2">
+          <a href="<?= htmlspecialchars($nav_mi_org_href) ?>" class="nav-link <?= $nav_mi_org_active ? 'active' : '' ?>">
+            <i class="fas fa-building me-3"></i>
+            <span class="nav-text">Mi organización</span>
+          </a>
+        </li>
+        <!-- 2. Estructura (acordeón: entidades / asociaciones) -->
         <li class="mb-2">
           <a href="#" class="nav-link <?= $is_estructura_open ? 'active' : '' ?>"
              onclick="event.preventDefault(); toggleSubmenu('estructura-submenu', this);"
@@ -378,66 +394,21 @@ if ($current_page === 'estadisticas_torneos') {
           </a>
           <ul class="list-unstyled ps-4 mt-1 collapse-submenu <?= $is_estructura_open ? 'show' : '' ?>" id="estructura-submenu">
             <li class="mb-1">
-              <a href="<?= htmlspecialchars($dashboard_href('entidades')) ?>" class="nav-link nav-sub-sub-link <?= $current_page === 'entidades' ? 'active' : '' ?>">
-                <i class="fas fa-map-marked-alt me-2"></i>
-                <span>Entidades</span>
-              </a>
-            </li>
-            <li class="mb-1">
-              <a href="<?= htmlspecialchars($dashboard_href('entidades', ['action' => 'index'])) ?>#crud-entidades" class="nav-link nav-sub-sub-link <?= $current_page === 'entidades' ? 'active' : '' ?>">
-                <i class="fas fa-cogs me-2"></i>
-                <span>CRUD Entidades</span>
-              </a>
-            </li>
-            <li class="mb-1">
-              <a href="<?= htmlspecialchars($dashboard_href('organizaciones')) ?>" class="nav-link nav-sub-sub-link <?= $current_page === 'organizaciones' ? 'active' : '' ?>">
-                <i class="fas fa-building me-2"></i>
-                <span>Organizaciones</span>
-              </a>
-            </li>
-            <li class="mb-1">
               <a href="<?= htmlspecialchars($dashboard_href('clubs')) ?>" class="nav-link nav-sub-sub-link <?= $current_page === 'clubs' ? 'active' : '' ?>">
                 <i class="fas fa-building me-2"></i>
-                <span>Clubes</span>
+                <span>Asociaciones</span>
+              </a>
+            </li>
+            <li class="mb-1">
+              <a href="<?= htmlspecialchars($dashboard_href('clubs', ['action' => 'new'])) ?>" class="nav-link nav-sub-sub-link <?= ($current_page === 'clubs' && ($_GET['action'] ?? '') === 'new') ? 'active' : '' ?>">
+                <i class="fas fa-plus-circle me-2"></i>
+                <span>Nueva asociación</span>
               </a>
             </li>
             <li class="nav-item mb-1">
               <a href="<?= htmlspecialchars($dashboard_href('directorio_clubes')) ?>" class="nav-link nav-sub-sub-link <?= $current_page === 'directorio_clubes' ? 'active' : '' ?>">
                 <i class="fas fa-address-book me-2"></i>
-                <span>Directorio de Clubes</span>
-              </a>
-            </li>
-            <li class="nav-item mb-1">
-              <a href="<?= htmlspecialchars($dashboard_href('entidades', ['action' => 'index'])) ?>#estructura-asociaciones" class="nav-link nav-sub-sub-link <?= $current_page === 'entidades' ? 'active' : '' ?>">
-                <i class="fas fa-project-diagram me-2"></i>
-                <span>Estructura asociaciones</span>
-              </a>
-            </li>
-          </ul>
-        </li>
-        <!-- 3. Afiliaciones (acordeón: Invitar, Solicitudes) -->
-        <li class="mb-2">
-          <a href="#" class="nav-link <?= $is_afiliaciones_open ? 'active' : '' ?>"
-             onclick="event.preventDefault(); toggleSubmenu('afiliaciones-submenu', this);"
-             style="cursor: pointer;">
-            <i class="fas fa-user-plus me-3"></i>
-            <span class="nav-text">Afiliaciones</span>
-            <i class="fas fa-chevron-<?= $is_afiliaciones_open ? 'up' : 'down' ?> ms-auto submenu-icon"></i>
-          </a>
-          <ul class="list-unstyled ps-4 mt-1 collapse-submenu <?= $is_afiliaciones_open ? 'show' : '' ?>" id="afiliaciones-submenu">
-            <li class="mb-1">
-              <a href="<?= htmlspecialchars($dashboard_href('admin_clubs', ['action' => 'invitar'])) ?>" class="nav-link nav-sub-sub-link <?= ($current_page === 'admin_clubs' && ($_GET['action'] ?? '') === 'invitar') ? 'active' : '' ?>">
-                <i class="fas fa-user-plus me-2"></i>
-                <span>Invitar Afiliados</span>
-              </a>
-            </li>
-            <li class="mb-1">
-              <a href="<?= htmlspecialchars($dashboard_href('affiliate_requests')) ?>" class="nav-link nav-sub-sub-link <?= $current_page === 'affiliate_requests' ? 'active' : '' ?>">
-                <i class="fas fa-user-clock me-2"></i>
-                <span>Solicitudes de Afiliación</span>
-                <?php if ($solicitudes_pendientes > 0): ?>
-                  <span class="badge bg-danger rounded-pill ms-2"><?= $solicitudes_pendientes ?></span>
-                <?php endif; ?>
+                <span>Directorio de asociaciones</span>
               </a>
             </li>
           </ul>
@@ -447,6 +418,12 @@ if ($current_page === 'estadisticas_torneos') {
           <a href="<?= htmlspecialchars($dashboard_href('torneo_gestion', ['action' => 'index'])) ?>" class="nav-link <?= ($current_page === 'torneo_gestion' && ($_GET['action'] ?? '') === 'index') ? 'active' : '' ?>">
             <i class="fas fa-trophy me-3"></i>
             <span class="nav-text">Torneos</span>
+          </a>
+        </li>
+        <li class="mb-2">
+          <a href="<?= htmlspecialchars($dashboard_href('finanzas/resumen_asociacion')) ?>" class="nav-link <?= $current_page === 'finanzas/resumen_asociacion' ? 'active' : '' ?>">
+            <i class="fas fa-coins me-3"></i>
+            <span class="nav-text">Finanzas por asociación</span>
           </a>
         </li>
         <li class="mb-2">
@@ -574,6 +551,18 @@ if ($current_page === 'estadisticas_torneos') {
         <?php endif; ?>
         
         <?php if ($user['role'] === 'admin_torneo'): ?>
+        <?php
+        $nav_fvd_torneo = class_exists('FvdConfig') ? FvdConfig::ORGANIZACION_ID : 1;
+        $href_mi_org_at = $dashboard_href('organizaciones', ['id' => $nav_fvd_torneo]);
+        $active_mi_org_at = in_array($current_page, ['organizaciones', 'mi_organizacion'], true)
+            && (int) ($_GET['id'] ?? $nav_fvd_torneo) === $nav_fvd_torneo;
+        ?>
+        <li class="mb-2">
+          <a href="<?= htmlspecialchars($href_mi_org_at) ?>" class="nav-link <?= $active_mi_org_at ? 'active' : '' ?>">
+            <i class="fas fa-building me-3"></i>
+            <span class="nav-text">Mi organización</span>
+          </a>
+        </li>
         <li class="mb-2">
           <a href="<?= htmlspecialchars($dashboard_href('torneo_gestion', ['action' => 'index'])) ?>" class="nav-link <?= ($current_page === 'torneo_gestion' && ($_GET['action'] ?? '') === 'index') ? 'active' : '' ?>">
             <i class="fas fa-trophy me-3"></i>
@@ -609,16 +598,19 @@ if ($current_page === 'estadisticas_torneos') {
         <?php endif; ?>
       </ul>
     </nav>
+    <?php endif; ?>
 
     <!-- Contenido principal -->
-    <div id="page-content-wrapper" class="flex-grow-1">
+    <div id="page-content-wrapper" class="flex-grow-1"<?= !empty($layout_hide_sidebar) ? ' style="min-width:0; width:100%;"' : '' ?>>
       
       <!-- Topbar -->
       <nav class="navbar navbar-expand-lg navbar-light bg-white border-bottom shadow-sm">
         <div class="container-fluid">
-          <button class="btn btn-outline-secondary me-3" id="menu-toggle">
+          <?php if (empty($layout_hide_sidebar)): ?>
+          <button class="btn btn-outline-secondary me-3" id="menu-toggle" type="button">
             <i class="fas fa-bars"></i>
           </button>
+          <?php endif; ?>
           
           <div class="navbar-nav me-auto d-flex align-items-center">
             <?php
@@ -634,11 +626,20 @@ if ($current_page === 'estadisticas_torneos') {
             <img src="<?= htmlspecialchars($topbar_logo_src) ?>" alt="<?= $topbar_nombre ?>" height="32" class="me-2 d-none d-md-inline-block" style="object-fit: contain;">
             <h5 class="mb-0 text-muted d-none d-md-block"><?= $topbar_nombre ?></h5>
             <h6 class="mb-0 text-muted d-md-none"><?= strlen($topbar_nombre) > 20 ? 'Dashboard' : $topbar_nombre ?></h6>
+            <?php if (!empty($layout_operativo_asoc) && ($current_page ?? '') !== 'asociacion_panel'): ?>
+            <a href="<?= htmlspecialchars($dashboard_href('asociacion_panel')) ?>" class="btn btn-sm btn-primary ms-2 ms-md-3">
+              <i class="fas fa-city me-1"></i><span class="d-none d-sm-inline">Panel</span> asociación
+            </a>
+            <?php elseif (!empty($show_link_panel_asociacion)): ?>
+            <a href="<?= htmlspecialchars($dashboard_href('asociacion_panel')) ?>" class="btn btn-sm btn-outline-primary ms-2 ms-md-3">
+              <i class="fas fa-city me-1"></i><span class="d-none d-sm-inline">Panel</span> asociación
+            </a>
+            <?php endif; ?>
           </div>
           
           <div class="d-flex align-items-center">
-            <?php if ($is_admin_general_base && $solicitudes_pendientes > 0): ?>
-            <!-- Indicador de Solicitudes Pendientes -->
+            <?php if (false): ?>
+            <!-- Indicador de Solicitudes Pendientes (FVD: deshabilitado) -->
             <div class="me-3">
               <a href="<?= htmlspecialchars($dashboard_href('affiliate_requests')) ?>" class="btn btn-warning position-relative" title="Solicitudes de Afiliación Pendientes">
                 <i class="fas fa-user-clock"></i>
@@ -677,15 +678,15 @@ if ($current_page === 'estadisticas_torneos') {
             </span>
             <?php endif; ?>
             
-            <?php if ($user['role'] === 'admin_club'): ?>
+            <?php if (in_array($user['role'] ?? '', ['admin_club', 'admin_general', 'admin_torneo'], true)): ?>
             <?php
-              $topbar_org_id = isset($admin_club_org_id) ? (int) $admin_club_org_id : (int) (Auth::getUserOrganizacionId() ?: 0);
+              $topbar_org_id = (int) (Auth::getUserOrganizacionId() ?: (class_exists('FvdConfig') ? FvdConfig::ORGANIZACION_ID : 1));
               $topbar_org_href = $topbar_org_id > 0
                 ? $dashboard_href('organizaciones', ['id' => $topbar_org_id])
                 : $dashboard_href('mi_organizacion');
             ?>
-            <!-- Mismo destino que «Mi Organización» en el menú lateral -->
-            <a href="<?= htmlspecialchars($topbar_org_href) ?>" class="btn btn-outline-primary me-2" title="Mi organización: resumen, clubes y afiliados">
+            <!-- Mismo destino que «Mi organización» en el menú lateral -->
+            <a href="<?= htmlspecialchars($topbar_org_href) ?>" class="btn btn-outline-primary me-2" title="Mi organización: resumen, asociaciones y afiliados">
               <i class="fas fa-building me-1"></i>
               <span class="d-none d-md-inline">Mi organización</span>
             </a>

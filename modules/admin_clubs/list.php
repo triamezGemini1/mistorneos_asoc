@@ -78,9 +78,9 @@ if ($view === 'detail' && $admin_id) {
             SELECT c.*, 
                    $org_sub as torneos_count,
                    $org_insc as inscritos_count,
-                   (SELECT COUNT(*) FROM usuarios WHERE club_id = c.id AND role = 'usuario' AND status = 0) as total_afiliados,
-                   (SELECT COUNT(*) FROM usuarios WHERE club_id = c.id AND role = 'usuario' AND status = 0 AND sexo = 'M') as hombres,
-                   (SELECT COUNT(*) FROM usuarios WHERE club_id = c.id AND role = 'usuario' AND status = 0 AND sexo = 'F') as mujeres
+                   (SELECT COUNT(*) FROM usuarios WHERE entidad = c.id) as total_afiliados,
+                   (SELECT COUNT(*) FROM usuarios WHERE entidad = c.id AND sexo = 'M') as hombres,
+                   (SELECT COUNT(*) FROM usuarios WHERE entidad = c.id AND sexo = 'F') as mujeres
             FROM clubes c
             WHERE c.id IN ($placeholders)
             ORDER BY c.nombre ASC
@@ -112,8 +112,8 @@ if ($view === 'detail' && $admin_id) {
         $stmt = $pdo->prepare("
             SELECT u.*, c.nombre as club_nombre
             FROM usuarios u
-            LEFT JOIN clubes c ON u.club_id = c.id
-            WHERE u.club_id IN ($placeholders) AND u.id != ?
+            LEFT JOIN clubes c ON u.entidad = c.id
+            WHERE u.entidad IN ($placeholders) AND u.id != ?
             ORDER BY u.created_at DESC
         ");
         $stmt->execute(array_merge($club_ids, [$admin_id]));

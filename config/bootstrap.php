@@ -20,6 +20,14 @@ $GLOBALS['APP_CONFIG'] = Environment::getConfig();
 
 // Load centralized app helpers
 require_once __DIR__ . '/../lib/app_helpers.php';
+require_once __DIR__ . '/../lib/FvdConfig.php';
+
+if (!defined('ORGANIZACION_ID')) {
+    define('ORGANIZACION_ID', FvdConfig::ORGANIZACION_ID);
+}
+if (!defined('ORGANIZACION_NOMBRE')) {
+    define('ORGANIZACION_NOMBRE', FvdConfig::ORGANIZACION_NOMBRE);
+}
 
 // Load logging helper
 require_once __DIR__ . '/../lib/Log.php';
@@ -87,7 +95,7 @@ if (!defined('URL_BASE')) {
         }
     }
     if ($url_base_path === '') {
-        $url_base_path = '/pruebas/public/';
+        $url_base_path = FvdConfig::BASE_PATH;
     }
     define('URL_BASE', $url_base_path);
 }
@@ -106,6 +114,8 @@ if (session_status() === PHP_SESSION_NONE && !headers_sent()) {
         error_log('[SESSION] bootstrap.php: session_start_early no dejó sesión activa (¿headers enviados antes?).');
     }
 }
+
+FvdConfig::ensureSessionAnchorIfAuthenticated();
 
 // =================================================================
 // HEADERS DE SEGURIDAD Y ANTI-CACHÉ (evitar 304 en desarrollo)

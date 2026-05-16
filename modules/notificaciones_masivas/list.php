@@ -284,7 +284,7 @@ if (!isset($torneo_id)) {
 }
 $torneo_lugar_preview = ($torneo_seleccionado && isset($torneo_seleccionado['lugar']) && trim((string)$torneo_seleccionado['lugar']) !== '') ? trim($torneo_seleccionado['lugar']) : 'Centro de eventos';
 $organizacion_nombre_preview = ($torneo_seleccionado && isset($torneo_seleccionado['club_nombre']) && trim((string)$torneo_seleccionado['club_nombre']) !== '') ? trim($torneo_seleccionado['club_nombre']) : 'Mi Organización';
-$base_preview = function_exists('app_base_url') ? app_base_url() : ($_ENV['APP_URL'] ?? 'http://localhost/mistorneos');
+$base_preview = function_exists('app_base_url') ? app_base_url() : ($_ENV['APP_URL'] ?? 'http://localhost/mistorneos_fvd');
 $url_inscripcion_preview = rtrim($base_preview, '/') . '/public/tournament_register.php?torneo_id=' . ($torneo_id ?: '1');
 
 // Variables comunes para resultado (admin_club las tiene en el else; admin_general las tiene arriba)

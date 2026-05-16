@@ -116,46 +116,7 @@ $athletes_by_club = $athletes_by_club ?? [];
                 </div>
             </div>
         </div>
-        <div class="col-xl-2 col-lg-3 col-md-4 col-sm-6 col-12">
-            <div class="stat-card success">
-                <div class="d-flex flex-column align-items-start">
-                    <div class="w-100">
-                        <h3 class="mb-1"><?= number_format($stats['total_clubs'] ?? 0) ?></h3>
-                        <p class="mb-0"><i class="fas fa-building me-1"></i>Clubes Afiliados</p>
-                    </div>
-                </div>
-            </div>
-        </div>
-        <div class="col-xl-2 col-lg-3 col-md-4 col-sm-6 col-12">
-            <div class="stat-card warning">
-                <div class="d-flex flex-column align-items-start">
-                    <div class="w-100">
-                        <h3 class="mb-1"><?= number_format($stats['total_afiliados'] ?? 0) ?></h3>
-                        <p class="mb-0"><i class="fas fa-user-check me-1"></i>Total Afiliados</p>
-                    </div>
-                </div>
-            </div>
-        </div>
-        <div class="col-xl-2 col-lg-3 col-md-4 col-sm-6 col-12">
-            <div class="stat-card danger">
-                <div class="d-flex flex-column align-items-start">
-                    <div class="w-100">
-                        <h3 class="mb-1"><?= number_format($stats['total_hombres'] ?? 0) ?></h3>
-                        <p class="mb-0"><i class="fas fa-mars me-1"></i>Hombres</p>
-                    </div>
-                </div>
-            </div>
-        </div>
-        <div class="col-xl-2 col-lg-3 col-md-4 col-sm-6 col-12">
-            <div class="stat-card purple">
-                <div class="d-flex flex-column align-items-start">
-                    <div class="w-100">
-                        <h3 class="mb-1"><?= number_format($stats['total_mujeres'] ?? 0) ?></h3>
-                        <p class="mb-0"><i class="fas fa-venus me-1"></i>Mujeres</p>
-                    </div>
-                </div>
-            </div>
-        </div>
+        <?php include __DIR__ . '/_atletas_stat_cards.php'; ?>
         <div class="col-xl-2 col-lg-3 col-md-4 col-sm-6 col-12">
             <div class="stat-card secondary">
                 <div class="d-flex flex-column align-items-start">
@@ -180,8 +141,6 @@ $athletes_by_club = $athletes_by_club ?? [];
         <?php elseif ($_SESSION['user']['role'] === 'admin_club'): ?>
         <?php
         $acl = $admin_club_stats ?? [];
-        $hombres = (int)($acl['afiliados_by_gender']['hombres'] ?? $acl['total_hombres'] ?? 0);
-        $mujeres = (int)($acl['afiliados_by_gender']['mujeres'] ?? $acl['total_mujeres'] ?? 0);
         $pr_acl = $torneos_linea_acl['por_realizar'] ?? [];
         $ep_acl = $torneos_linea_acl['en_proceso'] ?? [];
         $re_acl = $torneos_linea_acl['realizados'] ?? [];
@@ -189,48 +148,10 @@ $athletes_by_club = $athletes_by_club ?? [];
         $torneos_realizados = count($re_acl);
         ?>
         <div class="col-12 mb-3">
-            <h4 class="text-muted"><i class="fas fa-chart-line me-2"></i>Estadísticas de mi Organización</h4>
+            <h4 class="text-muted"><i class="fas fa-chart-line me-2"></i>Estadísticas de mi asociación</h4>
+            <p class="text-muted small mb-0"><i class="fas fa-map-marked-alt me-1"></i> <?= htmlspecialchars($entidad_nombre_actual ?? 'No definida') ?></p>
         </div>
-        <div class="col-xl-2 col-lg-3 col-md-4 col-sm-6 col-12">
-            <div class="stat-card success">
-                <div class="d-flex flex-column align-items-start">
-                    <div class="w-100">
-                        <h3 class="mb-1"><?= number_format($acl['total_clubes'] ?? 0) ?></h3>
-                        <p class="mb-0"><i class="fas fa-building me-1"></i>Clubes</p>
-                    </div>
-                </div>
-            </div>
-        </div>
-        <div class="col-xl-2 col-lg-3 col-md-4 col-sm-6 col-12">
-            <div class="stat-card warning">
-                <div class="d-flex flex-column align-items-start">
-                    <div class="w-100">
-                        <h3 class="mb-1"><?= number_format($acl['total_afiliados'] ?? 0) ?></h3>
-                        <p class="mb-0"><i class="fas fa-user-check me-1"></i>Total Afiliados</p>
-                    </div>
-                </div>
-            </div>
-        </div>
-        <div class="col-xl-2 col-lg-3 col-md-4 col-sm-6 col-12">
-            <div class="stat-card danger">
-                <div class="d-flex flex-column align-items-start">
-                    <div class="w-100">
-                        <h3 class="mb-1"><?= number_format($hombres) ?></h3>
-                        <p class="mb-0"><i class="fas fa-mars me-1"></i>Hombres</p>
-                    </div>
-                </div>
-            </div>
-        </div>
-        <div class="col-xl-2 col-lg-3 col-md-4 col-sm-6 col-12">
-            <div class="stat-card purple">
-                <div class="d-flex flex-column align-items-start">
-                    <div class="w-100">
-                        <h3 class="mb-1"><?= number_format($mujeres) ?></h3>
-                        <p class="mb-0"><i class="fas fa-venus me-1"></i>Mujeres</p>
-                    </div>
-                </div>
-            </div>
-        </div>
+        <?php include __DIR__ . '/_atletas_stat_cards.php'; ?>
         <div class="col-xl-2 col-lg-3 col-md-4 col-sm-6 col-12">
             <div class="stat-card secondary">
                 <div class="d-flex flex-column align-items-start">

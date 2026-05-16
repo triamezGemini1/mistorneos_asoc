@@ -25,6 +25,9 @@ class AuthService {
     public static function requireAuth(): void {
         $user = Auth::user();
         if ($user !== null && is_array($user) && !empty($user)) {
+            if (class_exists('FvdConfig', false)) {
+                FvdConfig::anchorSession();
+            }
             return;
         }
         if (headers_sent()) {

@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 require_once __DIR__ . '/InscritosHelper.php';
+require_once __DIR__ . '/FvdConfig.php';
 
 /**
  * Estadísticas de organización alineadas con el esquema real:
@@ -103,6 +104,10 @@ final class OrganizacionDashboardStats
         $c = (int) ($organizacion['cod_org'] ?? 0);
         if ($c > 0) {
             return $c;
+        }
+        $pk = (int) ($organizacion['id'] ?? 0);
+        if ($pk === FvdConfig::ORGANIZACION_ID) {
+            return FvdConfig::ORGANIZACION_ID;
         }
 
         return (int) ($organizacion['entidad'] ?? 0);
@@ -266,7 +271,7 @@ final class OrganizacionDashboardStats
         if ($org_ref <= 0) {
             $org_ref = $org_pk;
         }
-        $org_entidad = (int) ($organizacion['entidad'] ?? 0);
+        $org_entidad = FvdConfig::entidadTerritorioEfectivaOrganizacion($organizacion);
 
         return self::torneoScopeSqlAndParams($pdo, $has_cod_org, $org_pk, $org_ref, $org_entidad, $activosProximos, $tableAlias);
     }
@@ -324,7 +329,7 @@ final class OrganizacionDashboardStats
         if ($org_ref <= 0) {
             $org_ref = $org_pk;
         }
-        $org_entidad = (int) ($organizacion['entidad'] ?? 0);
+        $org_entidad = FvdConfig::entidadTerritorioEfectivaOrganizacion($organizacion);
 
         $canonical = self::canonicalOrgCodigo($organizacion);
         [$clubWhere, $clubParams] = self::clubScopeSqlAndParams($pdo, $canonical);
@@ -427,7 +432,7 @@ final class OrganizacionDashboardStats
         if ($org_ref <= 0) {
             $org_ref = $org_pk;
         }
-        $org_entidad = (int) ($organizacion['entidad'] ?? 0);
+        $org_entidad = FvdConfig::entidadTerritorioEfectivaOrganizacion($organizacion);
 
         $canonical = self::canonicalOrgCodigo($organizacion);
         [$clubWhere, $clubParams] = self::clubScopeSqlAndParams($pdo, $canonical);

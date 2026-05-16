@@ -48,6 +48,47 @@ if (! defined('TORNEO_GESTION_SKIP_AUTH') || ! TORNEO_GESTION_SKIP_AUTH) {
     $is_admin_general = Auth::isAdminGeneral();
     $is_admin_torneo = Auth::isAdminTorneo();
     $is_admin_club = Auth::isAdminClub();
+
+    if (Auth::isOperativoSoloAsociacion() && !defined('TORNEO_GESTION_OPERATIVO_VALIDATED')) {
+        require_once __DIR__ . '/../lib/AsociacionAdminHelper.php';
+        require_once __DIR__ . '/../lib/app_helpers.php';
+        $accionOper = trim((string) ($_GET['action'] ?? 'index'));
+        if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
+            $accionOper = trim((string) ($_POST['action'] ?? $accionOper));
+        }
+        $torneoOper = (int) ($_GET['torneo_id'] ?? $_POST['torneo_id'] ?? 0);
+        if (in_array($accionOper, ['', 'index', 'panel'], true)) {
+            $redirQs = $torneoOper > 0 ? ['torneo_id' => $torneoOper] : [];
+            if (!headers_sent()) {
+                header('Location: ' . AppHelpers::dashboard('asociacion_panel', $redirQs));
+                exit;
+            }
+            echo '<div class="alert alert-info m-3"><a href="' . htmlspecialchars(AppHelpers::dashboard('asociacion_panel', $redirQs)) . '">Ir al panel de asociación</a></div>';
+            return;
+        }
+        if (!AsociacionAdminHelper::accionTorneoGestionPermitida($accionOper)) {
+            $denyQs = $torneoOper > 0 ? ['torneo_id' => $torneoOper] : [];
+            $denyQs['error'] = 'No tiene permiso para gestionar el torneo. Use el panel de asociación.';
+            $urlPanel = AppHelpers::dashboard('asociacion_panel', $denyQs);
+            if (!headers_sent()) {
+                header('Location: ' . $urlPanel);
+                exit;
+            }
+            echo '<div class="alert alert-warning m-3"><a href="' . htmlspecialchars($urlPanel) . '">Volver al panel de asociación</a></div>';
+            return;
+        }
+        if ($torneoOper > 0 && !Auth::canAccessTournament($torneoOper)) {
+            $urlPanel = AppHelpers::dashboard('asociacion_panel', [
+                'error' => 'Torneo fuera del ámbito de su asociación.',
+            ]);
+            if (!headers_sent()) {
+                header('Location: ' . $urlPanel);
+                exit;
+            }
+            echo '<div class="alert alert-warning m-3"><a href="' . htmlspecialchars($urlPanel) . '">Volver al panel de asociación</a></div>';
+            return;
+        }
+    }
 } else {
     $current_user = [];
     $user_role = '';
@@ -67,6 +108,12 @@ function getBaseUrl() {
 
 // FunciÃ³n auxiliar para construir URLs de redirecciÃ³n
 function buildRedirectUrl($action, $params = []) {
+    if ($action === 'panel' && class_exists('Auth') && Auth::isOperativoSoloAsociacion()) {
+        $tid = (int) ($params['torneo_id'] ?? 0);
+        require_once __DIR__ . '/../lib/app_helpers.php';
+        return AppHelpers::dashboard('asociacion_panel', $tid > 0 ? ['torneo_id' => $tid] : []);
+    }
+
     $base = getBaseUrl();
     $url = $base;
     
@@ -2192,6 +2239,41 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $stmt = $pdo->prepare("UPDATE inscritos SET estatus = ? WHERE id = ? AND torneo_id = ?");
             $stmt->execute([$nuevo_estatus, $inscripcion_id, $torneo_id]);
             $_SESSION['success'] = 'Estatus del inscrito actualizado.';
+            header('Location: ' . buildRedirectUrl('inscripciones', ['torneo_id' => $torneo_id]));
+            exit;
+
+        case 'validar_pago_inscrito':
+        case 'toggle_pago_inscrito':
+            $inscripcion_id = (int) ($_POST['inscripcion_id'] ?? 0);
+            $torneo_id = (int) ($_POST['torneo_id'] ?? 0);
+            verificarPermisosTorneo($torneo_id, $user_id, $is_admin_general);
+            require_once __DIR__ . '/../lib/InscripcionPagoService.php';
+            $pagado = isset($_POST['pagado']) ? (int) $_POST['pagado'] : 1;
+            $resVal = $pagado === 1
+                ? InscripcionPagoService::validarPagoInscripcion(DB::pdo(), $inscripcion_id, $torneo_id)
+                : InscripcionPagoService::marcarPendienteInscripcion(DB::pdo(), $inscripcion_id, $torneo_id);
+            if ($resVal['ok']) {
+                $_SESSION['success'] = $resVal['message'];
+            } else {
+                $_SESSION['error'] = $resVal['message'];
+            }
+            header('Location: ' . buildRedirectUrl('inscripciones', ['torneo_id' => $torneo_id]));
+            exit;
+
+        case 'enviar_recordatorio_pago_inscrito':
+            $inscripcion_id = (int) ($_POST['inscripcion_id'] ?? 0);
+            $torneo_id = (int) ($_POST['torneo_id'] ?? 0);
+            verificarPermisosTorneo($torneo_id, $user_id, $is_admin_general);
+            require_once __DIR__ . '/../lib/InscripcionPagoService.php';
+            $resRec = InscripcionPagoService::enviarRecordatorioPago(DB::pdo(), $inscripcion_id, $torneo_id);
+            if ($resRec['ok']) {
+                $_SESSION['success'] = $resRec['message'];
+                if (!empty($resRec['whatsapp_url'])) {
+                    $_SESSION['whatsapp_redirect_inscripcion'] = $resRec['whatsapp_url'];
+                }
+            } else {
+                $_SESSION['error'] = $resRec['message'];
+            }
             header('Location: ' . buildRedirectUrl('inscripciones', ['torneo_id' => $torneo_id]));
             exit;
 
@@ -4534,7 +4616,7 @@ function obtenerDatosInscribirSitio($torneo_id, $user_id, $is_admin_general) {
     $usuarios_territorio = [];
     if ($entidad_torneo > 0) {
         $stmt = $pdo->prepare("
-            SELECT DISTINCT u.id, u.username, u.nombre, u.cedula, c.nombre as club_nombre, c.id as club_id
+            SELECT DISTINCT u.id, u.username, u.nombre, u.cedula, u.entidad, c.nombre as club_nombre, c.id as club_id
             FROM usuarios u
             LEFT JOIN clubes c ON u.club_id = c.id
             LEFT JOIN organizaciones o ON (c.cod_org = o.id" . (organizacionesHasCodOrg() ? " OR c.cod_org = o.cod_org" : "") . ") AND o.estatus = 1
@@ -4550,7 +4632,7 @@ function obtenerDatosInscribirSitio($torneo_id, $user_id, $is_admin_general) {
         $org_id = (int)($torneo['club_responsable'] ?? 0);
         if ($org_id > 0) {
             $stmt = $pdo->prepare("
-                SELECT DISTINCT u.id, u.username, u.nombre, u.cedula, c.nombre as club_nombre, c.id as club_id
+                SELECT DISTINCT u.id, u.username, u.nombre, u.cedula, u.entidad, c.nombre as club_nombre, c.id as club_id
                 FROM usuarios u
                 LEFT JOIN clubes c ON u.club_id = c.id
                 WHERE u.role = 'usuario'
@@ -4604,11 +4686,37 @@ function obtenerDatosInscribirSitio($torneo_id, $user_id, $is_admin_general) {
         }
     }
     
+    $inscripcion_operativo_asoc = false;
+    $club_forzado_id = 0;
+    $club_forzado_nombre = '';
+    require_once __DIR__ . '/../lib/AsociacionAdminHelper.php';
+    $ctxOp = AsociacionAdminHelper::contextoInscripcionOperativa($pdo);
+    if ($ctxOp !== null && ($ctxOp['club_id'] ?? 0) > 0) {
+        $inscripcion_operativo_asoc = true;
+        $club_forzado_id = (int) $ctxOp['club_id'];
+        $club_forzado_nombre = (string) ($ctxOp['club_nombre'] ?? '');
+        $eid = (int) ($ctxOp['entidad_id'] ?? 0);
+        $cid = $club_forzado_id;
+        $usuarios_territorio = array_values(array_filter($usuarios_territorio, static function ($u) use ($eid, $cid) {
+            $uEnt = (int) ($u['entidad'] ?? 0);
+            $uClub = (int) ($u['club_id'] ?? 0);
+
+            return $uEnt === $eid || $uClub === $cid;
+        }));
+        $usuarios_disponibles = array_values(array_filter($usuarios_territorio, function ($u) use ($usuarios_inscritos_ids) {
+            return !in_array($u['id'], $usuarios_inscritos_ids);
+        }));
+        $clubes_disponibles = [['id' => $club_forzado_id, 'nombre' => $club_forzado_nombre]];
+    }
+
     return [
         'torneo' => $torneo,
         'usuarios_disponibles' => array_values($usuarios_disponibles),
         'usuarios_inscritos' => $usuarios_inscritos,
-        'clubes_disponibles' => $clubes_disponibles
+        'clubes_disponibles' => $clubes_disponibles,
+        'inscripcion_operativo_asoc' => $inscripcion_operativo_asoc,
+        'club_forzado_id' => $club_forzado_id,
+        'club_forzado_nombre' => $club_forzado_nombre,
     ];
 }
 

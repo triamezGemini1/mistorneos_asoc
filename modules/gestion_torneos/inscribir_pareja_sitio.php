@@ -11,7 +11,7 @@ $torneo_iniciado = !empty($view_data['torneo_iniciado']);
 $script_actual = basename($_SERVER['PHP_SELF'] ?? '');
 $use_standalone = in_array($script_actual, ['admin_torneo.php', 'panel_torneo.php']);
 $base_url = $use_standalone ? $script_actual : 'index.php?page=torneo_gestion';
-$api_base_path = (function_exists('AppHelpers') ? AppHelpers::getPublicPath() : '/mistorneos/public/') . 'api/';
+$api_base_path = (function_exists('AppHelpers') ? AppHelpers::getPublicPath() : '/mistorneos_fvd/public/') . 'api/';
 
 require_once __DIR__ . '/../../config/csrf.php';
 $csrf_token = class_exists('CSRF') ? CSRF::token() : '';

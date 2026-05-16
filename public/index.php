@@ -201,9 +201,64 @@ $page = $_GET['page'] ?? 'home';
 // Sanitizar nombre de página (solo letras, números, guiones y barras)
 $page = preg_replace('/[^a-zA-Z0-9_\/\-]/', '', $page);
 
+// Admin operativo de asociación: inicio = panel acotado (sin dashboard general)
+if (Auth::isOperativoSoloAsociacion()) {
+    require_once __DIR__ . '/../lib/app_helpers.php';
+    require_once __DIR__ . '/../lib/AsociacionAdminHelper.php';
+    if ($page === 'home' || $page === '') {
+        header('Location: ' . AppHelpers::dashboard('asociacion_panel'));
+        exit;
+    }
+    if (!AsociacionAdminHelper::paginaPermitidaOperativo($page)) {
+        header('Location: ' . AppHelpers::dashboard('asociacion_panel', [
+            'error' => 'No tiene permiso para acceder a esa sección. Use el panel de asociación.',
+        ]));
+        exit;
+    }
+}
+
 // Pre-despacho para solicitudes POST y GET con acciones que requieren redirección
 $action = trim((string)($_GET['action'] ?? ''));
 $actions_requiring_redirect = ['delete', 'save', 'update'];
+
+// Operativo asociación: validar torneo_gestion / tournament_admin ANTES del layout (evita headers already sent)
+if (Auth::isOperativoSoloAsociacion() && in_array($page, ['torneo_gestion', 'tournament_admin'], true)) {
+    $accionOper = $action !== '' ? $action : trim((string) ($_GET['action'] ?? 'index'));
+    if ($page === 'torneo_gestion' && ($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
+        $accionOper = trim((string) ($_POST['action'] ?? $accionOper));
+    }
+    if ($page === 'torneo_gestion' && in_array($accionOper, ['', 'index', 'panel'], true)) {
+        $redirParams = [];
+        $tidIdx = (int) ($_GET['torneo_id'] ?? $_POST['torneo_id'] ?? 0);
+        if ($tidIdx > 0) {
+            $redirParams['torneo_id'] = $tidIdx;
+        }
+        header('Location: ' . AppHelpers::dashboard('asociacion_panel', $redirParams));
+        exit;
+    }
+    $permitida = $page === 'torneo_gestion'
+        ? AsociacionAdminHelper::accionTorneoGestionPermitida($accionOper)
+        : AsociacionAdminHelper::accionTournamentAdminPermitida($accionOper);
+    if (!$permitida) {
+        $redirParams = ['error' => 'No tiene permiso para gestionar el torneo. Use el panel de asociación.'];
+        $tidDeny = (int) ($_GET['torneo_id'] ?? $_POST['torneo_id'] ?? 0);
+        if ($tidDeny > 0) {
+            $redirParams['torneo_id'] = $tidDeny;
+        }
+        header('Location: ' . AppHelpers::dashboard('asociacion_panel', $redirParams));
+        exit;
+    }
+    $torneoOper = (int) ($_GET['torneo_id'] ?? $_POST['torneo_id'] ?? 0);
+    if ($torneoOper > 0 && !Auth::canAccessTournament($torneoOper)) {
+        header('Location: ' . AppHelpers::dashboard('asociacion_panel', [
+            'error' => 'Torneo fuera del ámbito de su asociación.',
+        ]));
+        exit;
+    }
+    if (!defined('TORNEO_GESTION_OPERATIVO_VALIDATED')) {
+        define('TORNEO_GESTION_OPERATIVO_VALIDATED', true);
+    }
+}
 
 // torneo_gestion action=new/view/edit: redirigir a tournaments ANTES de cualquier output (evita "headers already sent" y página en blanco)
 if ($page === 'torneo_gestion' && ($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'GET' && in_array($action, ['new', 'view', 'edit'], true)) {
@@ -301,6 +356,12 @@ if (in_array($page, $special_endpoints, true)) {
 }
 
 // POST clubs: actualizar o guardar club (evita 404 cuando la URL base no es public/)
+if (Auth::isOperativoSoloAsociacion() && $page === 'clubs' && (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST')) {
+    require_once __DIR__ . '/../lib/app_helpers.php';
+    header('Location: ' . AppHelpers::dashboard('asociacion_panel', ['error' => 'No puede crear ni editar clubes.']));
+    exit;
+}
+
 if ($page === 'clubs' && (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST')) {
     $club_action = $_GET['action'] ?? '';
     if ($club_action === 'update') {
@@ -411,6 +472,12 @@ if ($page === 'organizaciones') {
 
 // Unificar Torneos: solo usar la vista del menú lateral (torneo_gestion). Acceso GET a page=tournaments redirige al panel.
 // Excepción: acciones new, view, edit se manejan en tournaments (crear/ver/editar torneo)
+if (Auth::isOperativoSoloAsociacion() && $page === 'tournaments') {
+    require_once __DIR__ . '/../lib/app_helpers.php';
+    header('Location: ' . AppHelpers::dashboard('asociacion_panel', ['error' => 'No puede crear ni administrar torneos.']));
+    exit;
+}
+
 if ($page === 'tournaments' && ($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'GET') {
     $tg_action = $_GET['action'] ?? 'index';
     if ($tg_action === '' || $tg_action === 'index' || $tg_action === 'list') {
@@ -421,6 +488,9 @@ if ($page === 'tournaments' && ($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'GET') 
 
 // torneo_gestion POST: procesar ANTES del layout para evitar "headers already sent" al redirigir
 if ($page === 'torneo_gestion' && ($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
+    if (Auth::isOperativoSoloAsociacion() && !defined('TORNEO_GESTION_OPERATIVO_VALIDATED')) {
+        define('TORNEO_GESTION_OPERATIVO_VALIDATED', true);
+    }
     require_once __DIR__ . '/../modules/torneo_gestion.php';
     exit;
 }
@@ -449,6 +519,9 @@ if ($page === 'torneo_gestion' && ($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'GET
         || ($tg_get === 'retirados_export_xls' && $tg_tid > 0)
         || in_array($tg_get, ['panel_equipos', 'dashboard'], true);
     if ($tg_early) {
+        if (Auth::isOperativoSoloAsociacion() && !defined('TORNEO_GESTION_OPERATIVO_VALIDATED')) {
+            define('TORNEO_GESTION_OPERATIVO_VALIDATED', true);
+        }
         require_once __DIR__ . '/../modules/torneo_gestion.php';
         exit;
     }

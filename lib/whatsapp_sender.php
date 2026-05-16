@@ -11,9 +11,7 @@ class WhatsAppSender {
      */
     public static function generateInvitationMessage(array $data): string {
         // MENSAJE CON TOKEN (Sistema nuevo)
-        $protocol = isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on' ? 'https' : 'http';
-        $host = $_SERVER['HTTP_HOST'] ?? 'localhost';
-        $base_url = $protocol . '://' . $host . '/mistorneos/';
+        $base_url = rtrim(class_exists('FvdConfig') ? FvdConfig::resolvePublicUrl() : (class_exists('AppHelpers') ? AppHelpers::getPublicUrl() : 'http://localhost/mistorneos_fvd/public'), '/') . '/';
         
         $url_sistema = $base_url;
         $url_login = $url_sistema . "modules/invitations/inscripciones/login.php";
@@ -427,10 +425,8 @@ class WhatsAppSender {
             // Último fallback: detectar producción
             $host = $_SERVER['HTTP_HOST'] ?? 'localhost';
             $protocol = isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on' ? 'https' : 'http';
-            if (strpos($host, 'laestaciondeldomino.com') !== false) {
-                return $protocol . '://' . $host . '/mistorneos';
-            }
-            return $protocol . '://' . $host . '/mistorneos';
+            $folder = class_exists('FvdConfig') ? FvdConfig::APP_FOLDER : 'mistorneos_fvd';
+            return $protocol . '://' . $host . '/' . $folder;
         }
     }
 }
