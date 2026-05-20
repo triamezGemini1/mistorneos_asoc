@@ -50,7 +50,7 @@ $form_action = AppHelpers::url('profile_save.php');
 $role_original = (string)($_SESSION['user']['role_original'] ?? ($_SESSION['user']['role'] ?? ''));
 $role_mode_actual = (int)($_SESSION['user']['role_switch_mode'] ?? (($role_original === 'admin_general') ? 0 : 0));
 $url_switch_role = AppHelpers::url('switch_role.php');
-$current_uri = $_SERVER['REQUEST_URI'] ?? AppHelpers::url('index.php', ['page' => 'users/profile']);
+$current_uri = AppHelpers::url('profile.php');
 $role_labels = [
   0 => '0 - Admin General',
   1 => '1 - Admin Organización',

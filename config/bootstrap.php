@@ -5,10 +5,24 @@ if (!defined('APP_BOOTSTRAPPED')) {
 
 require_once __DIR__ . '/php_polyfills.php';
 
-// Nota: El autoloader de Composer debe regenerarse con 'composer dump-autoload'
-// if (file_exists(__DIR__ . '/../vendor/autoload.php')) {
-//     require_once __DIR__ . '/../vendor/autoload.php';
-// }
+// =================================================================
+// AUTOLOAD HÍBRIDO: Composer (prioridad) + fallback PSR-4 nativo
+// =================================================================
+$projectRoot = dirname(__DIR__);
+if (!defined('APP_ROOT')) {
+    define('APP_ROOT', $projectRoot);
+}
+
+$composerAutoload = $projectRoot . '/vendor/autoload.php';
+if (is_file($composerAutoload)) {
+    require_once $composerAutoload;
+} else {
+    require_once $projectRoot . '/core/Bootstrap/Autoloader.php';
+    \Core\Bootstrap\Autoloader::register($projectRoot, [
+        'Core\\' => 'core/',
+        'Lib\\'  => 'lib/',
+    ]);
+}
 
 // Cargar clase Env para variables de entorno
 require_once __DIR__ . '/../lib/Env.php';

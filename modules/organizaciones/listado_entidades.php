@@ -8,7 +8,7 @@ $page_title = 'Organizaciones por entidad';
 <div class="container-fluid py-4">
     <div class="row mb-4">
         <div class="col">
-            <h1 class="h3"><i class="fas fa-map-marked-alt text-primary me-2"></i>Organizaciones</h1>
+            <h1 class="h3"><i class="fas fa-map-marked-alt text-primary me-2"></i>Asociaciones territoriales</h1>
             <nav aria-label="breadcrumb">
                 <ol class="breadcrumb">
                     <li class="breadcrumb-item"><a href="index.php?page=home">Inicio</a></li>
@@ -16,7 +16,16 @@ $page_title = 'Organizaciones por entidad';
                 </ol>
             </nav>
         </div>
-        <div class="col-auto">
+        <div class="col-auto d-flex flex-wrap gap-2">
+            <a href="index.php?page=torneos_estructura&context=asociaciones" class="btn btn-outline-warning btn-sm">
+                <i class="fas fa-trophy me-1"></i>Torneos
+            </a>
+            <a href="index.php?page=torneos_estructura&context=asociaciones&vista=reporte" class="btn btn-outline-info btn-sm">
+                <i class="fas fa-chart-line me-1"></i>Reporte
+            </a>
+            <a href="index.php?page=organizaciones_particulares" class="btn btn-outline-secondary btn-sm">
+                <i class="fas fa-user-tie me-1"></i>Org. particulares
+            </a>
             <a href="<?= htmlspecialchars(AppHelpers::dashboard('notificaciones_masivas')) ?>" class="btn btn-outline-primary">
                 <i class="fas fa-bell me-1"></i>Enviar notificaciones
             </a>
@@ -34,7 +43,7 @@ $page_title = 'Organizaciones por entidad';
         <div class="card shadow-sm">
             <div class="card-header bg-light">
                 <h5 class="mb-0"><i class="fas fa-list me-2"></i>Resumen por entidad</h5>
-                <p class="text-muted small mb-0 mt-1">Organizaciones, clubes, afiliados y torneos por entidad territorial</p>
+                <p class="text-muted small mb-0 mt-1">Solo asociaciones (tipo_org = 0). Los afiliados particulares están en su listado aparte.</p>
             </div>
             <div class="card-body p-0">
                 <div class="table-responsive">

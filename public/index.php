@@ -477,5 +477,113 @@ if ($page === 'clubes_asociados' && ($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'G
     }
 }
 
+// =================================================================
+// FASE 1: Home modular por contexto (feature flag MODERN_HOME)
+// false = dashboard legacy (Bootstrap, layout.php, stat-cards) — alineado con producción previa.
+// true  = vistas Tailwind en views/modules/Dashboard/* (piloto Fase 1/2).
+// Override en .env: MODERN_HOME=true
+// =================================================================
+if (!defined('MODERN_HOME')) {
+    $modernHomeDefault = false;
+    if (class_exists('Env')) {
+        $modernHomeDefault = Env::bool('MODERN_HOME', false);
+    }
+    define('MODERN_HOME', $modernHomeDefault);
+}
+
+if (
+    MODERN_HOME
+    && $page === 'home'
+    && ($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'GET'
+) {
+    $contextType = \Core\Http\Context::resolve();
+    $controller = \Core\Modules\Dashboard\DashboardControllerFactory::make($contextType);
+
+    if ($controller !== null) {
+        $controller->index();
+        exit;
+    }
+}
+
+// =================================================================
+// FASE 0: Layout moderno (Tailwind) — piloto sin tocar router legacy
+// =================================================================
+if ($page === '_demo_modern' && ($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'GET') {
+    require_once $configDir . '/view.php';
+
+    $publicBase = class_exists('AppHelpers')
+        ? rtrim(AppHelpers::getPublicUrl(), '/')
+        : (defined('URL_BASE') ? rtrim((string) URL_BASE, '/') : '');
+    $indexBase = defined('URL_BASE') ? URL_BASE . 'index.php' : 'index.php';
+
+    $userLabel = '';
+    if (is_array($user)) {
+        $userLabel = trim((string) ($user['nombre'] ?? $user['username'] ?? $user['email'] ?? ''));
+    }
+
+    $demoMenu = static function (bool $demoActive) use ($indexBase): array {
+        return [
+            [
+                'label' => 'Inicio legacy',
+                'href' => $indexBase . '?page=home',
+                'icon' => '⌂',
+                'active' => false,
+            ],
+            [
+                'label' => 'Demo moderno',
+                'href' => $indexBase . '?page=_demo_modern',
+                'icon' => '◆',
+                'active' => $demoActive,
+            ],
+        ];
+    };
+
+    \Core\View\View::display(
+        'modules/_demo/index',
+        [
+            'mensaje' => 'Variables aisladas: esta vista solo lee el array $data pasado por el controlador.',
+            'timestamp' => date('Y-m-d H:i:s'),
+            'items' => [
+                ['id' => 101, 'nombre' => 'Torneo Regional Demo', 'estado' => 'Activo', 'inscritos' => 48],
+                ['id' => 102, 'nombre' => 'Copa Dominó Express', 'estado' => 'Inscripción', 'inscritos' => 12],
+                ['id' => 103, 'nombre' => 'Liga Nocturna', 'estado' => 'Finalizado', 'inscritos' => 64],
+            ],
+            'showGlobalsWarning' => true,
+            'homeHref' => $indexBase . '?page=home',
+        ],
+        'layouts/main',
+        [
+            'title' => 'Demo Fase 0 — Layout moderno',
+            'assetBase' => $publicBase,
+            'dashboardHref' => $indexBase . '?page=home',
+            'userLabel' => $userLabel,
+            'menu' => $demoMenu(true),
+            'menuMobile' => $demoMenu(true),
+            'flashMessages' => [
+                ['type' => 'info', 'message' => 'Piloto Fase 0: layout Tailwind con scroll contenido en main.'],
+            ],
+        ]
+    );
+    exit;
+}
+
+// Permisos por página ANTES del layout (el módulo se incluye después y headers ya estarían enviados).
+$page_roles_before_layout = [
+    'torneos_estructura' => ['admin_general', 'admin_club'],
+    'organizaciones_particulares' => ['admin_general'],
+    'estadisticas_torneos' => ['admin_general', 'admin_club'],
+    'entidades' => ['admin_general'],
+    'organizaciones' => ['admin_general', 'admin_club'],
+    'mi_organizacion' => ['admin_general', 'admin_club'],
+    'affiliate_requests' => ['admin_general'],
+    'admin_clubs' => ['admin_general'],
+    'importacion_torneo_externo' => ['admin_general'],
+    'torneo_split_ranking' => ['admin_general'],
+    'admin_atletas_sync' => ['admin_general'],
+];
+if (isset($page_roles_before_layout[$page])) {
+    Auth::requireRole($page_roles_before_layout[$page]);
+}
+
 // Incluir layout principal (para GET normal y páginas de visualización). $page ya está definida y saneada; el layout la usa para incluir el módulo correcto.
 include __DIR__ . "/includes/layout.php";

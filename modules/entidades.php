@@ -3,6 +3,7 @@
 require_once __DIR__ . '/../config/auth.php';
 require_once __DIR__ . '/../config/db.php';
 require_once __DIR__ . '/../config/csrf.php';
+require_once __DIR__ . '/../lib/ClubHelper.php';
 
 Auth::requireRole(['admin_general']);
 
@@ -102,7 +103,11 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
             $insertOrgSql = "INSERT INTO organizaciones (" . implode(', ', $orgFields) . ") VALUES (" . implode(', ', $orgPlaceholders) . ")";
             $insertOrgStmt = $pdo->prepare($insertOrgSql);
 
-            $clubFields = ['nombre', 'organizacion_id', 'estatus'];
+            $clubOrgFkCol = ClubHelper::clubOrganizacionFkColumn();
+            $clubFields = ['nombre', 'estatus'];
+            if ($clubOrgFkCol !== null) {
+                $clubFields[] = $clubOrgFkCol;
+            }
             if ($hasClubDireccion) { $clubFields[] = 'direccion'; }
             if ($hasClubDelegado) { $clubFields[] = 'delegado'; }
             if ($hasClubTelefono) { $clubFields[] = 'telefono'; }
@@ -167,17 +172,33 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
                     $syncCodStmt->execute([$codigo, $orgId]);
                 }
 
-                $checkClubSql = "SELECT id FROM clubes WHERE cod_org = ? AND LOWER(TRIM(nombre)) = LOWER(TRIM(?)) LIMIT 1";
-                $checkClubStmt = $pdo->prepare($checkClubSql);
-                $checkClubStmt->execute([$orgId, $nombre]);
-                $clubId = (int)$checkClubStmt->fetchColumn();
+                $clubId = 0;
+                if ($clubOrgFkCol !== null) {
+                    $orgFkVal = ($hasOrgCod && $clubOrgFkCol === 'cod_org') ? $codigo : $orgId;
+                    $checkClubSql = "SELECT id FROM clubes WHERE {$clubOrgFkCol} = ? AND LOWER(TRIM(nombre)) = LOWER(TRIM(?)) LIMIT 1";
+                    $checkClubStmt = $pdo->prepare($checkClubSql);
+                    $checkClubStmt->execute([$orgFkVal, $nombre]);
+                    $clubId = (int)$checkClubStmt->fetchColumn();
+                } else {
+                    $checkClubStmt = $pdo->prepare(
+                        "SELECT id FROM clubes WHERE LOWER(TRIM(nombre)) = LOWER(TRIM(?))" . ($hasClubEntidad ? ' AND entidad = ?' : '') . ' LIMIT 1'
+                    );
+                    $checkClubParams = [$nombre];
+                    if ($hasClubEntidad) {
+                        $checkClubParams[] = $codigo;
+                    }
+                    $checkClubStmt->execute($checkClubParams);
+                    $clubId = (int)$checkClubStmt->fetchColumn();
+                }
 
                 if ($clubId <= 0) {
                     $clubParams = [
                         ':nombre' => $nombre,
-                        ':organizacion_id' => $orgId,
                         ':estatus' => 1,
                     ];
+                    if ($clubOrgFkCol !== null) {
+                        $clubParams[':' . $clubOrgFkCol] = ($hasOrgCod && $clubOrgFkCol === 'cod_org') ? $codigo : $orgId;
+                    }
                     if ($hasClubDireccion) { $clubParams[':direccion'] = null; }
                     if ($hasClubDelegado) { $clubParams[':delegado'] = null; }
                     if ($hasClubTelefono) { $clubParams[':telefono'] = null; }

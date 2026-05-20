@@ -18,6 +18,13 @@ $pdo = DB::pdo();
 $current_user = Auth::user();
 $is_admin_general = ($current_user['role'] ?? '') === 'admin_general';
 
+// Admin general: reporte unificado por estructura (asociaciones / particulares)
+if ($is_admin_general && !isset($_GET['legacy']) && empty($_GET['context'])) {
+    $ctx = isset($_GET['particulares']) ? 'particulares' : 'asociaciones';
+    header('Location: index.php?page=torneos_estructura&context=' . urlencode($ctx) . '&vista=reporte');
+    exit;
+}
+
 // Mapa de entidades
 $entidad_map = [];
 try {

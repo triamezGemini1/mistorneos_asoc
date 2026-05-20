@@ -135,13 +135,13 @@ try {
     if (!$is_admin_general) {
         // admin_club trabaja a nivel de organización
         if ($user_role === 'admin_club') {
-            // Obtener la organización del admin_club (fallback robusto por Auth)
-            $organizacion_id = (int)(Auth::getUserOrganizacionRef() ?? Auth::getUserOrganizacionId() ?? 0);
-            
-            if (!$organizacion_id) {
+            // Siempre resolver por PK (getUserOrganizacionId). getUserOrganizacionRef() devuelve cod_org
+            // (= entidad en afiliados particulares) y colisiona con otras organizaciones de la misma entidad.
+            $org_pk = (int)(Auth::getUserOrganizacionId() ?? 0);
+            if (!$org_pk) {
                 throw new Exception('No tiene una organización asignada. Contacte al administrador.');
             }
-            $orgRefData = $resolveOrgRef(DB::pdo(), $organizacion_id);
+            $orgRefData = $resolveOrgRef(DB::pdo(), $org_pk);
             $organizacion_id = (int)$orgRefData['ref'];
             $club_responsable = (int)$orgRefData['ref'];
             

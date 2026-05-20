@@ -209,9 +209,10 @@ try {
         // Mantener la organización original del torneo
         $club_responsable = $torneo_actual['club_responsable'];
         if ($user_role === 'admin_club') {
-            $orgRef = (int)(Auth::getUserOrganizacionRef() ?? Auth::getUserOrganizacionId() ?? 0);
-            if ($orgRef > 0) {
-                $club_responsable = $orgRef;
+            $org_pk = (int)(Auth::getUserOrganizacionId() ?? 0);
+            if ($org_pk > 0) {
+                $orgResolved = $resolveOrgRef(DB::pdo(), $org_pk);
+                $club_responsable = (int)($orgResolved['ref'] ?? 0);
             }
         }
     } else {

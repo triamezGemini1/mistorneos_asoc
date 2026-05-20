@@ -25,13 +25,27 @@ $stats_operadores = isset($stats_operadores) ? (int)$stats_operadores : 0;
 $stats_admin_torneo = isset($stats_admin_torneo) ? (int)$stats_admin_torneo : 0;
 ?>
 <div class="container-fluid py-4" id="top-page">
+    <?php
+    $from_particulares = (($_GET['from'] ?? '') === 'particulares')
+        || (isset($organizacion['tipo_org']) && (int) $organizacion['tipo_org'] === 1);
+    ?>
     <nav aria-label="breadcrumb" class="mb-3">
         <ol class="breadcrumb">
             <li class="breadcrumb-item"><a href="index.php?page=home">Inicio</a></li>
-            <li class="breadcrumb-item"><a href="index.php?page=organizaciones">Organizaciones</a></li>
+            <?php if ($from_particulares): ?>
+                <li class="breadcrumb-item"><a href="index.php?page=organizaciones_particulares">Org. particulares</a></li>
+            <?php else: ?>
+                <li class="breadcrumb-item"><a href="index.php?page=organizaciones">Asociaciones</a></li>
+            <?php endif; ?>
             <li class="breadcrumb-item active"><?= htmlspecialchars($organizacion['nombre']) ?></li>
         </ol>
     </nav>
+    <?php if ($from_particulares): ?>
+        <div class="alert alert-light border mb-3 py-2 small">
+            <i class="fas fa-info-circle me-1 text-secondary"></i>
+            Organización <strong>particular</strong>: la entidad es solo referencia territorial, no pertenece a la asociación de esa entidad.
+        </div>
+    <?php endif; ?>
 
     <?php $error_org = isset($_GET['error']) ? trim((string) $_GET['error']) : ''; ?>
     <?php if ($error_org !== ''): ?>

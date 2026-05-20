@@ -155,11 +155,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             }
                         }
                         try {
-                            $tiene_cod_org_fk = (bool) $pdo->query("SHOW COLUMNS FROM clubes LIKE 'cod_org'")->fetch(PDO::FETCH_ASSOC);
-                            $org_fk_col = $tiene_cod_org_fk ? 'cod_org' : 'organizacion_id';
-                            $cols = ['nombre', 'delegado', 'delegado_user_id', 'telefono', 'direccion', 'estatus', 'admin_club_id', $org_fk_col, 'created_at'];
-                            $vals = ['?', '?', '?', '?', '?', '1', '?', '?', 'NOW()'];
-                            $params = [$nombre, $delegado_nombre, $delegado_user_id_final, $telefono, $direccion, $admin_club_user_id, $org_id_val];
+                            $org_fk_col = ClubHelper::clubOrganizacionFkColumn();
+                            $cols = ['nombre', 'delegado', 'delegado_user_id', 'telefono', 'direccion', 'estatus', 'admin_club_id', 'created_at'];
+                            $vals = ['?', '?', '?', '?', '?', '1', '?', 'NOW()'];
+                            $params = [$nombre, $delegado_nombre, $delegado_user_id_final, $telefono, $direccion, $admin_club_user_id];
+                            if ($org_fk_col !== null) {
+                                array_splice($cols, -1, 0, [$org_fk_col]);
+                                array_splice($vals, -1, 0, ['?']);
+                                $params[] = $org_id_val;
+                            }
                             if ($tiene_rif_col) { array_splice($cols, 0, 0, ['rif']); array_splice($vals, 0, 0, ['?']); array_splice($params, 0, 0, [$rif]); }
                             if ($tiene_email_col) { $cols[] = 'email'; $vals[] = '?'; $params[] = $email; }
                             if ($tiene_entidad_col) { $cols[] = 'entidad'; $vals[] = '?'; $params[] = $entidad_val; }

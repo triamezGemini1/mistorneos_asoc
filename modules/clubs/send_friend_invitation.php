@@ -7,6 +7,7 @@
 require_once __DIR__ . '/../../config/bootstrap.php';
 require_once __DIR__ . '/../../config/db.php';
 require_once __DIR__ . '/../../config/auth.php';
+require_once __DIR__ . '/../../lib/ClubHelper.php';
 
 Auth::requireRole(['admin_club']);
 
@@ -26,12 +27,8 @@ try {
     
     // Verificar que el club pertenece a la organización del admin_club
     if ($current_user['club_id'] != $club_id) {
-        $stmt = DB::pdo()->prepare("
-            SELECT COUNT(*) FROM clubes 
-            WHERE id = ? AND organizacion_id = (SELECT id FROM organizaciones WHERE admin_user_id = ? LIMIT 1)
-        ");
-        $stmt->execute([$club_id, $current_user['id']]);
-        if ((int)$stmt->fetchColumn() === 0) {
+        $managed = ClubHelper::getClubesByAdminClubId((int) $current_user['id']);
+        if (!in_array($club_id, $managed, true)) {
             throw new Exception('No tienes permiso para invitar a este club');
         }
     }

@@ -171,7 +171,7 @@ if ($current_page === 'torneo_gestion') {
         $body_page_extra .= ' page-registrar-resultados';
     }
 }
-if ($current_page === 'estadisticas_torneos') {
+if ($current_page === 'estadisticas_torneos' || ($current_page === 'torneos_estructura' && ($_GET['vista'] ?? '') === 'reporte')) {
     $body_page_extra .= ' page-estadisticas-torneos';
 }
 ?>
@@ -275,9 +275,21 @@ if ($current_page === 'estadisticas_torneos') {
         <?php endif; ?>
         <!-- Menú al mismo nivel (sin agrupación Organizaciones) -->
         <li class="mb-2">
-          <a href="<?= htmlspecialchars($dashboard_href('torneo_gestion', ['action' => 'index'])) ?>" class="nav-link <?= ($current_page === 'torneo_gestion' && ($_GET['action'] ?? '') === 'index') ? 'active' : '' ?>">
+          <a href="<?= htmlspecialchars($dashboard_href('torneos_estructura')) ?>" class="nav-link <?= $current_page === 'torneos_estructura' && ($_GET['vista'] ?? '') !== 'reporte' ? 'active' : '' ?>">
             <i class="fas fa-trophy me-3"></i>
             <span class="nav-text">Torneos</span>
+          </a>
+        </li>
+        <li class="mb-2">
+          <a href="<?= htmlspecialchars($dashboard_href('torneos_estructura', ['vista' => 'reporte'])) ?>" class="nav-link <?= $current_page === 'torneos_estructura' && ($_GET['vista'] ?? '') === 'reporte' ? 'active' : '' ?>">
+            <i class="fas fa-chart-line me-3"></i>
+            <span class="nav-text">Reporte torneos</span>
+          </a>
+        </li>
+        <li class="mb-2">
+          <a href="<?= htmlspecialchars($dashboard_href('torneo_gestion', ['action' => 'index'])) ?>" class="nav-link <?= ($current_page === 'torneo_gestion' && ($_GET['action'] ?? '') === 'index') ? 'active' : '' ?>">
+            <i class="fas fa-cogs me-3"></i>
+            <span class="nav-text">Gestión de torneos</span>
           </a>
         </li>
         <li class="mb-2">
@@ -338,7 +350,9 @@ if ($current_page === 'estadisticas_torneos') {
         <?php if (Auth::isAdminGeneral()): ?>
         <?php
         $is_inicio_open = in_array($current_page, ['home', 'calendario']);
-        $is_estructura_open = in_array($current_page, ['entidades', 'organizaciones', 'clubs', 'directorio_clubes']);
+        $is_estructura_open = in_array($current_page, ['entidades', 'organizaciones', 'organizaciones_particulares', 'torneos_estructura', 'clubs', 'directorio_clubes']);
+        $te_context = (string) ($_GET['context'] ?? '');
+        $te_vista = (string) ($_GET['vista'] ?? '');
         $is_afiliaciones_open = in_array($current_page, ['admin_clubs', 'affiliate_requests']);
         $is_comunicacion_open = in_array($current_page, ['notificaciones_masivas', 'whatsapp_config', 'comments']);
         $is_integraciones_open = in_array($current_page, ['admin_atletas_sync', 'importacion_torneo_externo', 'torneo_split_ranking']);
@@ -390,9 +404,39 @@ if ($current_page === 'estadisticas_torneos') {
               </a>
             </li>
             <li class="mb-1">
-              <a href="<?= htmlspecialchars($dashboard_href('organizaciones')) ?>" class="nav-link nav-sub-sub-link <?= $current_page === 'organizaciones' ? 'active' : '' ?>">
+              <a href="<?= htmlspecialchars($dashboard_href('organizaciones')) ?>" class="nav-link nav-sub-sub-link <?= $current_page === 'organizaciones' && empty($_GET['from']) ? 'active' : '' ?>">
                 <i class="fas fa-building me-2"></i>
-                <span>Organizaciones</span>
+                <span>Asociaciones</span>
+              </a>
+            </li>
+            <li class="mb-1 ps-3">
+              <a href="<?= htmlspecialchars($dashboard_href('torneos_estructura', ['context' => 'asociaciones'])) ?>" class="nav-link nav-sub-sub-link small <?= $current_page === 'torneos_estructura' && $te_context === 'asociaciones' && $te_vista !== 'reporte' ? 'active' : '' ?>">
+                <i class="fas fa-trophy me-2"></i>
+                <span>Torneos</span>
+              </a>
+            </li>
+            <li class="mb-1 ps-3">
+              <a href="<?= htmlspecialchars($dashboard_href('torneos_estructura', ['context' => 'asociaciones', 'vista' => 'reporte'])) ?>" class="nav-link nav-sub-sub-link small <?= $current_page === 'torneos_estructura' && $te_context === 'asociaciones' && $te_vista === 'reporte' ? 'active' : '' ?>">
+                <i class="fas fa-chart-line me-2"></i>
+                <span>Reporte torneos</span>
+              </a>
+            </li>
+            <li class="mb-1">
+              <a href="<?= htmlspecialchars($dashboard_href('organizaciones_particulares')) ?>" class="nav-link nav-sub-sub-link <?= $current_page === 'organizaciones_particulares' || ($current_page === 'organizaciones' && ($_GET['from'] ?? '') === 'particulares') ? 'active' : '' ?>">
+                <i class="fas fa-user-tie me-2"></i>
+                <span>Org. particulares</span>
+              </a>
+            </li>
+            <li class="mb-1 ps-3">
+              <a href="<?= htmlspecialchars($dashboard_href('torneos_estructura', ['context' => 'particulares'])) ?>" class="nav-link nav-sub-sub-link small <?= $current_page === 'torneos_estructura' && $te_context === 'particulares' && $te_vista !== 'reporte' ? 'active' : '' ?>">
+                <i class="fas fa-trophy me-2"></i>
+                <span>Torneos</span>
+              </a>
+            </li>
+            <li class="mb-1 ps-3">
+              <a href="<?= htmlspecialchars($dashboard_href('torneos_estructura', ['context' => 'particulares', 'vista' => 'reporte'])) ?>" class="nav-link nav-sub-sub-link small <?= $current_page === 'torneos_estructura' && $te_context === 'particulares' && $te_vista === 'reporte' ? 'active' : '' ?>">
+                <i class="fas fa-chart-line me-2"></i>
+                <span>Reporte torneos</span>
               </a>
             </li>
             <li class="mb-1">
@@ -442,11 +486,11 @@ if ($current_page === 'estadisticas_torneos') {
             </li>
           </ul>
         </li>
-        <!-- Torneos -->
+        <!-- Gestión operativa de torneos (panel, rondas, resultados) -->
         <li class="mb-2">
           <a href="<?= htmlspecialchars($dashboard_href('torneo_gestion', ['action' => 'index'])) ?>" class="nav-link <?= ($current_page === 'torneo_gestion' && ($_GET['action'] ?? '') === 'index') ? 'active' : '' ?>">
-            <i class="fas fa-trophy me-3"></i>
-            <span class="nav-text">Torneos</span>
+            <i class="fas fa-cogs me-3"></i>
+            <span class="nav-text">Gestión de torneos</span>
           </a>
         </li>
         <li class="mb-2">

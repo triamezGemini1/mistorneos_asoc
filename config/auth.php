@@ -139,20 +139,19 @@ class Auth {
     }
     if (!$ok) {
       // Redirigir a una p�gina de error en lugar de establecer c�digo de respuesta
+      $base = class_exists('AppHelpers') && method_exists('AppHelpers', 'getRequestEntryUrl')
+        ? AppHelpers::getRequestEntryUrl()
+        : rtrim(app_base_url(), '/') . '/public';
+      $deniedUrl = $base . '/access_denied.php';
       if (!headers_sent()) {
-        $base = class_exists('AppHelpers') && method_exists('AppHelpers', 'getRequestEntryUrl') ? AppHelpers::getRequestEntryUrl() : rtrim(app_base_url(), '/') . '/public';
-        header('Location: ' . $base . '/access_denied.php');
-        exit;
-      } else {
-        // Si los headers ya se enviaron, mostrar mensaje de error
-        echo '<div class="alert alert-danger text-center mt-4">';
-        echo '<h4>Acceso Denegado</h4>';
-        echo '<p>No tienes permisos para acceder a esta secci�n.</p>';
-        $base = class_exists('AppHelpers') && method_exists('AppHelpers', 'getRequestEntryUrl') ? AppHelpers::getRequestEntryUrl() : rtrim(app_base_url(), '/') . '/public';
-        echo '<a href="' . $base . '/index.php?page=registrants" class="btn btn-primary">Ir a Inscripciones</a>';
-        echo '</div>';
+        header('Location: ' . $deniedUrl);
         exit;
       }
+      echo '<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8">';
+      echo '<meta http-equiv="refresh" content="0;url=' . htmlspecialchars($deniedUrl, ENT_QUOTES, 'UTF-8') . '">';
+      echo '<script>location.replace(' . json_encode($deniedUrl, JSON_UNESCAPED_SLASHES) . ');</script>';
+      echo '</head><body><p><a href="' . htmlspecialchars($deniedUrl, ENT_QUOTES, 'UTF-8') . '">Acceso denegado</a></p></body></html>';
+      exit;
     }
   }
 
@@ -443,15 +442,24 @@ class Auth {
       return null;
     }
     try {
+      require_once __DIR__ . '/../lib/OrganizacionDashboardStats.php';
+      $cols = 'id, cod_org, entidad';
       if (self::hasCodOrg()) {
-        $stmt = DB::pdo()->prepare("SELECT COALESCE(NULLIF(cod_org, 0), NULLIF(entidad, 0)) FROM organizaciones WHERE id = ? AND estatus = 1 LIMIT 1");
-        $stmt->execute([$pk]);
-        $v = (int) $stmt->fetchColumn();
-
-        return $v > 0 ? $v : null;
+        try {
+          DB::pdo()->query('SELECT tipo_org FROM organizaciones LIMIT 0');
+          $cols .= ', tipo_org';
+        } catch (Throwable $ignored) {
+        }
       }
+      $stmt = DB::pdo()->prepare("SELECT {$cols} FROM organizaciones WHERE id = ? AND estatus = 1 LIMIT 1");
+      $stmt->execute([$pk]);
+      $org = $stmt->fetch(PDO::FETCH_ASSOC);
+      if (!$org) {
+        return null;
+      }
+      $v = OrganizacionDashboardStats::federacionCodigoDesdeOrganizacion($org);
 
-      return $pk;
+      return $v > 0 ? $v : null;
     } catch (Throwable $e) {
       return null;
     }

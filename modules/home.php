@@ -10,8 +10,10 @@ if (!defined('APP_BOOTSTRAPPED')) {
 require_once __DIR__ . '/../config/auth.php';
 
 $user = Auth::user();
-if ($user && ($user['role'] ?? '') === 'admin_general') {
+// Admin general efectivo (incl. modo 0 tras switch): vista con tarjetas globales legacy.
+if ($user && Auth::isAdminGeneral() && ($user['role'] ?? '') === 'admin_general') {
     require __DIR__ . '/admin_general/actions/home.php';
     return;
 }
+// admin_club, admin_torneo, operador y simulaciones de rol: dashboard legacy por rol.
 require __DIR__ . '/admin_dashboard.php';

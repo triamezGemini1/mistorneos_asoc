@@ -21,11 +21,46 @@ try {
     $entidad_map = [];
     $pdo = DB::pdo();
     $has_cod_org = false;
+    $has_usuario_cod_org = false;
+    $has_clubes_cod_org = false;
     try {
-        $has_cod_org = (bool)$pdo->query("SHOW COLUMNS FROM organizaciones LIKE 'cod_org'")->fetch(PDO::FETCH_ASSOC);
+        $has_cod_org = (bool) $pdo->query("SHOW COLUMNS FROM organizaciones LIKE 'cod_org'")->fetch(PDO::FETCH_ASSOC);
+        $has_usuario_cod_org = (bool) $pdo->query("SHOW COLUMNS FROM usuarios LIKE 'cod_org'")->fetch(PDO::FETCH_ASSOC);
+        $has_clubes_cod_org = (bool) $pdo->query("SHOW COLUMNS FROM clubes LIKE 'cod_org'")->fetch(PDO::FETCH_ASSOC);
     } catch (Throwable $ignored) {
         $has_cod_org = false;
+        $has_usuario_cod_org = false;
+        $has_clubes_cod_org = false;
     }
+
+    $sexM = "(UPPER(TRIM(COALESCE(ux.sexo, ''))) IN ('M', '1') OR ux.sexo = 1)";
+    $sexF = "(UPPER(TRIM(COALESCE(ux.sexo, ''))) IN ('F', '2') OR ux.sexo = 2)";
+
+    if ($has_usuario_cod_org) {
+        $orgUserMatch = $has_cod_org
+            ? '(ux.cod_org = o.id OR (COALESCE(o.cod_org, 0) > 0 AND ux.cod_org = o.cod_org))'
+            : 'ux.cod_org = o.id';
+        $afiliadosSql = "(SELECT COUNT(*) FROM usuarios ux WHERE ux.role = 'usuario' AND ux.status = 0 AND ux.entidad = ? AND {$orgUserMatch})";
+        $hombresSql = "(SELECT COUNT(*) FROM usuarios ux WHERE ux.role = 'usuario' AND ux.status = 0 AND ux.entidad = ? AND {$orgUserMatch} AND {$sexM})";
+        $mujeresSql = "(SELECT COUNT(*) FROM usuarios ux WHERE ux.role = 'usuario' AND ux.status = 0 AND ux.entidad = ? AND {$orgUserMatch} AND {$sexF})";
+    } else {
+        $clubLink = $has_clubes_cod_org
+            ? 'cx.cod_org = o.id AND cx.entidad = ? AND cx.estatus = 1'
+            : 'cx.admin_club_id = o.admin_user_id AND cx.estidad = ? AND cx.estatus = 1';
+        $afiliadosSql = "(SELECT COUNT(DISTINCT ux.id) FROM usuarios ux
+            INNER JOIN clubes cx ON cx.id = ux.club_id
+            WHERE {$clubLink} AND ux.role = 'usuario' AND ux.status = 0)";
+        $hombresSql = "(SELECT COUNT(DISTINCT ux.id) FROM usuarios ux
+            INNER JOIN clubes cx ON cx.id = ux.club_id
+            WHERE {$clubLink} AND ux.role = 'usuario' AND ux.status = 0 AND {$sexM})";
+        $mujeresSql = "(SELECT COUNT(DISTINCT ux.id) FROM usuarios ux
+            INNER JOIN clubes cx ON cx.id = ux.club_id
+            WHERE {$clubLink} AND ux.role = 'usuario' AND ux.status = 0 AND {$sexF})";
+    }
+
+    $clubsCountSql = $has_clubes_cod_org
+        ? '(SELECT COUNT(*) FROM clubes cx WHERE cx.cod_org = o.id AND cx.entidad = ? AND cx.estatus = 1)'
+        : '(SELECT COUNT(*) FROM clubes cx WHERE cx.admin_club_id = o.admin_user_id AND cx.entidad = ? AND cx.estatus = 1)';
     $cols = $pdo->query("SHOW COLUMNS FROM entidad")->fetchAll(PDO::FETCH_ASSOC);
     $codeCol = null;
     $nameCol = null;
@@ -59,10 +94,10 @@ try {
             u.email as admin_email,
             o.telefono as club_telefono,
             o.responsable as club_delegado,
-            (SELECT COUNT(*) FROM clubes cx WHERE cx.cod_org = o.id AND cx.entidad = ? AND cx.estatus = 1) as supervised_clubs_count,
-            (SELECT COUNT(*) FROM usuarios ux WHERE ux.cod_org = o.id AND ux.entidad = ?) as total_afiliados,
-            (SELECT COUNT(*) FROM usuarios ux WHERE ux.cod_org = o.id AND ux.entidad = ? AND UPPER(COALESCE(ux.sexo,'M')) = 'M') as hombres,
-            (SELECT COUNT(*) FROM usuarios ux WHERE ux.cod_org = o.id AND ux.entidad = ? AND UPPER(COALESCE(ux.sexo,'M')) = 'F') as mujeres,
+            {$clubsCountSql} as supervised_clubs_count,
+            {$afiliadosSql} as total_afiliados,
+            {$hombresSql} as hombres,
+            {$mujeresSql} as mujeres,
             (SELECT COUNT(*) FROM tournaments t WHERE " . ($has_cod_org ? "(t.club_responsable = o.id OR t.club_responsable = o.cod_org)" : "t.club_responsable = o.id") . " AND t.estatus = 1) as total_torneos
         FROM organizaciones o
         LEFT JOIN usuarios u ON u.id = o.admin_user_id

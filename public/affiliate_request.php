@@ -156,10 +156,17 @@ function cargarOrganizacionesParaSelector(): array {
         }
         // Intentar consulta con condición de responsable sin asignar (admin_user_id NULL o 0)
         try {
+            $soloAsoc = '';
+            try {
+                if ((bool) $pdo->query("SHOW COLUMNS FROM organizaciones LIKE 'tipo_org'")->fetch(PDO::FETCH_ASSOC)) {
+                    $soloAsoc = ' AND COALESCE(tipo_org, 0) = 0';
+                }
+            } catch (Throwable $ignored) {
+            }
             $stmt = $pdo->query("
                 SELECT id, nombre, COALESCE(entidad, 0) AS entidad 
                 FROM organizaciones 
-                WHERE estatus = 1 AND (admin_user_id IS NULL OR admin_user_id = 0) 
+                WHERE estatus = 1 AND (admin_user_id IS NULL OR admin_user_id = 0){$soloAsoc}
                 ORDER BY nombre ASC
             ");
             if ($stmt) {
@@ -183,7 +190,7 @@ function cargarOrganizacionesParaSelector(): array {
                 $stmt = $pdo->query("
                     SELECT id, nombre, COALESCE(entidad, 0) AS entidad 
                     FROM organizaciones 
-                    WHERE estatus = 1 AND (admin_user_id IS NULL OR admin_user_id = 0) 
+                    WHERE estatus = 1 AND (admin_user_id IS NULL OR admin_user_id = 0){$soloAsoc}
                     ORDER BY nombre ASC
                 ");
                 if ($stmt) {
@@ -349,7 +356,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
             $entidad_nombre = $entidad_nombre ?: 'Asociación ' . $entidad_codigo;
             try {
-                $stmt = $pdo->prepare("SELECT id FROM organizaciones WHERE estatus = 1 AND (admin_user_id IS NULL OR admin_user_id = 0) AND (entidad = ? OR entidad = ?) LIMIT 1");
+                $filtroAsoc = '';
+                try {
+                    if ((bool) $pdo->query("SHOW COLUMNS FROM organizaciones LIKE 'tipo_org'")->fetch(PDO::FETCH_ASSOC)) {
+                        $filtroAsoc = ' AND COALESCE(tipo_org, 0) = 0';
+                    }
+                } catch (Throwable $ignored) {
+                }
+                $stmt = $pdo->prepare("SELECT id FROM organizaciones WHERE estatus = 1 AND (admin_user_id IS NULL OR admin_user_id = 0) AND (entidad = ? OR entidad = ?){$filtroAsoc} LIMIT 1");
                 $stmt->execute([$entidad_codigo, (int)$entidad_codigo]);
                 $org = $stmt->fetch(PDO::FETCH_ASSOC);
                 if ($org) {

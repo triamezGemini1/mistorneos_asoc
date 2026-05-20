@@ -19,6 +19,64 @@ final class OrganizacionDashboardStats
 
     private static ?bool $clubesHasEntidad = null;
 
+    private static ?bool $organizacionesHasTipoOrg = null;
+
+    private static function organizacionesHasTipoOrgColumn(PDO $pdo): bool
+    {
+        if (self::$organizacionesHasTipoOrg !== null) {
+            return self::$organizacionesHasTipoOrg;
+        }
+        try {
+            $pdo->query('SELECT `tipo_org` FROM `organizaciones` LIMIT 0');
+            self::$organizacionesHasTipoOrg = true;
+        } catch (Throwable $ignored) {
+            self::$organizacionesHasTipoOrg = false;
+        }
+
+        return self::$organizacionesHasTipoOrg;
+    }
+
+    /**
+     * Organización particular (afiliado independiente): tipo_org = 1.
+     * Solo usa entidad como referencia territorial; no comparte clubes con la asociación.
+     *
+     * @param array<string, mixed> $organizacion
+     */
+    public static function isOrganizacionParticular(array $organizacion): bool
+    {
+        return isset($organizacion['tipo_org']) && (int) $organizacion['tipo_org'] === 1;
+    }
+
+    /**
+     * Fragmento SQL: solo filas de asociación territorial (tipo_org = 0).
+     */
+    public static function sqlWhereSoloAsociaciones(PDO $pdo, string $orgAlias = 'o'): string
+    {
+        if (! preg_match('/^[a-zA-Z_][a-zA-Z0-9_]*$/', $orgAlias)) {
+            $orgAlias = 'o';
+        }
+        if (! self::organizacionesHasTipoOrgColumn($pdo)) {
+            return '1=1';
+        }
+
+        return "COALESCE({$orgAlias}.tipo_org, 0) = 0";
+    }
+
+    /**
+     * Fragmento SQL: solo organizaciones particulares (tipo_org = 1).
+     */
+    public static function sqlWhereSoloParticulares(PDO $pdo, string $orgAlias = 'o'): string
+    {
+        if (! preg_match('/^[a-zA-Z_][a-zA-Z0-9_]*$/', $orgAlias)) {
+            $orgAlias = 'o';
+        }
+        if (! self::organizacionesHasTipoOrgColumn($pdo)) {
+            return '1=0';
+        }
+
+        return "COALESCE({$orgAlias}.tipo_org, 0) = 1";
+    }
+
     private static function clubesHasCodOrgColumn(PDO $pdo): bool
     {
         if (self::$clubesHasCodOrg !== null) {
@@ -96,10 +154,21 @@ final class OrganizacionDashboardStats
     }
 
     /**
-     * Código de federación canónico para enlazar clubes (misma semántica que sql/normalizar_modelo_organizacion_canonico.sql).
+     * Código para vincular clubes/torneos a la organización.
+     * - Asociación (tipo_org=0): cod_org territorial o entidad.
+     * - Particular (tipo_org=1): cod_org propio (PK); entidad NO se usa como código de federación.
      */
     private static function canonicalOrgCodigo(array $organizacion): int
     {
+        if (self::isOrganizacionParticular($organizacion)) {
+            $c = (int) ($organizacion['cod_org'] ?? 0);
+            if ($c > 0) {
+                return $c;
+            }
+
+            return (int) ($organizacion['id'] ?? 0);
+        }
+
         $c = (int) ($organizacion['cod_org'] ?? 0);
         if ($c > 0) {
             return $c;
@@ -157,6 +226,18 @@ final class OrganizacionDashboardStats
         if (! preg_match('/^[a-zA-Z_][a-zA-Z0-9_]*$/', $orgAlias)) {
             $orgAlias = 'o';
         }
+
+        if (self::organizacionesHasTipoOrgColumn($pdo)) {
+            $particular = "COALESCE({$orgAlias}.tipo_org, 0) = 1"
+                . " AND COALESCE(NULLIF({$clubAlias}.cod_org, 0), 0)"
+                . " = COALESCE(NULLIF({$orgAlias}.cod_org, 0), {$orgAlias}.id)";
+            $cFed = self::clubFederacionCodigoSqlExpr($pdo, $clubAlias);
+            $oCan = "COALESCE(NULLIF({$orgAlias}.cod_org, 0), NULLIF({$orgAlias}.entidad, 0))";
+            $asociacion = "COALESCE({$orgAlias}.tipo_org, 0) = 0 AND ({$cFed}) = ({$oCan})";
+
+            return "(({$particular}) OR ({$asociacion}))";
+        }
+
         $cFed = self::clubFederacionCodigoSqlExpr($pdo, $clubAlias);
         $oCan = "COALESCE(NULLIF({$orgAlias}.cod_org, 0), NULLIF({$orgAlias}.entidad, 0))";
 
@@ -181,6 +262,49 @@ final class OrganizacionDashboardStats
         $stmt->execute($clubParams);
 
         return array_values(array_map('intval', $stmt->fetchAll(PDO::FETCH_COLUMN) ?: []));
+    }
+
+    /**
+     * Torneos de una organización particular: solo los vinculados a su cod_org/PK, sin alcance territorial por entidad.
+     *
+     * @return array{0: string, 1: list<mixed>}
+     */
+    private static function torneoScopeSqlParticular(
+        PDO $pdo,
+        array $organizacion,
+        bool $activosProximos,
+        string $alias = 't'
+    ): array {
+        if (! preg_match('/^[a-zA-Z_][a-zA-Z0-9_]*$/', $alias)) {
+            $alias = 't';
+        }
+        $a = $alias;
+        $org_pk = (int) ($organizacion['id'] ?? 0);
+        $org_ref = (int) ($organizacion['cod_org'] ?? 0);
+        if ($org_ref <= 0) {
+            $org_ref = $org_pk;
+        }
+        $ids = self::idsRef($org_pk, $org_ref);
+        $idParams = count($ids) > 0 ? $ids : [$org_pk];
+        $ph = implode(',', array_fill(0, count($idParams), '?'));
+        $fechaPart = $activosProximos ? " AND {$a}.fechator >= CURDATE()" : '';
+        $flags = self::columnFlags($pdo);
+
+        if ($flags['has_tournament_cod_org']) {
+            $sql = "{$a}.estatus = 1{$fechaPart} AND (
+                ({$a}.cod_org IS NOT NULL AND {$a}.cod_org > 0 AND {$a}.cod_org IN ({$ph}))
+                OR (
+                    ({$a}.cod_org IS NULL OR {$a}.cod_org = 0)
+                    AND {$a}.club_responsable IN ({$ph})
+                )
+            )";
+
+            return [$sql, array_merge($idParams, $idParams)];
+        }
+
+        $sql = "{$a}.estatus = 1{$fechaPart} AND {$a}.club_responsable IN ({$ph})";
+
+        return [$sql, $idParams];
     }
 
     /** WHERE sobre tournaments + parámetros; $activosProximos añade fechator >= CURDATE() */
@@ -262,6 +386,9 @@ final class OrganizacionDashboardStats
         if ($org_pk <= 0) {
             return ['1=0', []];
         }
+        if (self::isOrganizacionParticular($organizacion)) {
+            return self::torneoScopeSqlParticular($pdo, $organizacion, $activosProximos, $tableAlias);
+        }
         $org_ref = (int) ($organizacion['cod_org'] ?? 0);
         if ($org_ref <= 0) {
             $org_ref = $org_pk;
@@ -325,6 +452,7 @@ final class OrganizacionDashboardStats
             $org_ref = $org_pk;
         }
         $org_entidad = (int) ($organizacion['entidad'] ?? 0);
+        $esParticular = self::isOrganizacionParticular($organizacion);
 
         $canonical = self::canonicalOrgCodigo($organizacion);
         [$clubWhere, $clubParams] = self::clubScopeSqlAndParams($pdo, $canonical);
@@ -332,48 +460,74 @@ final class OrganizacionDashboardStats
         $stmt->execute($clubParams);
         $stats_clubes = (int) $stmt->fetchColumn();
 
-        [$torneoActWhere, $torneoActParams] = self::torneoScopeSqlAndParams($pdo, $has_cod_org, $org_pk, $org_ref, $org_entidad, true);
+        [$torneoActWhere, $torneoActParams] = self::tournamentWhereSqlAndParamsForOrganizacion($pdo, $organizacion, $has_cod_org, 't', true);
         $stmt = $pdo->prepare("SELECT COUNT(DISTINCT t.id) FROM tournaments t WHERE {$torneoActWhere}");
         $stmt->execute($torneoActParams);
         $stats_torneos_activos = (int) $stmt->fetchColumn();
 
-        [$torneoTotWhere, $torneoTotParams] = self::torneoScopeSqlAndParams($pdo, $has_cod_org, $org_pk, $org_ref, $org_entidad, false);
+        [$torneoTotWhere, $torneoTotParams] = self::tournamentWhereSqlAndParamsForOrganizacion($pdo, $organizacion, $has_cod_org, 't', false);
         $stmt = $pdo->prepare("SELECT COUNT(DISTINCT t.id) FROM tournaments t WHERE {$torneoTotWhere}");
         $stmt->execute($torneoTotParams);
         $stats_torneos_total = (int) $stmt->fetchColumn();
 
-        $uTerr = self::usuarioTerritorioSql($pdo);
-        $terrParams = [$org_entidad, $org_entidad];
-
-        $sqlAfiliados = "
-            SELECT COUNT(DISTINCT u.id) FROM usuarios u
-            WHERE u.role = 'usuario' AND u.status = 0
-            AND (
-                {$uTerr}
-                OR EXISTS (
+        if ($esParticular) {
+            $sqlAfiliados = "
+                SELECT COUNT(DISTINCT u.id) FROM usuarios u
+                WHERE u.role = 'usuario' AND u.status = 0
+                AND EXISTS (
                     SELECT 1 FROM clubes c
                     WHERE c.id = u.club_id
                       AND ({$clubWhere})
-                )
-            )";
-        $stmt = $pdo->prepare($sqlAfiliados);
-        $stmt->execute(array_merge($terrParams, $clubParams));
-        $stats_afiliados = (int) $stmt->fetchColumn();
+                )";
+            $stmt = $pdo->prepare($sqlAfiliados);
+            $stmt->execute($clubParams);
+            $stats_afiliados = (int) $stmt->fetchColumn();
 
-        $sqlUsuarios = "
-            SELECT COUNT(DISTINCT u.id) FROM usuarios u
-            WHERE u.status = 0
-            AND (
-                {$uTerr}
-                OR EXISTS (
+            $sqlUsuarios = "
+                SELECT COUNT(DISTINCT u.id) FROM usuarios u
+                WHERE u.status = 0
+                AND EXISTS (
                     SELECT 1 FROM clubes c
                     WHERE c.id = u.club_id
                       AND ({$clubWhere})
-                )
-            )";
-        $stmt = $pdo->prepare($sqlUsuarios);
-        $stmt->execute(array_merge($terrParams, $clubParams));
-        $stats_usuarios = (int) $stmt->fetchColumn();
+                )";
+            $stmt = $pdo->prepare($sqlUsuarios);
+            $stmt->execute($clubParams);
+            $stats_usuarios = (int) $stmt->fetchColumn();
+        } else {
+            $uTerr = self::usuarioTerritorioSql($pdo);
+            $terrParams = [$org_entidad, $org_entidad];
+
+            $sqlAfiliados = "
+                SELECT COUNT(DISTINCT u.id) FROM usuarios u
+                WHERE u.role = 'usuario' AND u.status = 0
+                AND (
+                    {$uTerr}
+                    OR EXISTS (
+                        SELECT 1 FROM clubes c
+                        WHERE c.id = u.club_id
+                          AND ({$clubWhere})
+                    )
+                )";
+            $stmt = $pdo->prepare($sqlAfiliados);
+            $stmt->execute(array_merge($terrParams, $clubParams));
+            $stats_afiliados = (int) $stmt->fetchColumn();
+
+            $sqlUsuarios = "
+                SELECT COUNT(DISTINCT u.id) FROM usuarios u
+                WHERE u.status = 0
+                AND (
+                    {$uTerr}
+                    OR EXISTS (
+                        SELECT 1 FROM clubes c
+                        WHERE c.id = u.club_id
+                          AND ({$clubWhere})
+                    )
+                )";
+            $stmt = $pdo->prepare($sqlUsuarios);
+            $stmt->execute(array_merge($terrParams, $clubParams));
+            $stats_usuarios = (int) $stmt->fetchColumn();
+        }
 
         $whereInsc = InscritosHelper::sqlWhereSoloConfirmadoConAlias('i');
         $sqlInsc = "
@@ -431,30 +585,52 @@ final class OrganizacionDashboardStats
 
         $canonical = self::canonicalOrgCodigo($organizacion);
         [$clubWhere, $clubParams] = self::clubScopeSqlAndParams($pdo, $canonical);
-        $uTerr = self::usuarioTerritorioSql($pdo);
-        $terrParams = [$org_entidad, $org_entidad];
 
-        $sql = "
-            SELECT
-                SUM(CASE WHEN UPPER(TRIM(COALESCE(u.sexo, ''))) IN ('M', '1') OR u.sexo = 1 THEN 1 ELSE 0 END) AS hombres,
-                SUM(CASE WHEN UPPER(TRIM(COALESCE(u.sexo, ''))) IN ('F', '2') OR u.sexo = 2 THEN 1 ELSE 0 END) AS mujeres,
-                SUM(CASE
-                    WHEN u.sexo IS NULL OR TRIM(COALESCE(CAST(u.sexo AS CHAR), '')) = '' THEN 1
-                    WHEN UPPER(TRIM(COALESCE(u.sexo, ''))) NOT IN ('M', 'F', '1', '2') AND u.sexo NOT IN (1, 2) THEN 1
-                    ELSE 0
-                END) AS sin_genero
-            FROM usuarios u
-            WHERE u.role = 'usuario' AND u.status = 0
-            AND (
-                {$uTerr}
-                OR EXISTS (
+        if (self::isOrganizacionParticular($organizacion)) {
+            $sql = "
+                SELECT
+                    SUM(CASE WHEN UPPER(TRIM(COALESCE(u.sexo, ''))) IN ('M', '1') OR u.sexo = 1 THEN 1 ELSE 0 END) AS hombres,
+                    SUM(CASE WHEN UPPER(TRIM(COALESCE(u.sexo, ''))) IN ('F', '2') OR u.sexo = 2 THEN 1 ELSE 0 END) AS mujeres,
+                    SUM(CASE
+                        WHEN u.sexo IS NULL OR TRIM(COALESCE(CAST(u.sexo AS CHAR), '')) = '' THEN 1
+                        WHEN UPPER(TRIM(COALESCE(u.sexo, ''))) NOT IN ('M', 'F', '1', '2') AND u.sexo NOT IN (1, 2) THEN 1
+                        ELSE 0
+                    END) AS sin_genero
+                FROM usuarios u
+                WHERE u.role = 'usuario' AND u.status = 0
+                AND EXISTS (
                     SELECT 1 FROM clubes c
                     WHERE c.id = u.club_id
                       AND ({$clubWhere})
-                )
-            )";
-        $stmt = $pdo->prepare($sql);
-        $stmt->execute(array_merge($terrParams, $clubParams));
+                )";
+            $stmt = $pdo->prepare($sql);
+            $stmt->execute($clubParams);
+        } else {
+            $uTerr = self::usuarioTerritorioSql($pdo);
+            $terrParams = [$org_entidad, $org_entidad];
+
+            $sql = "
+                SELECT
+                    SUM(CASE WHEN UPPER(TRIM(COALESCE(u.sexo, ''))) IN ('M', '1') OR u.sexo = 1 THEN 1 ELSE 0 END) AS hombres,
+                    SUM(CASE WHEN UPPER(TRIM(COALESCE(u.sexo, ''))) IN ('F', '2') OR u.sexo = 2 THEN 1 ELSE 0 END) AS mujeres,
+                    SUM(CASE
+                        WHEN u.sexo IS NULL OR TRIM(COALESCE(CAST(u.sexo AS CHAR), '')) = '' THEN 1
+                        WHEN UPPER(TRIM(COALESCE(u.sexo, ''))) NOT IN ('M', 'F', '1', '2') AND u.sexo NOT IN (1, 2) THEN 1
+                        ELSE 0
+                    END) AS sin_genero
+                FROM usuarios u
+                WHERE u.role = 'usuario' AND u.status = 0
+                AND (
+                    {$uTerr}
+                    OR EXISTS (
+                        SELECT 1 FROM clubes c
+                        WHERE c.id = u.club_id
+                          AND ({$clubWhere})
+                    )
+                )";
+            $stmt = $pdo->prepare($sql);
+            $stmt->execute(array_merge($terrParams, $clubParams));
+        }
         $row = $stmt->fetch(PDO::FETCH_ASSOC) ?: [];
 
         return [

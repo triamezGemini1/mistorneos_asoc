@@ -12,6 +12,32 @@ require_once __DIR__ . '/../config/db.php';
 class ClubHelper {
     private static ?bool $hasCodOrgColumn = null;
 
+    /** @var string|null|false null = sin resolver; string = columna FK; false = ninguna */
+    private static $clubOrganizacionFkColumn = null;
+
+    /**
+     * Columna FK hacia organización en `clubes` (`cod_org` o `organizacion_id`), o null si no existe.
+     */
+    public static function clubOrganizacionFkColumn(): ?string
+    {
+        if (self::$clubOrganizacionFkColumn !== null) {
+            return self::$clubOrganizacionFkColumn === false ? null : self::$clubOrganizacionFkColumn;
+        }
+        try {
+            $pdo = DB::pdo();
+            if ((bool) $pdo->query("SHOW COLUMNS FROM clubes LIKE 'cod_org'")->fetch(PDO::FETCH_ASSOC)) {
+                self::$clubOrganizacionFkColumn = 'cod_org';
+            } elseif ((bool) $pdo->query("SHOW COLUMNS FROM clubes LIKE 'organizacion_id'")->fetch(PDO::FETCH_ASSOC)) {
+                self::$clubOrganizacionFkColumn = 'organizacion_id';
+            } else {
+                self::$clubOrganizacionFkColumn = false;
+            }
+        } catch (Throwable $e) {
+            self::$clubOrganizacionFkColumn = false;
+        }
+        return self::$clubOrganizacionFkColumn === false ? null : self::$clubOrganizacionFkColumn;
+    }
+
     private static function hasCodOrg(): bool
     {
         if (self::$hasCodOrgColumn !== null) {

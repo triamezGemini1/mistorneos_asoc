@@ -35,7 +35,16 @@ $role_labels = [
   3 => '3 - Operador',
   4 => '4 - Usuario Común',
 ];
-$current_uri = $_SERVER['REQUEST_URI'] ?? 'index.php?page=home';
+if (class_exists('AppHelpers') && !empty($_GET['page'])) {
+    $returnParams = $_GET;
+    $returnPage = (string) $returnParams['page'];
+    unset($returnParams['page']);
+    $current_uri = AppHelpers::dashboard($returnPage, $returnParams);
+} elseif (class_exists('AppHelpers') && !empty($_SERVER['SCRIPT_NAME']) && basename($_SERVER['SCRIPT_NAME']) !== 'index.php') {
+    $current_uri = AppHelpers::url(basename($_SERVER['SCRIPT_NAME']));
+} else {
+    $current_uri = class_exists('AppHelpers') ? AppHelpers::dashboard('home') : 'index.php?page=home';
+}
 ?>
 <!-- Menú usuario: centralizado para que todas las opciones (incl. logout) estén siempre disponibles -->
 <div class="dropdown" id="user-menu-dropdown" data-bs-boundary="viewport">

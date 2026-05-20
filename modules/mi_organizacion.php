@@ -133,9 +133,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
             $stmt = DB::pdo()->prepare("UPDATE organizaciones SET estatus = 1, updated_at = NOW() WHERE id = ? AND estatus = 0");
             $stmt->execute([$org_id_react]);
             if ($stmt->rowCount() > 0) {
-                $return_extra = (($_GET['return_to'] ?? '') === 'organizaciones' && !empty($_GET['entidad_id'])) ? '&entidad_id=' . (int)$_GET['entidad_id'] : '';
+                $return_to = (string) ($_GET['return_to'] ?? '');
+                $return_extra = ($return_to === 'organizaciones' && !empty($_GET['entidad_id'])) ? '&entidad_id=' . (int) $_GET['entidad_id'] : '';
+                $return_page = $return_to === 'particulares' ? 'organizaciones_particulares' : 'organizaciones';
                 $base = (defined('URL_BASE') && URL_BASE !== '') ? rtrim(URL_BASE, '/') . '/' : '';
-                header('Location: ' . $base . 'index.php?page=organizaciones' . $return_extra . '&success=' . urlencode('Organización reactivada correctamente.'));
+                header('Location: ' . $base . 'index.php?page=' . $return_page . $return_extra . '&success=' . urlencode('Organización reactivada correctamente.'));
                 exit;
             }
         } catch (Exception $e) {
@@ -260,12 +262,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
             $success_msg = 'Organización activada. Usuario asignado y contraseña actualizada.';
         }
 
-        $return_extra = '';
-        if (($_GET['return_to'] ?? '') === 'organizaciones' && !empty($_GET['entidad_id'])) {
-            $return_extra = '&entidad_id=' . (int)$_GET['entidad_id'];
-        }
+        $return_to = (string) ($_GET['return_to'] ?? '');
+        $return_extra = ($return_to === 'organizaciones' && !empty($_GET['entidad_id'])) ? '&entidad_id=' . (int) $_GET['entidad_id'] : '';
+        $return_page = $return_to === 'particulares' ? 'organizaciones_particulares' : 'organizaciones';
         $base = (defined('URL_BASE') && URL_BASE !== '') ? rtrim(URL_BASE, '/') . '/' : '';
-        header('Location: ' . $base . 'index.php?page=organizaciones' . $return_extra . '&success=' . urlencode($success_msg));
+        header('Location: ' . $base . 'index.php?page=' . $return_page . $return_extra . '&success=' . urlencode($success_msg));
         exit;
     } catch (Exception $e) {
         $error = $e->getMessage();

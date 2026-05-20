@@ -307,7 +307,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         if ($hasTipoOrg) {
                             $stmt = $pdo->prepare("
                                 INSERT INTO organizaciones (nombre, direccion, responsable, telefono, email, entidad, tipo_org, cod_org, admin_user_id, estatus, created_at, updated_at)
-                                VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?, 1, NOW(), NOW())
+                                VALUES (?, ?, ?, ?, ?, ?, 1, NULL, ?, 1, NOW(), NOW())
                             ");
                             $stmt->execute([
                                 $org_nombre,
@@ -315,14 +315,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                 $org_responsable,
                                 $org_telefono,
                                 $org_email,
-                                $org_entidad,
                                 $org_entidad,
                                 $admin_user_id
                             ]);
                         } else {
                             $stmt = $pdo->prepare("
                                 INSERT INTO organizaciones (nombre, direccion, responsable, telefono, email, entidad, cod_org, admin_user_id, estatus, created_at, updated_at)
-                                VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, NOW(), NOW())
+                                VALUES (?, ?, ?, ?, ?, ?, NULL, ?, 1, NOW(), NOW())
                             ");
                             $stmt->execute([
                                 $org_nombre,
@@ -330,7 +329,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                 $org_responsable,
                                 $org_telefono,
                                 $org_email,
-                                $org_entidad,
                                 $org_entidad,
                                 $admin_user_id
                             ]);
@@ -365,6 +363,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                 $admin_user_id
                             ]);
                         }
+                    }
+                    $new_org_id = (int) $pdo->lastInsertId();
+                    if ($new_org_id > 0 && $hasCodOrg) {
+                        // Afiliado particular: cod_org único (PK) para no colisionar con la asociación de la entidad.
+                        $pdo->prepare('UPDATE organizaciones SET cod_org = ? WHERE id = ?')->execute([$new_org_id, $new_org_id]);
                     }
                     $nota = "Organización: " . ($solicitud['club_nombre'] ?? 'N/A');
                 }

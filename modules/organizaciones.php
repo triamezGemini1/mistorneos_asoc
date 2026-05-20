@@ -39,6 +39,7 @@ try {
 }
 require_once __DIR__ . '/../lib/OrganizacionDashboardStats.php';
 $usuarios_territorio_expr = OrganizacionDashboardStats::usuarioTerritorioCoalesceExpr($pdo);
+$sql_solo_asociaciones = OrganizacionDashboardStats::sqlWhereSoloAsociaciones($pdo, 'o');
 
 // ---------- Vista: Detalle de club (con afiliados) ----------
 if ($organizacion_id && $club_id) {
@@ -527,7 +528,7 @@ if ($is_admin_general && !$organizacion_id && !$club_id && $entidad_id > 0) {
                        (SELECT COUNT(DISTINCT c.id) FROM clubes c WHERE {$clubMatchOo} AND c.estatus = 1 AND COALESCE(c.entidad, 0) = COALESCE(o.entidad, 0)) as total_clubes,
                        (SELECT COUNT(DISTINCT t.id) FROM tournaments t WHERE " . ($has_cod_org ? "(t.club_responsable = o.id OR t.club_responsable = o.cod_org)" : "t.club_responsable = o.id") . " AND COALESCE(t.entidad, 0) = COALESCE(o.entidad, 0)) as total_torneos
                 FROM organizaciones o
-                WHERE o.entidad = ?
+                WHERE o.entidad = ? AND {$sql_solo_asociaciones}
                 ORDER BY o.estatus DESC, o.nombre ASC
             ");
             $stmt->execute([$entidad_id]);
@@ -605,7 +606,7 @@ if ($is_admin_general && !$organizacion_id && !$club_id && $entidad_id > 0) {
 if ($is_admin_general && !$organizacion_id && !$club_id) {
     $resumen_entidades = [];
     try {
-        $stmt = $pdo->query("SELECT DISTINCT entidad FROM organizaciones WHERE entidad IS NOT NULL AND entidad != 0 ORDER BY entidad ASC");
+        $stmt = $pdo->query("SELECT DISTINCT entidad FROM organizaciones o WHERE entidad IS NOT NULL AND entidad != 0 AND {$sql_solo_asociaciones} ORDER BY entidad ASC");
         $entidad_codes = $stmt->fetchAll(PDO::FETCH_COLUMN);
     } catch (Exception $e) {
         $entidad_codes = [];
@@ -628,7 +629,7 @@ if ($is_admin_general && !$organizacion_id && !$club_id) {
     } catch (Exception $e) {}
     foreach ($entidad_codes as $cod) {
         $nombre = $entidad_nombres[$cod] ?? ('Entidad ' . $cod);
-        $stmt = $pdo->prepare("SELECT id FROM organizaciones WHERE entidad = ?");
+        $stmt = $pdo->prepare("SELECT id FROM organizaciones o WHERE o.entidad = ? AND {$sql_solo_asociaciones}");
         $stmt->execute([$cod]);
         $org_ids = $stmt->fetchAll(PDO::FETCH_COLUMN);
         $total_organizaciones = count($org_ids);
@@ -682,7 +683,7 @@ try {
                (SELECT COUNT(DISTINCT t.id) FROM tournaments t WHERE " . ($has_cod_org ? "(t.club_responsable = o.id OR t.club_responsable = o.cod_org)" : "t.club_responsable = o.id") . " AND COALESCE(t.entidad, 0) = COALESCE(o.entidad, 0)) as total_torneos
         FROM organizaciones o
         LEFT JOIN entidad e ON o.entidad = e.id
-        WHERE o.estatus = 1
+        WHERE o.estatus = 1 AND {$sql_solo_asociaciones}
         ORDER BY e.nombre ASC, o.nombre ASC
     ");
     $todas = $stmt->fetchAll(PDO::FETCH_ASSOC);

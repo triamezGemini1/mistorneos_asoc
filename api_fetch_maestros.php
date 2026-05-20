@@ -45,7 +45,12 @@ try {
     // Clubes
     $clubes = [];
     try {
-        $stmt = $pdo->query("SELECT id, nombre, organizacion_id, entidad, estatus FROM clubes WHERE estatus = 1 ORDER BY nombre");
+        require_once __DIR__ . '/lib/ClubHelper.php';
+        $orgFk = ClubHelper::clubOrganizacionFkColumn();
+        $orgSelect = $orgFk !== null
+            ? "{$orgFk} AS organizacion_id"
+            : 'NULL AS organizacion_id';
+        $stmt = $pdo->query("SELECT id, nombre, {$orgSelect}, entidad, estatus FROM clubes WHERE estatus = 1 ORDER BY nombre");
         $clubes = $stmt->fetchAll(PDO::FETCH_ASSOC);
     } catch (Throwable $e) {
     }
