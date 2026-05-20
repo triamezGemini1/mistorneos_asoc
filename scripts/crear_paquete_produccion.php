@@ -16,22 +16,53 @@ if (file_exists($deployignore)) {
     $excluir = array_filter(array_map('trim', file($deployignore)));
 }
 
-// Agregar exclusiones por defecto
+// Exclusiones obligatorias (además de .deployignore)
 $excluir = array_merge($excluir, [
     '.git',
     'node_modules',
     'vendor',
+    '.vscode',
     'storage/logs/*.log',
     'storage/cache/*',
     'storage/sessions/*',
     '*.zip',
     '*.sql.backup',
-    'confiprrod.php', // No subir, solo mantener en local
+    'confiprrod.php',
     'config/config.development.php',
+    'config/env.production.php',
     'tests',
     '.DS_Store',
     'Thumbs.db',
 ]);
+
+$sql_obligatorios = [
+    'sql/migracion_produccion_2026.sql',
+    'sql/fix_cod_org_organizaciones_particulares.sql',
+];
+
+function debeExcluirRuta(string $ruta_relativa, string $nombre_archivo, array $excluir): bool
+{
+    $norm = str_replace('\\', '/', $ruta_relativa);
+    if ($norm === '.env' || str_ends_with($norm, '/.env')) {
+        return true;
+    }
+    foreach ($excluir as $patron) {
+        if ($patron === '' || str_starts_with($patron, '#')) {
+            continue;
+        }
+        if ($norm === $patron || $nombre_archivo === $patron) {
+            return true;
+        }
+        if (str_contains($norm, $patron)) {
+            return true;
+        }
+        if (function_exists('fnmatch') && (fnmatch($patron, $norm) || fnmatch($patron, $nombre_archivo))) {
+            return true;
+        }
+    }
+
+    return false;
+}
 
 // Crear ZIP
 if (class_exists('ZipArchive')) {
@@ -54,20 +85,7 @@ if (class_exists('ZipArchive')) {
             $ruta_completa = $dir . '/' . $file;
             $ruta_relativa = ltrim(str_replace($base_dir . '/', '', $ruta_completa), '/');
             
-            // Verificar si debe excluirse
-            $excluir_archivo = false;
-            foreach ($excluir as $patron) {
-                // Patrón simple (sin regex por ahora)
-                if (strpos($ruta_relativa, $patron) !== false || 
-                    strpos($file, $patron) !== false ||
-                    fnmatch($patron, $ruta_relativa) ||
-                    fnmatch($patron, $file)) {
-                    $excluir_archivo = true;
-                    break;
-                }
-            }
-            
-            if ($excluir_archivo) {
+            if (debeExcluirRuta($ruta_relativa, $file, $excluir)) {
                 continue;
             }
             
@@ -92,11 +110,14 @@ if (class_exists('ZipArchive')) {
     // Agregar todos los archivos
     $total = agregarArchivos($base_dir, $zip, $base_dir, $excluir);
     
-    // Agregar script de migración SQL
-    $sql_file = $base_dir . '/sql/migracion_produccion_2026.sql';
-    if (file_exists($sql_file)) {
-        $zip->addFile($sql_file, 'sql/migracion_produccion_2026.sql');
-        echo "  ✓ Script de migración SQL incluido\n";
+    foreach ($sql_obligatorios as $sql_rel) {
+        $sql_file = $base_dir . '/' . $sql_rel;
+        if (is_file($sql_file)) {
+            $zip->addFile($sql_file, $sql_rel);
+            echo "  ✓ SQL incluido: {$sql_rel}\n";
+        } else {
+            echo "  ⚠ SQL no encontrado: {$sql_rel}\n";
+        }
     }
     
     // Agregar documentación de despliegue
