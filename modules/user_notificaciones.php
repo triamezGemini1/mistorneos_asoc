@@ -108,9 +108,56 @@ $profile_url = AppHelpers::url('index.php', ['page' => 'users/profile']);
                         $esNuevaRonda = $datos && isset($datos['tipo']) && $datos['tipo'] === 'nueva_ronda';
                         $esResultadosMesa = $datos && isset($datos['tipo']) && $datos['tipo'] === 'resultados_mesa';
                         $esInvitacionFormal = $datos && isset($datos['tipo']) && $datos['tipo'] === 'invitacion_torneo_formal';
+                        $esInscripcionTorneo = $datos && isset($datos['tipo']) && $datos['tipo'] === 'inscripcion_torneo_confirmada';
+                        $esPagoValidado = $datos && isset($datos['tipo']) && $datos['tipo'] === 'inscripcion_pago_validado';
                     ?>
                         <li class="list-group-item">
-                            <?php if ($esResultadosMesa): ?>
+                            <?php if ($esInscripcionTorneo): ?>
+                                <div class="notif-list-invitacion-formal">
+                                    <div class="notif-list-invitacion-org text-center fw-bold text-success">✅ Inscripción exitosa</div>
+                                    <div class="notif-list-invitacion-saludo text-center">Hola <?= htmlspecialchars($datos['nombre'] ?? '') ?></div>
+                                    <div class="notif-list-invitacion-torneo text-center fw-bold"><?= htmlspecialchars($datos['torneo'] ?? '') ?></div>
+                                    <div class="notif-list-invitacion-lugar text-center">
+                                        <?= htmlspecialchars($datos['lugar_torneo'] ?? '') ?>
+                                        <?php if (!empty($datos['fecha_torneo'])): ?> · <?= htmlspecialchars($datos['fecha_torneo']) ?><?php endif; ?>
+                                    </div>
+                                    <?php if (!empty($datos['asociacion'])): ?>
+                                        <div class="notif-list-invitacion-lugar text-center">Asociación: <?= htmlspecialchars($datos['asociacion']) ?></div>
+                                    <?php endif; ?>
+                                    <?php if (!empty($datos['costo'])): ?>
+                                        <div class="notif-list-invitacion-lugar text-center fw-bold">Costo: $<?= htmlspecialchars($datos['costo']) ?></div>
+                                    <?php endif; ?>
+                                    <div class="mt-2 text-center">
+                                        <?php
+                                        $urlPago = isset($datos['url_pago']) ? trim($datos['url_pago']) : ($n['url_destino'] ?? '#');
+                                        $base = rtrim(AppHelpers::getBaseUrl(), '/');
+                                        $uPago = ltrim($urlPago, '/');
+                                        $hrefPago = ($urlPago !== '' && $urlPago !== '#') ? (strpos($urlPago, 'http') === 0 ? $urlPago : $base . (strpos($uPago, 'public/') === 0 ? '/' : '/public/') . $uPago) : '';
+                                        if ($hrefPago !== ''): ?>
+                                            <a href="<?= htmlspecialchars($hrefPago) ?>" class="btn btn-sm btn-primary"><i class="fas fa-credit-card me-1"></i>Reportar pago</a>
+                                        <?php endif; ?>
+                                    </div>
+                                    <small class="text-muted d-block mt-2 text-center"><?= date('d/m/Y H:i', strtotime($n['fecha_creacion'])) ?></small>
+                                </div>
+                            <?php elseif ($esPagoValidado): ?>
+                                <div class="notif-list-invitacion-formal">
+                                    <div class="notif-list-invitacion-org text-center fw-bold text-success">✅ Pago validado</div>
+                                    <div class="notif-list-invitacion-saludo text-center">Hola <?= htmlspecialchars($datos['nombre'] ?? '') ?></div>
+                                    <div class="notif-list-invitacion-torneo text-center fw-bold"><?= htmlspecialchars($datos['torneo'] ?? '') ?></div>
+                                    <div class="notif-list-invitacion-lugar text-center">
+                                        <?= htmlspecialchars($datos['lugar_torneo'] ?? '') ?>
+                                        <?php if (!empty($datos['fecha_torneo'])): ?> · <?= htmlspecialchars($datos['fecha_torneo']) ?><?php endif; ?>
+                                    </div>
+                                    <?php if (!empty($datos['asociacion'])): ?>
+                                        <div class="notif-list-invitacion-lugar text-center">Asociación: <?= htmlspecialchars($datos['asociacion']) ?></div>
+                                    <?php endif; ?>
+                                    <?php if (!empty($datos['monto'])): ?>
+                                        <div class="notif-list-invitacion-lugar text-center fw-bold text-success">Monto: $<?= htmlspecialchars($datos['monto']) ?></div>
+                                    <?php endif; ?>
+                                    <p class="text-center small mb-0 mt-2">Su inscripción quedó <strong>confirmada</strong>.</p>
+                                    <small class="text-muted d-block mt-2 text-center"><?= date('d/m/Y H:i', strtotime($n['fecha_creacion'])) ?></small>
+                                </div>
+                            <?php elseif ($esResultadosMesa): ?>
                                 <div class="notif-list-nueva-ronda">
                                     <div class="notif-list-ronda text-center fw-bold text-primary">RESULTADOS RONDA <?= htmlspecialchars($datos['ronda'] ?? '—') ?> · MESA <?= htmlspecialchars($datos['mesa'] ?? '—') ?></div>
                                     <div class="notif-list-atleta text-center">Atleta: <?= (int)($datos['usuario_id'] ?? 0) ?> <?= htmlspecialchars($datos['nombre'] ?? '') ?></div>

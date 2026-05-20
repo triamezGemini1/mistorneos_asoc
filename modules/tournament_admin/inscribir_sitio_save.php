@@ -20,8 +20,8 @@ $id_usuario = (int)($_POST['id_usuario'] ?? 0);
 $cedula = trim($_POST['cedula'] ?? '');
 $id_club = !empty($_POST['id_club']) ? (int)$_POST['id_club'] : null;
 
-// Inscripción en sitio: siempre confirmado (no pendiente)
-$estatus = 1; // confirmado
+// Inscripción en sitio: pendiente de pago hasta validar en listado
+$estatus = InscritosHelper::ESTATUS_PENDIENTE_NUM;
 
 $inscrito_por = Auth::user()['id'];
 $current_user = Auth::user();
@@ -103,20 +103,15 @@ try {
         exit;
     }
     
-    // Si no se especificó club: inscripción en sitio asume el club de la organización (club_responsable del torneo)
-    if (!$id_club) {
-        $stmt = $pdo->prepare("SELECT club_responsable FROM tournaments WHERE id = ? LIMIT 1");
-        $stmt->execute([$torneo_id]);
-        $club_org = $stmt->fetchColumn();
-        if (!empty($club_org) && (int)$club_org > 0) {
-            $id_club = (int)$club_org;
-        } else {
-            $stmt = $pdo->prepare("SELECT club_id FROM usuarios WHERE id = ?");
-            $stmt->execute([$id_usuario]);
-            $usuario_club = $stmt->fetchColumn();
-            $id_club = $usuario_club ?: $user_club_id;
-        }
-    }
+    require_once __DIR__ . '/../../lib/AsociacionAdminHelper.php';
+    $id_club = AsociacionAdminHelper::resolverIdClubInscripcion(
+        $pdo,
+        $id_usuario,
+        (int) $inscrito_por,
+        null,
+        $id_club,
+        $user_club_id !== null ? (int) $user_club_id : null
+    );
     
     // Insertar inscripción usando función centralizada
     $id_inscrito = InscritosHelper::insertarInscrito($pdo, [

@@ -7,6 +7,7 @@
 declare(strict_types=1);
 
 require_once __DIR__ . '/db_local.php';
+require_once __DIR__ . '/../../lib/FvdConfig.php';
 
 function uuidV4(): string
 {
@@ -18,13 +19,12 @@ function uuidV4(): string
 
 // Cargar maestros desde SQLite
 $entidades = [];
-$organizaciones = [];
 $clubes = [];
 $context = [];
+$fvd_org_id = class_exists('FvdConfig') ? FvdConfig::organizacionId() : 1;
 try {
     $pdo = DB_Local::pdo();
     $entidades = $pdo->query("SELECT codigo, nombre FROM entidad ORDER BY nombre")->fetchAll(PDO::FETCH_ASSOC);
-    $organizaciones = $pdo->query("SELECT id, nombre, entidad FROM organizaciones ORDER BY nombre")->fetchAll(PDO::FETCH_ASSOC);
     $clubes = $pdo->query("SELECT id, nombre, organizacion_id, entidad FROM clubes ORDER BY nombre")->fetchAll(PDO::FETCH_ASSOC);
 } catch (Throwable $e) {
     // tablas pueden no existir aún
@@ -80,7 +80,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
 $default_entidad = (int)($_POST['entidad'] ?? $context['entidad_id'] ?? 0);
 $default_club = (int)($_POST['club_id'] ?? $context['club_id'] ?? 0);
-$default_org = (int)($_POST['organizacion_id'] ?? $context['organizacion_id'] ?? 0);
+$default_org = $fvd_org_id;
 ?>
 <!DOCTYPE html>
 <html lang="es">
@@ -163,15 +163,7 @@ $default_org = (int)($_POST['organizacion_id'] ?? $context['organizacion_id'] ??
                                     <?php endforeach; ?>
                                 </select>
                             </div>
-                            <div class="mb-3">
-                                <label class="form-label">Organización</label>
-                                <select name="organizacion_id" id="selOrganizacion" class="form-select">
-                                    <option value="">-- Seleccione organización --</option>
-                                    <?php foreach ($organizaciones as $o): ?>
-                                        <option value="<?= (int)$o['id'] ?>" data-entidad="<?= (int)$o['entidad'] ?>" <?= (int)$o['id'] === $default_org ? 'selected' : '' ?>><?= htmlspecialchars($o['nombre']) ?></option>
-                                    <?php endforeach; ?>
-                                </select>
-                            </div>
+                            <input type="hidden" name="organizacion_id" value="<?= (int)$fvd_org_id ?>">
                             <div class="mb-3">
                                 <label class="form-label">Club *</label>
                                 <select name="club_id" id="selClub" class="form-select">
@@ -194,45 +186,22 @@ $default_org = (int)($_POST['organizacion_id'] ?? $context['organizacion_id'] ??
     <script>
     (function () {
         var selEntidad = document.getElementById('selEntidad');
-        var selOrganizacion = document.getElementById('selOrganizacion');
         var selClub = document.getElementById('selClub');
 
-        function filterByEntidad(select, dataAttr) {
+        function filterClubesByEntidad() {
             var entidad = parseInt(selEntidad.value, 10) || 0;
-            var opts = select.querySelectorAll('option');
-            opts.forEach(function (opt) {
-                if (opt.value === '' || opt.value === '0') {
-                    opt.style.display = '';
-                    return;
-                }
-                var e = parseInt(opt.getAttribute(dataAttr), 10) || 0;
-                opt.style.display = (entidad === 0 || e === entidad) ? '' : 'none';
-            });
-        }
-        function filterClubesByOrg() {
-            var org = parseInt(selOrganizacion.value, 10) || 0;
             var opts = selClub.querySelectorAll('option');
             opts.forEach(function (opt) {
                 if (opt.value === '' || opt.value === '0') {
                     opt.style.display = '';
                     return;
                 }
-                var o = parseInt(opt.getAttribute('data-organizacion'), 10) || 0;
-                opt.style.display = (org === 0 || o === org) ? '' : 'none';
+                var e = parseInt(opt.getAttribute('data-entidad'), 10) || 0;
+                opt.style.display = (entidad === 0 || e === entidad) ? '' : 'none';
             });
         }
-        selEntidad.addEventListener('change', function () {
-            filterByEntidad(selOrganizacion, 'data-entidad');
-            filterByEntidad(selClub, 'data-entidad');
-            filterClubesByOrg();
-        });
-        selOrganizacion.addEventListener('change', function () {
-            filterByEntidad(selClub, 'data-entidad');
-            filterClubesByOrg();
-        });
-        filterByEntidad(selOrganizacion, 'data-entidad');
-        filterByEntidad(selClub, 'data-entidad');
-        filterClubesByOrg();
+        selEntidad.addEventListener('change', filterClubesByEntidad);
+        filterClubesByEntidad();
     })();
     </script>
 </body>

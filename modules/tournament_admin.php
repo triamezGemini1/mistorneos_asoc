@@ -29,6 +29,19 @@ if (!Auth::canAccessTournament($torneo_id)) {
     exit;
 }
 
+if (Auth::isOperativoSoloAsociacion()) {
+    require_once __DIR__ . '/../lib/AsociacionAdminHelper.php';
+    require_once __DIR__ . '/../lib/app_helpers.php';
+    $accionTa = trim((string) ($_GET['action'] ?? ''));
+    if (!AsociacionAdminHelper::accionTournamentAdminPermitida($accionTa)) {
+        header('Location: ' . AppHelpers::dashboard('asociacion_panel', [
+            'torneo_id' => $torneo_id,
+            'error' => 'Solo puede emitir carnets / credenciales desde el panel de asociación.',
+        ]));
+        exit;
+    }
+}
+
 // API JSON: enlace QR corto para jugador (POST + CSRF; solo staff del torneo)
 $early_api_action = $_GET['action'] ?? '';
 if ($early_api_action === 'api_torneo_jugador_qr_token' && ($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
@@ -429,7 +442,9 @@ if (in_array($menu_action, $acciones_solo_reporte, true)) {
                         $mostrar_retorno_layout = !in_array($menu_action, $acciones_impresion, true);
                         if ($mostrar_retorno_layout):
                             $base_retorno = function_exists('app_base_url') ? rtrim(app_base_url(), '/') . '/public' : '';
-                            $url_retorno = ($base_retorno !== '' ? $base_retorno . '/' : '') . 'index.php?page=torneo_gestion&action=panel&torneo_id=' . (int)$torneo_id;
+                            $url_retorno = class_exists('AppHelpers')
+                                ? AppHelpers::urlPanelTorneoReturn((int) $torneo_id)
+                                : (($base_retorno !== '' ? $base_retorno . '/' : '') . 'index.php?page=torneo_gestion&action=panel&torneo_id=' . (int) $torneo_id);
                         ?>
                         <a href="<?= htmlspecialchars($url_retorno) ?>" class="btn btn-light btn-lg">
                             <i class="fas fa-arrow-left me-2"></i>Volver al panel

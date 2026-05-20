@@ -73,7 +73,7 @@ if (class_exists('AppHelpers') && !empty($_GET['page'])) {
       </form>
     </li>
     <?php endif; ?>
-    <?php if (($user['role'] ?? '') === 'admin_club'): ?>
+    <?php if (in_array(($user['role'] ?? ''), ['admin_club', 'admin_general', 'admin_torneo'], true)): ?>
     <li><a class="dropdown-item" href="<?= htmlspecialchars($url_mi_organizacion) ?>"><i class="fas fa-building me-2"></i>Mi organización</a></li>
     <?php endif; ?>
     <li><a class="dropdown-item" href="<?= htmlspecialchars($url_profile) ?>"><i class="fas fa-id-card me-2"></i>Mi Perfil</a></li>

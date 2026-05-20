@@ -1,7 +1,7 @@
 <?php
 /**
  * Configuración de Producción
- * laestaciondeldominohoy.com - public_html/mistorneos/
+ * laestaciondeldominohoy.com - public_html/mistorneos_fvd/
  * BD principal: laestaci1_mistorneos
  * BD auxiliar: laestaci1_fvdadmin (tabla dbo.persona)
  */
@@ -50,12 +50,12 @@ return [
     ],
 
     'app' => [
-        'base_url' => $envValue('APP_URL', 'https://laestaciondeldominohoy.com/mistorneos/'),
+        'base_url' => $envValue('APP_URL', 'https://laestaciondeldominohoy.com/mistorneos_fvd/'),
         'debug' => false,
         'environment' => 'production',
     ],
 
     'whatsapp' => [
-        'base_url' => 'https://laestaciondeldominohoy.com/mistorneos',
+        'base_url' => 'https://laestaciondeldominohoy.com/mistorneos_fvd',
     ],
 ];

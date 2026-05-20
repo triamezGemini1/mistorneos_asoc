@@ -5,10 +5,14 @@
 $script_actual = basename($_SERVER['PHP_SELF'] ?? '');
 $use_standalone = in_array($script_actual, ['admin_torneo.php', 'panel_torneo.php']);
 $base_url = $use_standalone ? $script_actual : 'index.php?page=torneo_gestion';
-$url_panel = $base_url . ($use_standalone ? '?' : '&') . 'action=panel&torneo_id=' . (int)($torneo['id'] ?? 0);
+$tid_panel = (int) ($torneo['id'] ?? 0);
+$url_panel = class_exists('AppHelpers')
+    ? AppHelpers::urlPanelTorneoReturn($tid_panel)
+    : ($base_url . ($use_standalone ? '?' : '&') . 'action=panel&torneo_id=' . $tid_panel);
 $total_inscritos = isset($total_inscritos) ? (int)$total_inscritos : 0;
 $confirmados = isset($confirmados) ? (int)$confirmados : 0;
 $contadores_inscripcion = isset($contadores_inscripcion) && is_array($contadores_inscripcion) ? $contadores_inscripcion : ['inscritos_total' => $total_inscritos, 'jugadores_confirmados' => $confirmados, 'equipos_activos' => 0];
+$torneo_costo = (float) ($torneo['costo'] ?? 0);
 $hombres = isset($hombres) ? (int)$hombres : 0;
 $mujeres = isset($mujeres) ? (int)$mujeres : 0;
 $resumen_clubes = $resumen_clubes ?? [];
@@ -63,7 +67,7 @@ $puede_confirmar_retirar = isset($puede_confirmar_retirar) ? $puede_confirmar_re
     </div>
     <div class="col-6 col-md-3">
         <div class="stat-card" style="background: linear-gradient(135deg, #10b981 0%, #059669 100%); color: white;">
-            <div class="stat-label" style="opacity: 0.9;">Confirmados</div>
+            <div class="stat-label" style="opacity: 0.9;">Pagados</div>
             <div class="stat-value" style="font-size: 2.5rem;"><?php echo $confirmados ?? 0; ?></div>
         </div>
     </div>
@@ -186,6 +190,9 @@ $puede_confirmar_retirar = isset($puede_confirmar_retirar) ? $puede_confirmar_re
                             <th style="border: none; padding: 12px; font-weight: 600;">Club</th>
                             <th style="border: none; padding: 12px; font-weight: 600; text-align: center;">Género</th>
                             <th style="border: none; padding: 12px; font-weight: 600; text-align: center;">Estado</th>
+                            <?php if ($torneo_costo > 0): ?>
+                            <th style="border: none; padding: 12px; font-weight: 600; text-align: center;">Pago</th>
+                            <?php endif; ?>
                             <th style="border: none; padding: 12px; font-weight: 600; text-align: center;">Acciones</th>
                         </tr>
                     </thead>
@@ -200,15 +207,16 @@ $puede_confirmar_retirar = isset($puede_confirmar_retirar) ? $puede_confirmar_re
                                 $club_actual = $nuevo_club;
                         ?>
                         <tr style="background: rgba(99, 102, 241, 0.05);">
-                            <td colspan="7" style="border: none; padding: 8px 12px; font-weight: 600; color: #6366f1;">
+                            <td colspan="<?= $torneo_costo > 0 ? 8 : 7 ?>" style="border: none; padding: 8px 12px; font-weight: 600; color: #6366f1;">
                                 <i class="fas fa-building me-2"></i><?php echo htmlspecialchars($club_actual); ?>
                             </td>
                         </tr>
                         <?php endif;
                             $estatus = $inscrito['estatus'] ?? 0;
                             $estatus_num = is_numeric($estatus) ? (int)$estatus : (InscritosHelper::ESTATUS_REVERSE_MAP[$estatus] ?? 0);
-                            $es_confirmado = ($estatus_num === 1 || $estatus === 'confirmado' || $estatus === 'solvente');
-                            $es_retirado = ($estatus_num === 4 || $estatus === 'retirado');
+                            $es_retirado = InscritosHelper::esRetirado($estatus);
+                            $es_pagado = InscritosHelper::esConfirmado($estatus);
+                            $es_pendiente = !$es_retirado && !$es_pagado;
                         ?>
                         <tr style="transition: background 0.2s;">
                             <td style="border: none; padding: 12px;"><?php echo $contador++; ?></td>
@@ -235,38 +243,61 @@ $puede_confirmar_retirar = isset($puede_confirmar_retirar) ? $puede_confirmar_re
                             </td>
                             <td style="border: none; padding: 12px; text-align: center;">
                                 <?php 
-                                if ($es_confirmado) {
-                                    echo '<span class="badge bg-success">Confirmado</span>';
-                                } elseif ($es_retirado) {
+                                if ($es_retirado) {
                                     echo '<span class="badge bg-dark">Retirado</span>';
-                                } elseif ($estatus_num === 0 || $estatus === 'pendiente') {
-                                    echo '<span class="badge bg-warning">Pendiente</span>';
+                                } elseif ($es_pagado) {
+                                    echo '<span class="badge bg-success">Pagado</span>';
+                                } elseif ($es_pendiente) {
+                                    echo '<span class="badge bg-warning text-dark">Pendiente de pago</span>';
                                 } else {
-                                    echo '<span class="badge bg-secondary">' . htmlspecialchars($estatus) . '</span>';
+                                    echo '<span class="badge bg-secondary">' . htmlspecialchars((string) $estatus) . '</span>';
                                 }
                                 ?>
                             </td>
+                            <?php if ($torneo_costo > 0): ?>
+                            <td style="border: none; padding: 12px; text-align: center;">
+                                <?php if (!empty($puede_confirmar_retirar) && !$es_retirado): ?>
+                                <form method="post" action="" class="d-inline">
+                                    <input type="hidden" name="action" value="toggle_pago_inscrito">
+                                    <input type="hidden" name="torneo_id" value="<?php echo (int)($torneo['id'] ?? 0); ?>">
+                                    <input type="hidden" name="inscripcion_id" value="<?php echo (int)($inscrito['id'] ?? 0); ?>">
+                                    <input type="hidden" name="pagado" value="<?php echo $es_pagado ? '0' : '1'; ?>" class="input-pagado-val">
+                                    <input type="hidden" name="csrf_token" value="<?php echo htmlspecialchars($csrf ?? ''); ?>">
+                                    <div class="form-check form-switch d-inline-flex align-items-center justify-content-center mb-0">
+                                        <input type="checkbox" class="form-check-input" role="switch" <?php echo $es_pagado ? 'checked' : ''; ?>
+                                               onchange="var f=this.form;f.querySelector('.input-pagado-val').value=this.checked?'1':'0';f.submit();">
+                                        <label class="form-check-label small ms-1"><?php echo $es_pagado ? 'Pagado' : 'Pendiente'; ?></label>
+                                    </div>
+                                </form>
+                                <?php else: ?>
+                                <span class="text-muted">—</span>
+                                <?php endif; ?>
+                            </td>
+                            <?php endif; ?>
                             <td style="border: none; padding: 12px; text-align: center;">
                                 <?php if (!empty($puede_confirmar_retirar)): ?>
-                                <div class="btn-group btn-group-sm">
-                                    <?php if (!$es_confirmado): ?>
+                                <div class="btn-group btn-group-sm flex-wrap justify-content-center">
+                                    <?php if ($torneo_costo > 0 && $es_pendiente && !$es_retirado): ?>
                                     <form method="post" action="" class="d-inline">
-                                        <input type="hidden" name="action" value="cambiar_estatus_inscrito">
+                                        <input type="hidden" name="action" value="enviar_recordatorio_pago_inscrito">
                                         <input type="hidden" name="torneo_id" value="<?php echo (int)($torneo['id'] ?? 0); ?>">
                                         <input type="hidden" name="inscripcion_id" value="<?php echo (int)($inscrito['id'] ?? 0); ?>">
-                                        <input type="hidden" name="estatus" value="1">
                                         <input type="hidden" name="csrf_token" value="<?php echo htmlspecialchars($csrf ?? ''); ?>">
-                                        <button type="submit" class="btn btn-success btn-sm" title="Confirmar participación">Confirmar</button>
+                                        <button type="submit" class="btn btn-outline-primary btn-sm" title="WhatsApp + notificación al atleta">
+                                            <i class="fab fa-whatsapp"></i> Recordatorio
+                                        </button>
                                     </form>
                                     <?php endif; ?>
                                     <?php if (!$es_retirado): ?>
-                                    <form method="post" action="" class="d-inline">
+                                    <form method="post" action="" class="d-inline" onsubmit="return confirm('¿Retirar a este jugador del torneo?');">
                                         <input type="hidden" name="action" value="cambiar_estatus_inscrito">
                                         <input type="hidden" name="torneo_id" value="<?php echo (int)($torneo['id'] ?? 0); ?>">
                                         <input type="hidden" name="inscripcion_id" value="<?php echo (int)($inscrito['id'] ?? 0); ?>">
-                                        <input type="hidden" name="estatus" value="4">
+                                        <input type="hidden" name="estatus" value="<?php echo (int) InscritosHelper::ESTATUS_RETIRADO_NUM; ?>">
                                         <input type="hidden" name="csrf_token" value="<?php echo htmlspecialchars($csrf ?? ''); ?>">
-                                        <button type="submit" class="btn btn-outline-danger btn-sm" title="Retirar del evento">Retirar</button>
+                                        <button type="submit" class="btn btn-outline-danger btn-sm" title="Retirar del evento">
+                                            <i class="fas fa-user-minus"></i> Retirar
+                                        </button>
                                     </form>
                                     <?php endif; ?>
                                 </div>
@@ -347,4 +378,13 @@ $puede_confirmar_retirar = isset($puede_confirmar_retirar) ? $puede_confirmar_re
     text-decoration: underline;
 }
 </style>
+
+<?php if (!empty($_SESSION['whatsapp_redirect_inscripcion'])): ?>
+<script>
+(function () {
+    var url = <?php echo json_encode((string) $_SESSION['whatsapp_redirect_inscripcion'], JSON_HEX_TAG | JSON_HEX_AMP); ?>;
+    if (url) { window.open(url, '_blank', 'noopener'); }
+})();
+</script>
+<?php unset($_SESSION['whatsapp_redirect_inscripcion']); endif; ?>
 

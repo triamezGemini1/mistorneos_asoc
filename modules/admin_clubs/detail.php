@@ -67,7 +67,7 @@ try {
                 SUM(CASE WHEN u.sexo = 'F' OR UPPER(u.sexo) = 'F' THEN 1 ELSE 0 END) as mujeres,
                 $sql_torneos_sub as total_torneos
             FROM clubes c
-            LEFT JOIN usuarios u ON u.club_id = c.id AND u.role = 'usuario' AND u.status = 0
+            LEFT JOIN usuarios u ON u.entidad = c.id
             WHERE c.id IN ($placeholders)
             GROUP BY c.id, c.nombre, c.delegado, c.telefono, c.direccion, c.estatus
             ORDER BY c.nombre ASC
@@ -98,7 +98,7 @@ try {
         <div class="col-12">
             <div class="d-flex justify-content-between align-items-center mb-4">
                 <div>
-                    <a href="<?= $entidad_id ? 'index.php?page=entidades&action=detail&id=' . $entidad_id : 'index.php?page=home' ?>" 
+                    <a href="<?= $entidad_id ? 'index.php?page=clubs&action=list&amp;entidad_id=' . (int)$entidad_id . '#asociacion-' . (int)$entidad_id : 'index.php?page=home' ?>" 
                        class="btn btn-outline-secondary btn-sm mb-2">
                         <i class="fas fa-arrow-left me-1"></i>Volver
                     </a>

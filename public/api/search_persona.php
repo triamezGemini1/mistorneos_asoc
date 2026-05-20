@@ -17,6 +17,8 @@ header('Content-Type: application/json; charset=utf-8');
 try {
     require_once __DIR__ . '/../../config/bootstrap.php';
     require_once __DIR__ . '/../../config/db_config.php';
+    require_once __DIR__ . '/../../config/auth.php';
+    require_once __DIR__ . '/../../lib/AsociacionAdminHelper.php';
 } catch (Throwable $e) {
     error_log("search_persona.php init: " . $e->getMessage() . " en " . $e->getFile() . ":" . $e->getLine());
     http_response_code(500);
@@ -58,7 +60,18 @@ if ($qNombre === '' && $cedula === '' && $cedula_raw !== '') {
 try {
     $pdo = DB::pdo();
 
-    $emitirEncontradoUsuario = static function (array $persona, string $cRef): void {
+    $emitirEncontradoUsuario = static function (array $persona, string $cRef) use ($pdo): void {
+        $uid = (int) ($persona['id'] ?? 0);
+        if ($uid > 0 && !AsociacionAdminHelper::usuarioEnAmbitoAsociacion($pdo, $uid)) {
+            echo json_encode([
+                'accion' => 'error',
+                'status' => 'error',
+                'mensaje' => 'El atleta no pertenece a su asociación.',
+                'error' => 'fuera_ambito',
+                'encontrado' => false,
+            ]);
+            exit;
+        }
         $fechnac = $persona['fechnac'] ?? '';
         if ($fechnac && preg_match('/^\d{4}-\d{2}-\d{2}/', $fechnac) === false && strtotime($fechnac) !== false) {
             $fechnac = date('Y-m-d', strtotime($fechnac));
@@ -135,13 +148,15 @@ try {
             exit;
         }
         $like = '%' . addcslashes($qNombre, '%_\\') . '%';
+        [$sqlAmbito, $paramsAmbito] = AsociacionAdminHelper::filtroSqlUsuariosAsociacion($pdo, 'u');
         $stmtN = $pdo->prepare("
             SELECT id, username, nacionalidad, nombre, cedula, sexo, fechnac, celular, email, club_id
-            FROM usuarios
-            WHERE (nombre LIKE ? OR username LIKE ?)
+            FROM usuarios u
+            WHERE (u.nombre LIKE ? OR u.username LIKE ?)
+            {$sqlAmbito}
             LIMIT 2
         ");
-        $stmtN->execute([$like, $like]);
+        $stmtN->execute(array_merge([$like, $like], $paramsAmbito));
         $rows = $stmtN->fetchAll(PDO::FETCH_ASSOC);
         if (count($rows) === 1) {
             error_log('search_persona.php - BLOQUE NOMBRE: ENCONTRADO (' . ($rows[0]['nombre'] ?? '') . ')');

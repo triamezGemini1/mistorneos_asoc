@@ -102,7 +102,7 @@ try {
     $mensaje .= "🌐 *ACCESO AL SISTEMA*\n";
     $mensaje .= "━━━━━━━━━━━━━━━━━━\n\n";
     $mensaje .= "Usuario: *" . $admin['username'] . "*\n";
-    $app_url = $_ENV['APP_URL'] ?? 'http://localhost/mistorneos';
+    $app_url = $_ENV['APP_URL'] ?? 'http://localhost/mistorneos_fvd';
     $mensaje .= "URL: " . $app_url . "/public/login.php\n\n";
     $mensaje .= "━━━━━━━━━━━━━━━━━━\n\n";
     $mensaje .= "💡 *RECORDATORIO*\n";

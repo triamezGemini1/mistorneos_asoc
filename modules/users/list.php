@@ -204,7 +204,6 @@ if (!empty($stats) && !isset($stats['error'])):
 <?php
 $is_admin_list = $users_result && isset($users_result['is_admin_list']) && $users_result['is_admin_list'];
 $is_club_list = $users_result && isset($users_result['is_club_list']) && $users_result['is_club_list'];
-$is_club_by_entidad = $users_result && isset($users_result['is_club_by_entidad']) && $users_result['is_club_by_entidad'];
 $is_admin_general = Auth::isAdminGeneral();
 $is_admin_club = $current_user['role'] === 'admin_club';
 ?>
@@ -402,110 +401,6 @@ $is_admin_club = $current_user['role'] === 'admin_club';
         </div>
     </div>
     <?php endif; ?>
-<?php elseif ($is_admin_general && $is_club_by_entidad && !$admin_id): 
-    $clubes_by_entidad_admin = $users_result['clubes_by_entidad_admin'] ?? [];
-    // Cargar mapa de entidades si no existe
-    if (empty($entidad_map) && !empty($entidades_options)) {
-        foreach ($entidades_options as $ent) {
-            $codigo = $ent['codigo'] ?? null;
-            if ($codigo !== null) {
-                $entidad_map[(string)$codigo] = $ent['nombre'] ?? $codigo;
-            }
-        }
-    }
-?>
-    <!-- Vista: Clubes por Entidad, agrupados por Admin Organización - Seleccionar club para ver afiliados -->
-    <div class="container-fluid">
-        <div class="card border-0 shadow-sm mb-4">
-            <div class="card-header bg-primary text-white">
-                <h5 class="card-title mb-0">
-                    <i class="fas fa-building me-2"></i>Clubes por Entidad
-                </h5>
-                <p class="mb-0 mt-1 small opacity-90">Seleccione un club para ver sus afiliados</p>
-            </div>
-            <div class="card-body p-0">
-                <?php if (empty($clubes_by_entidad_admin)): ?>
-                    <div class="text-center py-5">
-                        <i class="fas fa-building fa-3x text-muted mb-3"></i>
-                        <p class="text-muted">No hay clubes registrados</p>
-                    </div>
-                <?php else: ?>
-                    <?php 
-                    // Ordenar entidades por nombre
-                    uksort($clubes_by_entidad_admin, function($a, $b) use ($entidad_map) {
-                        $nombre_a = $entidad_map[(string)$a] ?? ($a > 0 ? "Entidad {$a}" : 'Sin Entidad');
-                        $nombre_b = $entidad_map[(string)$b] ?? ($b > 0 ? "Entidad {$b}" : 'Sin Entidad');
-                        return strcmp($nombre_a, $nombre_b);
-                    });
-                    
-                    foreach ($clubes_by_entidad_admin as $entidad_id => $admins_data): 
-                        $entidad_nombre = $entidad_map[(string)$entidad_id] ?? ($entidad_id > 0 ? "Entidad {$entidad_id}" : 'Sin Entidad');
-                        $total_clubes_entidad = 0;
-                        foreach ($admins_data as $ad) {
-                            $total_clubes_entidad += count($ad['clubes'] ?? []);
-                        }
-                    ?>
-                        <!-- Separador de Entidad -->
-                        <div class="bg-primary text-white px-4 py-3 border-bottom">
-                            <div class="d-flex justify-content-between align-items-center">
-                                <div>
-                                    <h6 class="mb-0">
-                                        <i class="fas fa-map-marked-alt me-2"></i><?= htmlspecialchars($entidad_nombre) ?>
-                                        <?php if ($entidad_id > 0): ?>
-                                            <small class="opacity-75">(Código: <?= $entidad_id ?>)</small>
-                                        <?php endif; ?>
-                                    </h6>
-                                </div>
-                                <div>
-                                    <span><i class="fas fa-building me-1"></i><?= number_format($total_clubes_entidad) ?> Clubes</span>
-                                </div>
-                            </div>
-                        </div>
-                        
-                        <!-- Por cada Admin Organización -->
-                        <?php foreach ($admins_data as $admin_data): ?>
-                            <div class="border-bottom p-3 bg-light">
-                                <div class="d-flex align-items-center mb-2">
-                                    <i class="fas fa-user-shield text-primary me-2"></i>
-                                    <strong><?= htmlspecialchars($admin_data['admin_nombre'] ?? 'Admin') ?></strong>
-                                </div>
-                                <div class="row g-3">
-                                    <?php foreach (($admin_data['clubes'] ?? []) as $club): ?>
-                                        <div class="col-md-6 col-lg-4">
-                                            <div class="card h-100 border-info hover-shadow" style="transition: all 0.3s; cursor: pointer;" 
-                                                 onclick="window.location.href='<?= htmlspecialchars(AppHelpers::dashboard('users', ['club_id' => $club['id']])) ?>'">
-                                                <div class="card-body">
-                                                    <div class="d-flex align-items-center mb-2">
-                                                        <div class="bg-info text-white rounded-circle d-flex align-items-center justify-content-center me-2" 
-                                                             style="width: 40px; height: 40px; font-size: 1rem;">
-                                                            <i class="fas fa-building"></i>
-                                                        </div>
-                                                        <div>
-                                                            <h6 class="mb-0"><?= htmlspecialchars($club['nombre']) ?></h6>
-                                                            <?php if (!empty($club['delegado'])): ?>
-                                                                <small class="text-muted"><?= htmlspecialchars($club['delegado']) ?></small>
-                                                            <?php endif; ?>
-                                                        </div>
-                                                    </div>
-                                                    <div class="text-center">
-                                                        <strong class="text-info"><?= (int)($club['total_usuarios'] ?? 0) ?></strong>
-                                                        <br><small class="text-muted">Afiliados</small>
-                                                    </div>
-                                                </div>
-                                                <div class="card-footer bg-light text-center py-1">
-                                                    <small class="text-info"><i class="fas fa-arrow-right"></i> Ver afiliados</small>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    <?php endforeach; ?>
-                                </div>
-                            </div>
-                        <?php endforeach; ?>
-                    <?php endforeach; ?>
-                <?php endif; ?>
-            </div>
-        </div>
-    </div>
 <?php elseif ($is_admin_club && !$club_id): ?>
     <!-- Vista de Clubes para admin_club -->
     <div class="card">
@@ -1397,7 +1292,7 @@ $is_admin_club = $current_user['role'] === 'admin_club';
 function getBaseUrlForApi() {
     let baseUrl = window.location.pathname;
     if (baseUrl.includes('/public/')) baseUrl = baseUrl.split('/public/')[0];
-    else if (baseUrl.includes('/mistorneos/')) baseUrl = '/mistorneos';
+    else if (baseUrl.includes('/mistorneos_fvd/')) baseUrl = '/mistorneos_fvd';
     else {
         const pathParts = baseUrl.split('/').filter(p => p);
         if (pathParts.length > 0) baseUrl = '/' + pathParts[0];

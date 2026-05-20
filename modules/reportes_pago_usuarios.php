@@ -50,26 +50,30 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             
             if ($reporte_data) {
                 if ($accion === 'confirmar') {
-                    $stmt = $pdo->prepare("
-                        UPDATE reportes_pago_usuarios 
-                        SET estatus = 'confirmado', updated_at = NOW() 
-                        WHERE id = ?
-                    ");
-                    $stmt->execute([$reporte_id_post]);
-                    // Marcar al inscrito en el torneo como confirmado (pago verificado)
-                    $id_usuario = (int)($reporte_data['id_usuario'] ?? 0);
-                    $torneo_id = (int)($reporte_data['torneo_id'] ?? 0);
-                    if ($id_usuario > 0 && $torneo_id > 0) {
-                        try {
-                            require_once __DIR__ . '/../lib/InscritosHelper.php';
-                            // Columna inscritos.estatus es INT en producción: 1 = confirmado, 4 = retirado
-                            $upd = $pdo->prepare("UPDATE inscritos SET estatus = ? WHERE id_usuario = ? AND torneo_id = ? AND estatus != ?");
-                            $upd->execute([InscritosHelper::ESTATUS_CONFIRMADO_NUM, $id_usuario, $torneo_id, InscritosHelper::ESTATUS_RETIRADO_NUM]);
-                        } catch (Exception $e) {
-                            error_log("Reportes pago: error al actualizar inscrito a confirmado: " . $e->getMessage());
-                        }
+                    $id_usuario = (int) ($reporte_data['id_usuario'] ?? 0);
+                    $torneo_id = (int) ($reporte_data['torneo_id'] ?? 0);
+                    $inscrito_id = (int) ($reporte_data['inscrito_id'] ?? 0);
+                    require_once __DIR__ . '/../lib/InscripcionPagoService.php';
+                    if ($inscrito_id <= 0 && $id_usuario > 0 && $torneo_id > 0) {
+                        $stI = $pdo->prepare('SELECT id FROM inscritos WHERE id_usuario = ? AND torneo_id = ? LIMIT 1');
+                        $stI->execute([$id_usuario, $torneo_id]);
+                        $inscrito_id = (int) ($stI->fetchColumn() ?: 0);
                     }
-                    $success = 'Reporte de pago confirmado exitosamente';
+                    if ($inscrito_id > 0 && $torneo_id > 0) {
+                        $resVal = InscripcionPagoService::validarPagoInscripcion($pdo, $inscrito_id, $torneo_id);
+                        $success = $resVal['ok'] ? $resVal['message'] : $resVal['message'];
+                        if (!$resVal['ok']) {
+                            $error = $resVal['message'];
+                        }
+                    } else {
+                        $stmt = $pdo->prepare("
+                            UPDATE reportes_pago_usuarios 
+                            SET estatus = 'confirmado', updated_at = NOW() 
+                            WHERE id = ?
+                        ");
+                        $stmt->execute([$reporte_id_post]);
+                        $success = 'Reporte de pago confirmado exitosamente';
+                    }
                 } elseif ($accion === 'rechazar') {
                     $stmt = $pdo->prepare("
                         UPDATE reportes_pago_usuarios 

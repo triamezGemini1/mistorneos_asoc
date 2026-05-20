@@ -6,6 +6,8 @@
  */
 declare(strict_types=1);
 
+require_once __DIR__ . '/../../config/bootstrap.php';
+
 header('Content-Type: application/json; charset=utf-8');
 
 $file = __DIR__ . '/session_context.json';
@@ -35,6 +37,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     ];
 }
 
+$data['organizacion_id'] = FvdConfig::ORGANIZACION_ID;
+$data['organizacion_nombre'] = FvdConfig::getOrganizacionNombre();
 $data['updated_at'] = date('c');
 
 // Invalidar referencias club_id legadas tras remapeo (IDs anteriores al corte).

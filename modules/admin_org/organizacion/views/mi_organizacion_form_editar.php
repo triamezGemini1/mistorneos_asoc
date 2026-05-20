@@ -62,7 +62,7 @@
                 <h5 class="mb-0"><i class="fas fa-chart-bar me-2"></i>Estadísticas</h5>
             </div>
             <div class="card-body">
-                <p class="text-muted small mb-3">Resumen global según la entidad de la organización y el vínculo canónico (cod_org / club_responsable y clubes asociados).</p>
+                <p class="text-muted small mb-3">Resumen nacional o por territorio según la federación; la FVD usa alcance efectivo país completo sin filtrar por estado en los totales.</p>
                 <div class="row g-3">
                     <div class="col-6 col-lg-4">
                         <div class="card bg-primary text-white text-center">
@@ -118,6 +118,44 @@
     </div>
 </div>
 
+<?php
+$fvdEs = class_exists('FvdConfig') && FvdConfig::organizacionEsAmbitoNacional($organizacion);
+$canEdit = !empty($can_edit_mi_organizacion);
+$urlHome = class_exists('AppHelpers') ? AppHelpers::dashboard('home') : 'index.php?page=home';
+?>
+
+<?php if ($fvdEs): ?>
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="card shadow-sm border-info">
+            <div class="card-header bg-info bg-opacity-10">
+                <h5 class="mb-0"><i class="fas fa-flag me-2"></i>Ámbito territorial (Federación)</h5>
+            </div>
+            <div class="card-body">
+                <p class="text-muted small mb-3">La FVD es de <strong>ámbito nacional</strong>. Puede ajustar la etiqueta mostrada en el registro territorial; los reportes siguen considerando todo el país.</p>
+                <?php if ($canEdit): ?>
+                <form method="POST" class="row g-3 align-items-end">
+                    <input type="hidden" name="action" value="actualizar_entidad_ambito">
+                    <input type="hidden" name="organizacion_id" value="<?= (int) $organizacion['id'] ?>">
+                    <div class="col-md-8">
+                        <label class="form-label">Nombre del ámbito</label>
+                        <input type="text" name="entidad_ambito_nombre" class="form-control" maxlength="60" value="<?= htmlspecialchars(trim((string) ($organizacion['entidad_nombre'] ?? 'Nacional'))) ?>" required>
+                    </div>
+                    <div class="col-md-4">
+                        <button type="submit" class="btn btn-info text-white w-100">
+                            <i class="fas fa-save me-1"></i>Guardar etiqueta
+                        </button>
+                    </div>
+                </form>
+                <?php else: ?>
+                <p class="mb-0"><i class="fas fa-map-marker-alt me-1"></i><strong><?= htmlspecialchars(trim((string) ($organizacion['entidad_nombre'] ?? 'Nacional'))) ?></strong></p>
+                <?php endif; ?>
+            </div>
+        </div>
+    </div>
+</div>
+<?php endif; ?>
+
 <!-- Formulario de edición -->
 <div class="row">
     <div class="col-12">
@@ -126,6 +164,11 @@
                 <i class="fas fa-edit me-2"></i>Editar Información
             </div>
             <div class="card-body">
+                <?php if (!$canEdit): ?>
+                <div class="alert alert-secondary mb-0">
+                    <i class="fas fa-eye me-2"></i>Modo solo consulta. Para cambiar datos de la federación, use un perfil con permisos de administración de organización.
+                </div>
+                <?php else: ?>
                 <form method="POST" enctype="multipart/form-data">
                     <input type="hidden" name="action" value="actualizar">
                     <input type="hidden" name="organizacion_id" value="<?= $organizacion['id'] ?>">
@@ -178,20 +221,15 @@
                     <hr>
                     
                     <div class="d-flex justify-content-between">
-                        <?php if ($is_admin_general): ?>
-                            <a href="index.php?page=mi_organizacion" class="btn btn-outline-secondary">
-                                <i class="fas fa-arrow-left me-1"></i>Volver a la lista
-                            </a>
-                        <?php else: ?>
-                            <a href="<?= htmlspecialchars(class_exists('AppHelpers') ? AppHelpers::dashboard('home') : 'index.php?page=home') ?>" class="btn btn-outline-secondary">
-                                <i class="fas fa-arrow-left me-1"></i>Volver al inicio
-                            </a>
-                        <?php endif; ?>
+                        <a href="<?= htmlspecialchars($urlHome) ?>" class="btn btn-outline-secondary">
+                            <i class="fas fa-arrow-left me-1"></i>Volver al inicio
+                        </a>
                         <button type="submit" class="btn btn-primary">
                             <i class="fas fa-save me-1"></i>Guardar Cambios
                         </button>
                     </div>
                 </form>
+                <?php endif; ?>
             </div>
         </div>
     </div>

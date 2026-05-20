@@ -52,9 +52,7 @@ try {
     }
     
     // URLs
-    $protocol = isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on' ? 'https' : 'http';
-    $host = $_SERVER['HTTP_HOST'];
-    $url_sistema = $protocol . '://' . $host . '/mistorneos/';
+    $url_sistema = rtrim(FvdConfig::resolvePublicUrl(), '/') . '/';
     $url_login = $url_sistema . 'modules/invitations/inscripciones/login.php';
     
     // Datos

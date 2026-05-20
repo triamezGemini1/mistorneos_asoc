@@ -12,12 +12,16 @@ require_once __DIR__ . '/../config/db.php';
 require_once __DIR__ . '/../lib/file_upload.php';
 require_once __DIR__ . '/../lib/security.php';
 require_once __DIR__ . '/../lib/OrganizacionDashboardStats.php';
+require_once __DIR__ . '/../lib/FvdConfig.php';
 
-// Solo admin_club y admin_general pueden acceder
-Auth::requireRole(['admin_club', 'admin_general']);
+Auth::requireRole(['admin_club', 'admin_general', 'admin_torneo']);
 
 $current_user = Auth::user();
+$user_role = (string) ($current_user['role'] ?? '');
 $is_admin_general = Auth::isAdminGeneral();
+$is_admin_torneo = $user_role === 'admin_torneo';
+/** Edición de datos de federación / logo / ámbito: no admin_torneo */
+$can_edit_mi_organizacion = $is_admin_general || $user_role === 'admin_club';
 $message = $_GET['success'] ?? '';
 $error = $_GET['error'] ?? '';
 $has_cod_org = false;
@@ -37,12 +41,16 @@ $action_get = $_GET['action'] ?? '';
 // Desactivar/Reactivar: manejado por index.php -> admin_org/organizacion/actions/
 
 if ($is_admin_general) {
-    // Admin general puede ver/editar cualquier organización
-    $organizacion_id = isset($_GET['id']) ? (int)$_GET['id'] : null;
+    // Admin general: por defecto la federación FVD (id 1); se puede pasar otro ?id= explícito
+    $organizacion_id = isset($_GET['id']) ? (int) $_GET['id'] : null;
     if ($action_get === 'new') {
         $organizacion_id = null;
         $organizacion = [];
-    } elseif ($organizacion_id) {
+    } elseif (($organizacion_id === null || $organizacion_id === 0) && $action_get !== 'activar') {
+        $organizacion_id = FvdConfig::ORGANIZACION_ID;
+    }
+
+    if ($organizacion_id && $action_get !== 'new') {
         // id en URL es siempre PK: evitar (id OR cod_org) con el mismo parámetro (colisión entre orgs).
         $stmt = DB::pdo()->prepare("
             SELECT o.*, e.nombre as entidad_nombre, u.nombre as admin_nombre, u.email as admin_email
@@ -54,7 +62,7 @@ if ($is_admin_general) {
         $stmt->execute([(int) $organizacion_id]);
         $organizacion = $stmt->fetch(PDO::FETCH_ASSOC);
     }
-} else {
+} elseif (in_array($user_role, ['admin_club', 'admin_torneo'], true)) {
     // Admin club solo puede ver su organización
     $org_id_user = Auth::getUserOrganizacionId();
     if ($org_id_user) {
@@ -81,6 +89,36 @@ if ($is_admin_general) {
         $organizacion = $stmt->fetch(PDO::FETCH_ASSOC);
     }
     $organizacion_id = $organizacion['id'] ?? null;
+}
+
+// Actualizar etiqueta de ámbito nacional (fila `entidad`; organización FVD)
+if (
+    $_SERVER['REQUEST_METHOD'] === 'POST'
+    && isset($_POST['action'])
+    && $_POST['action'] === 'actualizar_entidad_ambito'
+    && $can_edit_mi_organizacion
+) {
+    try {
+        $org_id = (int) ($_POST['organizacion_id'] ?? 0);
+        if ($org_id !== FvdConfig::ORGANIZACION_ID) {
+            throw new Exception('Esta acción solo aplica a la federación.');
+        }
+        $nombre = trim((string) ($_POST['entidad_ambito_nombre'] ?? ''));
+        if ($nombre === '') {
+            throw new Exception('Indique el nombre del ámbito territorial.');
+        }
+        $pdo = DB::pdo();
+        $pdo
+            ->prepare('INSERT INTO entidad (id, nombre, estado) VALUES (?, ?, 0) ON DUPLICATE KEY UPDATE nombre = VALUES(nombre)')
+            ->execute([FvdConfig::ENTIDAD_AMBITO_NACIONAL_ID, $nombre]);
+        $pdo
+            ->prepare('UPDATE organizaciones SET entidad = ?, updated_at = NOW() WHERE id = ?')
+            ->execute([FvdConfig::ENTIDAD_AMBITO_NACIONAL_ID, FvdConfig::ORGANIZACION_ID]);
+        header('Location: index.php?page=mi_organizacion&id=' . FvdConfig::ORGANIZACION_ID . '&success=' . urlencode('Ámbito territorial actualizado correctamente'));
+        exit;
+    } catch (Exception $e) {
+        $error = $e->getMessage();
+    }
 }
 
 // Procesar creación de organización (solo admin_general)
@@ -279,8 +317,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
         $org_id = (int)($_POST['organizacion_id'] ?? 0);
         
         // Validar permisos
+        if (!$can_edit_mi_organizacion) {
+            throw new Exception('No tiene permisos para editar la organización');
+        }
         if (!$is_admin_general) {
-            if (!$organizacion || $organizacion['id'] != $org_id) {
+            if (!$organizacion || (int) $organizacion['id'] !== $org_id) {
                 throw new Exception('No tiene permisos para editar esta organización');
             }
         }
@@ -384,19 +425,21 @@ if ($is_admin_general) {
         $dashColsLista = OrganizacionDashboardStats::columnFlags(DB::pdo());
         $has_t_org_lista = $dashColsLista['has_tournament_cod_org'];
         $clubMatchMi = OrganizacionDashboardStats::sqlClubMismaFederacionQueOrg(DB::pdo(), 'c', 'o');
+        $fvd_pk = (int) FvdConfig::ORGANIZACION_ID;
+        $oEntSql = "(CASE WHEN o.id = {$fvd_pk} THEN 0 ELSE COALESCE(o.entidad,0) END)";
         $sub_clubes_lista = "(SELECT COUNT(DISTINCT c.id) FROM clubes c WHERE c.estatus = 1 "
-            . "AND (COALESCE(o.entidad,0) = 0 OR COALESCE(c.entidad,0) = COALESCE(o.entidad,0)) "
+            . "AND ({$oEntSql} = 0 OR COALESCE(c.entidad,0) = {$oEntSql}) "
             . "AND ({$clubMatchMi}))";
         if ($has_t_org_lista) {
             $sub_torneos_lista = "(SELECT COUNT(DISTINCT t.id) FROM tournaments t WHERE t.estatus = 1 "
-                . "AND (COALESCE(o.entidad,0) = 0 OR COALESCE(t.entidad,0) = COALESCE(o.entidad,0)) "
+                . "AND ({$oEntSql} = 0 OR COALESCE(t.entidad,0) = {$oEntSql}) "
                 . "AND ((t.cod_org IS NOT NULL AND t.cod_org > 0 AND t.cod_org = o.id) OR ((t.cod_org IS NULL OR t.cod_org = 0) AND "
                 . ($has_cod_org ? "(t.club_responsable = COALESCE(NULLIF(o.cod_org, 0), o.id) OR t.club_responsable = o.id)" : "t.club_responsable = o.id")
                 . ")))";
         } else {
             $sub_torneos_lista = "(SELECT COUNT(DISTINCT t.id) FROM tournaments t WHERE "
                 . ($has_cod_org ? "(t.club_responsable = COALESCE(NULLIF(o.cod_org, 0), o.id) OR t.club_responsable = o.id)" : "t.club_responsable = o.id")
-                . " AND t.estatus = 1 AND (COALESCE(o.entidad,0) = 0 OR COALESCE(t.entidad,0) = COALESCE(o.entidad,0)))";
+                . " AND t.estatus = 1 AND ({$oEntSql} = 0 OR COALESCE(t.entidad,0) = {$oEntSql}))";
         }
         $stmt = DB::pdo()->query("
             SELECT o.*, e.nombre as entidad_nombre, u.nombre as admin_nombre,

@@ -776,57 +776,6 @@ function getUsers($page = 1, $per_page = 25, $admin_id = null, $search = null, $
         }
     }
     
-    // Si es admin_general y no hay admin_id ni club_id, retornar clubes por entidad agrupados por admin_club
-    if ($is_admin_general && !$admin_id && !$club_id && !$role_filter) {
-        // Obtener todos los clubes con su admin_club y entidad (organizacion_id / admin_club_id)
-        $sql = "
-            SELECT 
-                c.id, c.nombre, c.delegado, c.telefono, c.estatus,
-                u_admin.id as admin_id, u_admin.nombre as admin_nombre, u_admin.entidad,
-                (SELECT COUNT(*) FROM usuarios ux WHERE ux.club_id = c.id AND ux.role != 'admin_club' AND ux.status = 0) as total_usuarios
-            FROM clubes c
-            LEFT JOIN usuarios u_admin ON (c.admin_club_id = u_admin.id AND u_admin.role = 'admin_club')
-            WHERE c.estatus = 1
-            ORDER BY u_admin.entidad ASC, u_admin.nombre ASC, c.nombre ASC
-        ";
-        try {
-            $stmt = $pdo->query($sql);
-            $clubes_raw = $stmt->fetchAll(PDO::FETCH_ASSOC);
-        } catch (Exception $e) {
-            error_log("Users getClubesByEntidad: " . $e->getMessage());
-            $clubes_raw = [];
-        }
-        
-        // Agrupar: entidad -> admin_id -> [clubes]
-        $clubes_by_entidad_admin = [];
-        foreach ($clubes_raw as $c) {
-            $entidad_id = (int)($c['entidad'] ?? 0);
-            $aid = (int)($c['admin_id'] ?? 0);
-            if ($aid <= 0) {
-                $aid = 0;
-                $entidad_id = 0;
-            }
-            if (!isset($clubes_by_entidad_admin[$entidad_id])) {
-                $clubes_by_entidad_admin[$entidad_id] = [];
-            }
-            if (!isset($clubes_by_entidad_admin[$entidad_id][$aid])) {
-                $clubes_by_entidad_admin[$entidad_id][$aid] = [
-                    'admin_id' => $aid,
-                    'admin_nombre' => $c['admin_nombre'] ?? 'Sin admin',
-                    'clubes' => []
-                ];
-            }
-            $clubes_by_entidad_admin[$entidad_id][$aid]['clubes'][] = $c;
-        }
-        
-        return [
-            'data' => $clubes_raw,
-            'pagination' => null,
-            'is_club_by_entidad' => true,
-            'clubes_by_entidad_admin' => $clubes_by_entidad_admin
-        ];
-    }
-    
     // Si es admin_club y no hay club_id seleccionado, retornar lista de clubes supervisados
     if ($is_admin_club && !$club_id && $current_user['club_id'] && !$role_filter) {
         require_once __DIR__ . '/../lib/ClubHelper.php';
@@ -974,7 +923,7 @@ function getUsers($page = 1, $per_page = 25, $admin_id = null, $search = null, $
             }
         }
     } elseif ($is_admin_general && !$admin_id && $club_id && $club_id !== 'all') {
-        // Admin_general: seleccionar club directamente (desde vista clubes por entidad) - ver afiliados
+        // Admin_general: seleccionar club directamente - ver afiliados
         $where_clauses[] = 'u.club_id = ?';
         $params[] = $club_id;
         $where_clauses[] = 'u.role != ?';

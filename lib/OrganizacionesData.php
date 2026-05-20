@@ -17,10 +17,61 @@ class OrganizacionesData
         }
     }
     /**
+     * Conteo de atletas (role=usuario) activos/inactivos y por género.
+     * Si $entidadId > 0, solo usuarios de esa asociación (usuarios.entidad).
+     *
+     * @return array<string, int>
+     */
+    public static function loadAtletasStats(?int $entidadId = null): array
+    {
+        $stats = [
+            'atletas_activos' => 0,
+            'atletas_inactivos' => 0,
+            'hombres_activos' => 0,
+            'mujeres_activos' => 0,
+            'hombres_inactivos' => 0,
+            'mujeres_inactivos' => 0,
+        ];
+
+        try {
+            $pdo = DB::pdo();
+            $where = "role = 'usuario'";
+            $params = [];
+            if ($entidadId !== null && $entidadId > 0) {
+                $where .= ' AND entidad = ?';
+                $params[] = $entidadId;
+            }
+
+            $sql = "
+                SELECT
+                    SUM(CASE WHEN status = 0 THEN 1 ELSE 0 END) AS activos,
+                    SUM(CASE WHEN status <> 0 THEN 1 ELSE 0 END) AS inactivos,
+                    SUM(CASE WHEN status = 0 AND (sexo = 'M' OR UPPER(COALESCE(sexo,'')) = 'M') THEN 1 ELSE 0 END) AS hombres_activos,
+                    SUM(CASE WHEN status = 0 AND (sexo = 'F' OR UPPER(COALESCE(sexo,'')) = 'F') THEN 1 ELSE 0 END) AS mujeres_activos,
+                    SUM(CASE WHEN status <> 0 AND (sexo = 'M' OR UPPER(COALESCE(sexo,'')) = 'M') THEN 1 ELSE 0 END) AS hombres_inactivos,
+                    SUM(CASE WHEN status <> 0 AND (sexo = 'F' OR UPPER(COALESCE(sexo,'')) = 'F') THEN 1 ELSE 0 END) AS mujeres_inactivos
+                FROM usuarios
+                WHERE {$where}
+            ";
+            $stmt = $pdo->prepare($sql);
+            $stmt->execute($params);
+            $row = $stmt->fetch(PDO::FETCH_ASSOC) ?: [];
+
+            $stats['atletas_activos'] = (int)($row['activos'] ?? 0);
+            $stats['atletas_inactivos'] = (int)($row['inactivos'] ?? 0);
+            $stats['hombres_activos'] = (int)($row['hombres_activos'] ?? 0);
+            $stats['mujeres_activos'] = (int)($row['mujeres_activos'] ?? 0);
+            $stats['hombres_inactivos'] = (int)($row['hombres_inactivos'] ?? 0);
+            $stats['mujeres_inactivos'] = (int)($row['mujeres_inactivos'] ?? 0);
+        } catch (Exception $e) {
+            error_log('OrganizacionesData loadAtletasStats: ' . $e->getMessage());
+        }
+
+        return $stats;
+    }
+
+    /**
      * Estadísticas globales para el dashboard admin_general (solo tarjetas).
-     * Retorna: total_entidades, total_organizaciones, total_usuarios, total_admin_clubs,
-     *          total_clubs, total_afiliados, total_hombres, total_mujeres,
-     *          total_admin_torneo, total_operadores.
      *
      * @return array<string, int>
      */
@@ -31,10 +82,6 @@ class OrganizacionesData
             'total_organizaciones' => 0,
             'total_users' => 0,
             'total_admin_clubs' => 0,
-            'total_clubs' => 0,
-            'total_afiliados' => 0,
-            'total_hombres' => 0,
-            'total_mujeres' => 0,
             'total_admin_torneo' => 0,
             'total_operadores' => 0,
         ];
@@ -42,44 +89,19 @@ class OrganizacionesData
         try {
             $pdo = DB::pdo();
 
-            $stmt = $pdo->query("
-                SELECT COUNT(DISTINCT entidad) FROM organizaciones
-                WHERE entidad IS NOT NULL AND entidad != 0
-            ");
-            $stats['total_entidades'] = (int)$stmt->fetchColumn();
+            try {
+                $stmt = $pdo->query('SELECT COUNT(*) FROM entidad');
+                $stats['total_entidades'] = (int)$stmt->fetchColumn();
+            } catch (Exception $e) {
+                $stats['total_entidades'] = 0;
+            }
 
-            $stmt = $pdo->query("SELECT COUNT(*) FROM organizaciones WHERE estatus = 1");
-            $stats['total_organizaciones'] = (int)$stmt->fetchColumn();
+            $stats['total_organizaciones'] = 1;
 
-            $stmt = $pdo->query("SELECT COUNT(*) FROM usuarios");
-            $stats['total_users'] = (int)$stmt->fetchColumn();
-
-            $stmt = $pdo->query("SELECT COUNT(*) FROM usuarios WHERE role = 'admin_club' AND status = 0");
-            $stats['total_admin_clubs'] = (int)$stmt->fetchColumn();
-
-            $stmt = $pdo->query("SELECT COUNT(*) FROM clubes WHERE estatus = 1");
-            $stats['total_clubs'] = (int)$stmt->fetchColumn();
-
-            $stmt = $pdo->query("SELECT COUNT(*) FROM usuarios WHERE role = 'usuario' AND status = 0");
-            $stats['total_afiliados'] = (int)$stmt->fetchColumn();
-
-            $stmt = $pdo->query("
-                SELECT COUNT(*) FROM usuarios
-                WHERE role = 'usuario' AND status = 0 AND (sexo = 'M' OR UPPER(sexo) = 'M')
-            ");
-            $stats['total_hombres'] = (int)$stmt->fetchColumn();
-
-            $stmt = $pdo->query("
-                SELECT COUNT(*) FROM usuarios
-                WHERE role = 'usuario' AND status = 0 AND (sexo = 'F' OR UPPER(sexo) = 'F')
-            ");
-            $stats['total_mujeres'] = (int)$stmt->fetchColumn();
-
-            $stmt = $pdo->query("SELECT COUNT(*) FROM usuarios WHERE role = 'admin_torneo' AND status = 0");
-            $stats['total_admin_torneo'] = (int)$stmt->fetchColumn();
-
-            $stmt = $pdo->query("SELECT COUNT(*) FROM usuarios WHERE role = 'operador' AND status = 0");
-            $stats['total_operadores'] = (int)$stmt->fetchColumn();
+            $stats['total_users'] = (int)$pdo->query('SELECT COUNT(*) FROM usuarios')->fetchColumn();
+            $stats['total_admin_clubs'] = (int)$pdo->query("SELECT COUNT(*) FROM usuarios WHERE role = 'admin_club' AND status = 0")->fetchColumn();
+            $stats['total_admin_torneo'] = (int)$pdo->query("SELECT COUNT(*) FROM usuarios WHERE role = 'admin_torneo' AND status = 0")->fetchColumn();
+            $stats['total_operadores'] = (int)$pdo->query("SELECT COUNT(*) FROM usuarios WHERE role = 'operador' AND status = 0")->fetchColumn();
 
             require_once __DIR__ . '/StatisticsHelper.php';
             $helperStats = StatisticsHelper::generateStatistics();
@@ -87,13 +109,42 @@ class OrganizacionesData
                 $stats['total_admin_clubs'] = (int)($helperStats['total_admin_clubs'] ?? $stats['total_admin_clubs']);
                 $stats['total_admin_torneo'] = (int)($helperStats['total_admin_torneo'] ?? $stats['total_admin_torneo']);
                 $stats['total_operadores'] = (int)($helperStats['total_operadores'] ?? $stats['total_operadores']);
-                $stats['total_clubs'] = (int)($helperStats['total_clubs'] ?? $stats['total_clubs']);
             }
         } catch (Exception $e) {
-            error_log("OrganizacionesData loadStatsGlobales: " . $e->getMessage());
+            error_log('OrganizacionesData loadStatsGlobales: ' . $e->getMessage());
         }
 
-        return $stats;
+        return array_merge($stats, self::loadAtletasStats(null));
+    }
+
+    /**
+     * Contadores para el panel operativo del admin general (badges en SUPERVISIÓN).
+     *
+     * @return array{solicitudes_afiliacion_total: int, solicitudes_afiliacion_pendiente: int, comentarios_pendientes: int}
+     */
+    public static function loadAdminGeneralPanelBadges(): array
+    {
+        $out = [
+            'solicitudes_afiliacion_total' => 0,
+            'solicitudes_afiliacion_pendiente' => 0,
+            'comentarios_pendientes' => 0,
+        ];
+        try {
+            $pdo = DB::pdo();
+            $chk = $pdo->query("SHOW TABLES LIKE 'solicitudes_afiliacion'");
+            if ($chk && $chk->rowCount() > 0) {
+                $out['solicitudes_afiliacion_total'] = (int) $pdo->query('SELECT COUNT(*) FROM solicitudes_afiliacion')->fetchColumn();
+                $out['solicitudes_afiliacion_pendiente'] = (int) $pdo->query("SELECT COUNT(*) FROM solicitudes_afiliacion WHERE estatus = 'pendiente'")->fetchColumn();
+            }
+            $chk2 = $pdo->query("SHOW TABLES LIKE 'comentariossugerencias'");
+            if ($chk2 && $chk2->rowCount() > 0) {
+                $out['comentarios_pendientes'] = (int) $pdo->query("SELECT COUNT(*) FROM comentariossugerencias WHERE estatus = 'pendiente'")->fetchColumn();
+            }
+        } catch (Throwable $e) {
+            error_log('OrganizacionesData::loadAdminGeneralPanelBadges: ' . $e->getMessage());
+        }
+
+        return $out;
     }
 
     /**
@@ -124,10 +175,9 @@ class OrganizacionesData
     }
 
     /**
-     * Listado de entidades con resumen (organizaciones, clubes, afiliados, torneos).
-     * Para página Entidades > index.
+     * Listado de asociaciones (entidades) con atletas activos/inactivos por género.
      *
-     * @return list<array{entidad_id: int|string, entidad_nombre: string, total_organizaciones: int, total_clubes: int, total_afiliados: int, total_torneos: int}>
+     * @return list<array<string, mixed>>
      */
     public static function loadResumenEntidades(): array
     {
@@ -138,65 +188,30 @@ class OrganizacionesData
         }
 
         $resumen = [];
-        $entidades = self::loadEntidadRows($pdo);
-        $hasCodOrg = self::hasCodOrg($pdo);
-        foreach ($entidades as $e) {
+        foreach (self::loadEntidadRows($pdo) as $e) {
             $cod = (int)($e['codigo'] ?? 0);
             if ($cod <= 0) {
                 continue;
             }
-            $nombre = (string)($e['nombre'] ?? ('Entidad ' . $cod));
-
-            $stOrg = $pdo->prepare("SELECT COUNT(*) FROM organizaciones WHERE entidad = ?");
-            $stOrg->execute([$cod]);
-            $total_organizaciones = (int)$stOrg->fetchColumn();
-
-            $stClub = $pdo->prepare("SELECT COUNT(*) FROM clubes WHERE entidad = ? AND estatus = 1");
-            $stClub->execute([$cod]);
-            $total_clubes = (int)$stClub->fetchColumn();
-
-            $stAfi = $pdo->prepare("
-                SELECT
-                    COUNT(*) AS total,
-                    SUM(CASE WHEN UPPER(COALESCE(sexo,'M')) = 'M' THEN 1 ELSE 0 END) AS hombres,
-                    SUM(CASE WHEN UPPER(COALESCE(sexo,'M')) = 'F' THEN 1 ELSE 0 END) AS mujeres
-                FROM usuarios
-                WHERE entidad = ?
-            ");
-            $stAfi->execute([$cod]);
-            $rowAfi = $stAfi->fetch(PDO::FETCH_ASSOC) ?: [];
-
-            $stTor = $pdo->prepare("
-                SELECT COUNT(*)
-                FROM tournaments t
-                INNER JOIN organizaciones o ON " . ($hasCodOrg
-                    ? "(o.id = t.club_responsable OR o.cod_org = t.club_responsable)"
-                    : "o.id = t.club_responsable") . "
-                WHERE o.entidad = ?
-            ");
-            $stTor->execute([$cod]);
-            $total_torneos = (int)$stTor->fetchColumn();
-
-            $resumen[] = [
+            $atletas = self::loadAtletasStats($cod);
+            $resumen[] = array_merge([
                 'entidad_id' => $cod,
                 'entidad_codigo' => $cod,
-                'entidad_nombre' => $nombre,
-                'total_organizaciones' => $total_organizaciones,
-                'total_clubes' => $total_clubes,
-                'total_afiliados' => (int)($rowAfi['total'] ?? 0),
-                'hombres' => (int)($rowAfi['hombres'] ?? 0),
-                'mujeres' => (int)($rowAfi['mujeres'] ?? 0),
-                'total_torneos' => $total_torneos,
-            ];
+                'entidad_nombre' => (string)($e['nombre'] ?? ('Entidad ' . $cod)),
+                'estado' => (int)($e['estado'] ?? 1),
+            ], $atletas);
         }
         return $resumen;
     }
 
+    /**
+     * @return list<array{codigo: int|string, nombre: string, estado?: int}>
+     */
     private static function loadEntidadRows(PDO $pdo): array
     {
         try {
-            $cols = $pdo->query("SHOW COLUMNS FROM entidad")->fetchAll(PDO::FETCH_ASSOC);
-            $codeCol = $nameCol = null;
+            $cols = $pdo->query('SHOW COLUMNS FROM entidad')->fetchAll(PDO::FETCH_ASSOC);
+            $codeCol = $nameCol = $stateCol = null;
             foreach ($cols as $c) {
                 $f = strtolower($c['Field'] ?? '');
                 if (!$codeCol && in_array($f, ['codigo', 'cod_entidad', 'id', 'code'], true)) {
@@ -205,9 +220,16 @@ class OrganizacionesData
                 if (!$nameCol && in_array($f, ['nombre', 'descripcion', 'entidad', 'nombre_entidad'], true)) {
                     $nameCol = $c['Field'];
                 }
+                if (!$stateCol && in_array($f, ['estado', 'estatus', 'status', 'activo'], true)) {
+                    $stateCol = $c['Field'];
+                }
             }
             if ($codeCol && $nameCol) {
-                $stmt = $pdo->query("SELECT {$codeCol} AS codigo, {$nameCol} AS nombre FROM entidad ORDER BY {$codeCol} ASC");
+                $select = "{$codeCol} AS codigo, {$nameCol} AS nombre";
+                if ($stateCol) {
+                    $select .= ", {$stateCol} AS estado";
+                }
+                $stmt = $pdo->query("SELECT {$select} FROM entidad ORDER BY {$codeCol} ASC");
                 return $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
             }
         } catch (Exception $e) {

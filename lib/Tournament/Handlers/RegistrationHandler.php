@@ -49,7 +49,7 @@ final class RegistrationHandler
         $cedula = trim((string) ($post['cedula'] ?? ''));
         $id_club = !empty($post['id_club']) ? (int) $post['id_club'] : null;
 
-        $estatus = 1;
+        $estatus = InscritosHelper::ESTATUS_PENDIENTE_NUM;
         $inscrito_por = $user_id;
 
         if (empty($id_usuario) && $cedula !== '') {
@@ -69,6 +69,11 @@ final class RegistrationHandler
 
         if ($id_usuario <= 0) {
             return ['ok' => false, 'error' => 'Debe seleccionar un usuario o proporcionar una cédula válida'];
+        }
+
+        $errAlcance = self::aplicarAlcanceOperativo($pdo, $id_club, $id_usuario);
+        if ($errAlcance !== null) {
+            return $errAlcance;
         }
 
         $stmt = $pdo->prepare('SELECT nombre, cedula, sexo, email, username, entidad FROM usuarios WHERE id = ?');
@@ -114,12 +119,15 @@ final class RegistrationHandler
             return ['ok' => false, 'error' => 'Este usuario ya está inscrito en el torneo'];
         }
 
-        if (!$id_club) {
-            $stmt = $pdo->prepare('SELECT club_id FROM usuarios WHERE id = ?');
-            $stmt->execute([$id_usuario]);
-            $usuario_club = $stmt->fetchColumn();
-            $id_club = $usuario_club ? (int) $usuario_club : $user_club_id;
-        }
+        require_once __DIR__ . '/../../AsociacionAdminHelper.php';
+        $id_club = \AsociacionAdminHelper::resolverIdClubInscripcion(
+            $pdo,
+            $id_usuario,
+            $inscrito_por,
+            null,
+            $id_club,
+            $user_club_id
+        );
 
         if ($id_usuario <= 0) {
             return ['ok' => false, 'error' => 'ID de usuario inválido'];
@@ -137,6 +145,7 @@ final class RegistrationHandler
                 'inscrito_por' => $inscrito_por,
                 'numero' => 0,
             ]);
+            self::notificarInscripcion($pdo, $id_usuario, $torneo_id, $id_club, (int) $id_inscrito);
 
             return ['ok' => true, 'success_message' => 'Jugador inscrito exitosamente', 'id_inscrito' => (int) $id_inscrito];
         } catch (PDOException $e) {
@@ -161,7 +170,7 @@ final class RegistrationHandler
         require_once __DIR__ . '/../../UserActivationHelper.php';
         require_once __DIR__ . '/../../security.php';
 
-        $estatus = 1;
+        $estatus = InscritosHelper::ESTATUS_PENDIENTE_NUM;
         $nacionalidad = strtoupper(trim((string) ($post['nacionalidad'] ?? 'V')));
         if (!in_array($nacionalidad, ['V', 'E', 'J', 'P'], true)) {
             $nacionalidad = 'V';
@@ -180,6 +189,10 @@ final class RegistrationHandler
         $user_club_id = $current_user['club_id'] ?? null;
         if ($id_club === null || $id_club <= 0) {
             $id_club = $user_club_id;
+        }
+        $errAlcance = self::aplicarAlcanceOperativo($pdo, $id_club, 0);
+        if ($errAlcance !== null) {
+            return ['success' => false, 'error' => $errAlcance['error'] ?? 'Sin permiso'];
         }
 
         if (strlen($cedula) < 4) {
@@ -229,22 +242,29 @@ final class RegistrationHandler
         $username = $username . $sufijo;
         $password = strlen($cedula) >= 6 ? $cedula : str_pad($cedula, 6, '0', STR_PAD_LEFT);
 
+        $createData = [
+            'username' => $username,
+            'password' => $password,
+            'role' => 'usuario',
+            'nombre' => $nombre,
+            'cedula' => $cedula,
+            'nacionalidad' => $nacionalidad,
+            'sexo' => $sexo,
+            'fechnac' => $fechnac !== '' ? $fechnac : null,
+            'email' => $email,
+            'celular' => $telefono,
+            'club_id' => $id_club,
+            '_allow_club_for_usuario' => true,
+        ];
+        require_once __DIR__ . '/../../AsociacionAdminHelper.php';
+        $ctxOp = \AsociacionAdminHelper::contextoInscripcionOperativa($pdo);
+        if ($ctxOp !== null && ($ctxOp['entidad_id'] ?? 0) > 0) {
+            $createData['entidad'] = (int) $ctxOp['entidad_id'];
+        }
+
         $pdo->beginTransaction();
         try {
-            $create = Security::createUser([
-                'username' => $username,
-                'password' => $password,
-                'role' => 'usuario',
-                'nombre' => $nombre,
-                'cedula' => $cedula,
-                'nacionalidad' => $nacionalidad,
-                'sexo' => $sexo,
-                'fechnac' => $fechnac !== '' ? $fechnac : null,
-                'email' => $email,
-                'celular' => $telefono,
-                'club_id' => $id_club,
-                '_allow_club_for_usuario' => true,
-            ]);
+            $create = Security::createUser($createData);
             if (!empty($create['errors'])) {
                 $pdo->rollBack();
 
@@ -273,6 +293,7 @@ final class RegistrationHandler
             ]);
             UserActivationHelper::activateUser($pdo, $id_usuario);
             $pdo->commit();
+            self::notificarInscripcion($pdo, $id_usuario, $torneoId, $id_club, (int) $id_inscrito);
 
             return [
                 'success' => true,
@@ -309,16 +330,31 @@ final class RegistrationHandler
         require_once __DIR__ . '/../../InscritosHelper.php';
         require_once __DIR__ . '/../../UserActivationHelper.php';
 
+        $errAlcance = self::aplicarAlcanceOperativo($pdo, $idClubPost, $idUsuario);
+        if ($errAlcance !== null) {
+            return ['success' => false, 'error' => $errAlcance['error'] ?? 'Sin permiso'];
+        }
+
         $stmt = $pdo->prepare('SELECT id, estatus FROM inscritos WHERE id_usuario = ? AND torneo_id = ?');
         $stmt->execute([$idUsuario, $torneoId]);
         $existe = $stmt->fetch(PDO::FETCH_ASSOC);
-        if ($existe && InscritosHelper::esConfirmado($existe['estatus'])) {
+        if ($existe && !InscritosHelper::esRetirado($existe['estatus'])) {
             return ['success' => false, 'error' => 'Este usuario ya está inscrito en el torneo'];
         }
         if ($existe) {
-            $stmt = $pdo->prepare('UPDATE inscritos SET estatus = 1 WHERE id = ?');
-            $stmt->execute([$existe['id']]);
+            $idClubRe = $idClubPost;
+            $errRe = self::aplicarAlcanceOperativo($pdo, $idClubRe, $idUsuario);
+            if ($errRe !== null) {
+                return ['success' => false, 'error' => $errRe['error'] ?? 'Sin permiso'];
+            }
+            $estatusRe = $estatus > 0 ? $estatus : InscritosHelper::ESTATUS_PENDIENTE_NUM;
+            $sqlUp = 'UPDATE inscritos SET estatus = ?' . ($idClubRe ? ', id_club = ?' : '') . ' WHERE id = ?';
+            $stmt = $pdo->prepare($sqlUp);
+            $idClubRe
+                ? $stmt->execute([$estatusRe, $idClubRe, $existe['id']])
+                : $stmt->execute([$estatusRe, $existe['id']]);
             UserActivationHelper::activateUser($pdo, $idUsuario);
+            self::notificarInscripcion($pdo, $idUsuario, $torneoId, $idClubRe, (int) $existe['id']);
 
             return ['success' => true, 'message' => 'Jugador inscrito exitosamente', 'id' => (int) $existe['id']];
         }
@@ -357,24 +393,15 @@ final class RegistrationHandler
             ];
         }
 
-        $id_club = $idClubPost;
-        if (empty($id_club) || $id_club === 0) {
-            $stmt = $pdo->prepare('SELECT club_responsable FROM tournaments WHERE id = ? LIMIT 1');
-            $stmt->execute([$torneoId]);
-            $club_org = $stmt->fetchColumn();
-            if (!empty($club_org) && (int) $club_org > 0) {
-                $id_club = (int) $club_org;
-            } else {
-                $stmt = $pdo->prepare('SELECT club_id FROM usuarios WHERE id = ?');
-                $stmt->execute([$idUsuario]);
-                $usuario_club = $stmt->fetchColumn();
-                $id_club = $usuario_club ? (int) $usuario_club : $userClubIdActor;
-            }
-        }
-
-        if (empty($id_club) || $id_club === 0) {
-            $id_club = null;
-        }
+        require_once __DIR__ . '/../../AsociacionAdminHelper.php';
+        $id_club = \AsociacionAdminHelper::resolverIdClubInscripcion(
+            $pdo,
+            $idUsuario,
+            $inscritoPorUserId,
+            null,
+            $idClubPost,
+            $userClubIdActor
+        );
 
         $nac_inscrito = isset($usuario_datos['nacionalidad']) && in_array(strtoupper(trim((string) $usuario_datos['nacionalidad'])), ['V', 'E', 'J', 'P'], true)
             ? strtoupper(trim((string) $usuario_datos['nacionalidad'])) : 'V';
@@ -397,12 +424,49 @@ final class RegistrationHandler
                 'codigo_equipo' => $codigo_equipo,
             ]);
             UserActivationHelper::activateUser($pdo, $idUsuario);
+            self::notificarInscripcion($pdo, $idUsuario, $torneoId, $id_club, (int) $id_inscrito);
 
             return ['success' => true, 'message' => 'Jugador inscrito exitosamente', 'id' => (int) $id_inscrito];
         } catch (Exception $e) {
             error_log('Error al inscribir jugador (API): ' . $e->getMessage());
 
             return ['success' => false, 'error' => $e->getMessage(), 'sql_error' => $e->getMessage()];
+        }
+    }
+
+    /**
+     * Fuerza club de la asociación y valida ámbito del atleta (admin operativo).
+     *
+     * @return array{ok: false, error: string}|null
+     */
+    private static function aplicarAlcanceOperativo(PDO $pdo, ?int &$idClub, int $idUsuario = 0): ?array
+    {
+        require_once __DIR__ . '/../../AsociacionAdminHelper.php';
+        $forzado = \AsociacionAdminHelper::idClubForzadoInscripcion($pdo);
+        if ($forzado === null) {
+            return null;
+        }
+        if ($idUsuario > 0 && !\AsociacionAdminHelper::usuarioEnAmbitoAsociacion($pdo, $idUsuario)) {
+            return ['ok' => false, 'error' => 'El atleta no pertenece a su asociación.'];
+        }
+        $idClub = $forzado;
+
+        return null;
+    }
+
+    private static function notificarInscripcion(PDO $pdo, int $idUsuario, int $torneoId, ?int $idClub, int $idInscrito): void
+    {
+        try {
+            require_once __DIR__ . '/../../InscripcionTorneoNotifier.php';
+            \InscripcionTorneoNotifier::notificarTrasInscripcion(
+                $pdo,
+                $idUsuario,
+                $torneoId,
+                (int) ($idClub ?? 0),
+                $idInscrito
+            );
+        } catch (Throwable $e) {
+            error_log('notificarInscripcion: ' . $e->getMessage());
         }
     }
 }

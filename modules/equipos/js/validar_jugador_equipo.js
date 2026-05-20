@@ -13,7 +13,7 @@
 const ValidadorJugadorEquipo = {
     torneoId: null,
     equipoIdActual: null, // Para excluir al editar un equipo existente
-    apiUrl: '/mistorneos/api/verificar_jugador_equipo.php',
+    apiUrl: '/mistorneos_fvd/public/api/verificar_jugador_equipo.php',
     
     /**
      * Inicializar el validador
@@ -291,7 +291,7 @@ async function verificarJugadorEquipo(cedula, torneoId, equipoIdExcluir = null) 
     }
     
     const queryString = new URLSearchParams(params).toString();
-    const response = await fetch(`/mistorneos/api/verificar_jugador_equipo.php?${queryString}`);
+    const response = await fetch(`${window.APP_CONFIG?.apiPath || '/mistorneos_fvd/public/api/'}verificar_jugador_equipo.php?${queryString}`);
     
     return await response.json();
 }

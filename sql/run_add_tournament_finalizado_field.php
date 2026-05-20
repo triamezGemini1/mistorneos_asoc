@@ -14,7 +14,7 @@ require_once $config_file;
 try {
     // Crear conexión directa
     $host = $config['db']['host'] ?? 'localhost';
-    $dbname = $config['db']['name'] ?? 'mistorneos';
+    $dbname = $config['db']['name'] ?? 'mistorneos_fvd';
     $username = $config['db']['user'] ?? 'root';
     $password = $config['db']['pass'] ?? '';
     

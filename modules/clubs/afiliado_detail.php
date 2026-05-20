@@ -41,12 +41,14 @@ try {
         exit;
     }
     
-    // Obtener datos del afiliado
+    [$scopeSql, $scopeParams] = ClubHelper::afiliadosMatchSqlAndParams(DB::pdo(), $club, $club_id);
+
     $stmt = DB::pdo()->prepare("
-        SELECT * FROM usuarios 
-        WHERE id = ? AND club_id = ? AND role = 'usuario'
+        SELECT u.* FROM usuarios u
+        WHERE u.id = ?
+          AND {$scopeSql}
     ");
-    $stmt->execute([$user_id, $club_id]);
+    $stmt->execute(array_merge([$user_id], $scopeParams));
     $afiliado_detail = $stmt->fetch(PDO::FETCH_ASSOC);
     
     if (!$afiliado_detail) {
@@ -100,12 +102,26 @@ try {
     header('Location: index.php?page=clubs&error=' . urlencode('Error al cargar datos: ' . $e->getMessage()));
     exit;
 }
+
+$from_page_af = isset($_GET['from']) ? (string) $_GET['from'] : null;
+$from_admin_id_af = isset($_GET['admin_id']) ? (int) $_GET['admin_id'] : null;
+$genero_af = isset($_GET['genero']) ? (string) $_GET['genero'] : null;
+$back_to_club = 'index.php?page=clubs&action=detail&id=' . (int) $club['id'];
+if ($from_page_af !== null && $from_page_af !== '') {
+    $back_to_club .= '&from=' . urlencode($from_page_af);
+}
+if ($from_admin_id_af > 0) {
+    $back_to_club .= '&admin_id=' . $from_admin_id_af;
+}
+if ($genero_af !== null && $genero_af !== '') {
+    $back_to_club .= '&genero=' . urlencode(strtoupper($genero_af));
+}
 ?>
 
 <div class="container-fluid">
     <div class="d-flex justify-content-between align-items-center mb-4">
         <div>
-            <a href="index.php?page=clubs&action=detail&id=<?= $club['id'] ?>" class="btn btn-outline-secondary btn-sm mb-2">
+            <a href="<?= htmlspecialchars($back_to_club) ?>" class="btn btn-outline-secondary btn-sm mb-2">
                 <i class="fas fa-arrow-left me-1"></i>Volver al Club
             </a>
             <h2 class="mb-0">

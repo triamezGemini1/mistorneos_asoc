@@ -1,7 +1,7 @@
 <?php
 /**
- * Clubes de la organización (admin organización)
- * Muestra los clubes de la organización del admin con sus estadísticas
+ * Asociaciones de la organización (admin organización)
+ * Muestra las asociaciones de la organización del admin con sus estadísticas
  *
  * Regla de identificación:
  * - Listado / modal / POST editar: siempre el club por PK `clubes.id` (parámetro `club_id`). No sustituir por `cod_org`.
@@ -112,7 +112,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         $delegado_nombre = trim($current_user['nombre'] ?? $current_user['username'] ?? '');
                     } elseif (!empty($club_ids_pre)) {
                         $ph = implode(',', array_fill(0, count($club_ids_pre), '?'));
-                        $stmt = $pdo->prepare("SELECT nombre FROM usuarios WHERE id = ? AND club_id IN ($ph) AND role = 'usuario' AND (status = 'approved' OR status = 1) LIMIT 1");
+                        $stmt = $pdo->prepare("SELECT nombre FROM usuarios WHERE id = ? AND club_id IN ($ph) AND role = 'usuario' LIMIT 1");
                         $stmt->execute(array_merge([$delegado_user_id_post], $club_ids_pre));
                         $row = $stmt->fetch(PDO::FETCH_ASSOC);
                         if ($row) {
@@ -223,7 +223,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $es_usuario = false;
                     if (!empty($club_ids)) {
                         $ph = implode(',', array_fill(0, count($club_ids), '?'));
-                        $stmt = $pdo->prepare("SELECT nombre FROM usuarios WHERE id = ? AND (id = ? OR (club_id IN ($ph) AND role = 'usuario' AND (status = 'approved' OR status = 1))) LIMIT 1");
+                        $stmt = $pdo->prepare("SELECT nombre FROM usuarios WHERE id = ? AND (id = ? OR (club_id IN ($ph) AND role = 'usuario')) LIMIT 1");
                         $stmt->execute(array_merge([$delegado_user_id, $admin_club_user_id], $club_ids));
                         $row = $stmt->fetch(PDO::FETCH_ASSOC);
                         if ($row) {
@@ -352,6 +352,7 @@ try {
             $placeholders = implode(',', array_fill(0, count($club_ids), '?'));
             $select_cols = "c.id, c.nombre, c.delegado, c.telefono, c.direccion, c.estatus";
             $group_cols = "c.id, c.nombre, c.delegado, c.telefono, c.direccion, c.estatus";
+            $clubes_tiene_entidad = false;
             try {
                 $stmt = DB::pdo()->query("SHOW COLUMNS FROM clubes LIKE 'delegado_user_id'");
                 if ($stmt->rowCount() > 0) {
@@ -377,10 +378,12 @@ try {
                 if ($stmt->rowCount() > 0) {
                     $select_cols .= ", c.entidad";
                     $group_cols .= ", c.entidad";
+                    $clubes_tiene_entidad = true;
                 }
             } catch (Exception $e) {}
             $pdoFed = DB::pdo();
             $fedExprC = OrganizacionDashboardStats::clubFederacionCodigoSqlExpr($pdoFed, 'c');
+            $join_usuarios_afiliados = 'LEFT JOIN usuarios u ON ' . ClubHelper::sqlJoinUsuariosAfiliadosOnClub(DB::pdo(), 'c');
             $stmt = DB::pdo()->prepare("
                 SELECT 
                     $select_cols,
@@ -392,7 +395,7 @@ try {
                      INNER JOIN tournaments t ON i.torneo_id = t.id 
                      WHERE t.club_responsable = ({$fedExprC})) as inscritos_count
                 FROM clubes c
-                LEFT JOIN usuarios u ON u.club_id = c.id AND u.role = 'usuario' AND (u.status = 'approved' OR u.status = 1)
+                {$join_usuarios_afiliados}
                 WHERE c.id IN ($placeholders)
                 GROUP BY $group_cols
                 ORDER BY c.nombre ASC
@@ -436,8 +439,8 @@ if (!empty($club_ids)) {
     $stmt = DB::pdo()->prepare("
         SELECT u.id, u.nombre, u.celular, c.nombre as club_nombre
         FROM usuarios u
-        LEFT JOIN clubes c ON u.club_id = c.id
-        WHERE u.club_id IN ($ph) AND u.role = 'usuario' AND (u.status = 'approved' OR u.status = 1)
+        LEFT JOIN clubes c ON u.entidad = c.id
+        WHERE u.entidad IN ($ph)
         ORDER BY u.nombre ASC
     ");
     $stmt->execute($club_ids);
@@ -473,7 +476,7 @@ if ($organizacion_cod_org && !empty($mis_clubes)) {
 <div class="container-fluid">
     <div class="d-flex justify-content-between align-items-center mb-4">
         <div>
-            <h2><i class="fas fa-building"></i> Clubes de la organización</h2>
+            <h2><i class="fas fa-building"></i> Asociaciones de la organización</h2>
             <p class="text-muted mb-0">
                 Solo clubes vinculados a tu federación (misma regla en listados, edición y búsquedas).
             </p>
@@ -534,7 +537,7 @@ if ($organizacion_cod_org && !empty($mis_clubes)) {
             <div class="card text-center bg-primary text-white">
                 <div class="card-body">
                     <h3 class="mb-0"><?= count($mis_clubes) ?></h3>
-                    <small>Clubes de la organización</small>
+                    <small>Asociaciones de la organización</small>
                 </div>
             </div>
         </div>
@@ -552,7 +555,7 @@ if ($organizacion_cod_org && !empty($mis_clubes)) {
     <!-- Lista de clubes con estadísticas -->
     <div class="card">
         <div class="card-header bg-primary text-white">
-            <h5 class="mb-0"><i class="fas fa-building me-2"></i>Clubes de la organización (<?= count($mis_clubes) ?>)</h5>
+            <h5 class="mb-0"><i class="fas fa-building me-2"></i>Asociaciones de la organización (<?= count($mis_clubes) ?>)</h5>
         </div>
         <div class="card-body">
             <?php if (empty($mis_clubes)): ?>
@@ -594,7 +597,7 @@ if ($organizacion_cod_org && !empty($mis_clubes)) {
                                             <div>
                                                 <strong><?= htmlspecialchars(trim((string) ($club['nombre'] ?? ''))) ?></strong>
                                                 <br>
-                                                <a href="index.php?page=clubs&action=detail&id=<?= (int) ($club['club_id_pk'] ?? $club['id'] ?? 0) ?>" class="btn btn-sm btn-link p-0 text-primary" title="Ver afiliados"><small><i class="fas fa-users me-1"></i>Ver afiliados</small></a>
+                                                <a href="index.php?page=clubs&action=detail&id=<?= (int) ($club['club_id_pk'] ?? $club['id'] ?? 0) ?>&from=clubes_asociados" class="btn btn-sm btn-link p-0 text-primary" title="Ver afiliados"><small><i class="fas fa-users me-1"></i>Ver afiliados</small></a>
                                             </div>
                                         </div>
                                     </td>

@@ -90,7 +90,8 @@ class TournamentFileHelper {
         $host = rtrim($host, '.');
         
         // Construir la URL base
-        return $protocol . '://' . $host . '/mistorneos';
+        $folder = class_exists('FvdConfig') ? FvdConfig::APP_FOLDER : 'mistorneos_fvd';
+        return $protocol . '://' . $host . '/' . $folder;
     }
     
     /**

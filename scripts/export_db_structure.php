@@ -20,7 +20,7 @@ mn_env_load($root . '/.env');
 
 $host = getenv('DB_HOST') ?: 'localhost';
 $port = getenv('DB_PORT') ?: '3306';
-$name = getenv('DB_DATABASE') ?: 'mistorneos';
+$name = getenv('DB_DATABASE') ?: 'mistorneos_fvd';
 $user = getenv('DB_USERNAME') ?: 'root';
 $pass = getenv('DB_PASSWORD');
 $pass = is_string($pass) ? $pass : '';

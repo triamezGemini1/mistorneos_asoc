@@ -17,20 +17,11 @@ try {
 
     $current_user = Auth::user();
 
-    // Organización y entidad obligatorias (solo admin_general puede crear clubes)
-    $organizacion_id = !empty($_POST['organizacion_id']) ? (int)$_POST['organizacion_id'] : null;
-    if (!$organizacion_id) {
-        throw new Exception('Debe seleccionar una organización. Todo club debe pertenecer a una organización con entidad definida.');
-    }
-    $entidad = 0;
-
-    if ($organizacion_id) {
-        $stmt = DB::pdo()->prepare("SELECT entidad FROM organizaciones WHERE id = ? AND estatus = 1");
-        $stmt->execute([$organizacion_id]);
-        $entidad = (int)$stmt->fetchColumn();
-    }
+    require_once __DIR__ . '/../../lib/FvdConfig.php';
+    $organizacion_id = FvdConfig::organizacionId();
+    $entidad = !empty($_POST['entidad']) ? (int)$_POST['entidad'] : 0;
     if ($entidad <= 0) {
-        throw new Exception('La organización seleccionada no tiene entidad definida. No se puede registrar un club sin entidad.');
+        throw new Exception('Debe seleccionar la asociación (estado/región) del club.');
     }
     
     // Preparar datos (solo campos que existen en BD)

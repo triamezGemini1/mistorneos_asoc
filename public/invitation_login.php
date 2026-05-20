@@ -109,8 +109,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !$error_message) {
                     'username' => $authenticatedUser['username'],
                     'role' => $authenticatedUser['role'],
                     'email' => $authenticatedUser['email'],
-                    'club_id' => $authenticatedUser['club_id']
+                    'club_id' => $authenticatedUser['club_id'],
+                    'organizacion_id' => defined('ORGANIZACION_ID') ? ORGANIZACION_ID : 1,
                 ];
+                if (class_exists('FvdConfig', false)) {
+                    FvdConfig::anchorSession();
+                }
                 session_regenerate_id(true);
                 
                 // Redirigir al formulario de inscripci�n independiente

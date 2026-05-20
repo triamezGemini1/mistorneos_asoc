@@ -1254,17 +1254,10 @@ function getModalidadLabel($modalidad) {
                 <div class="row align-items-center mb-3 pb-3 border-bottom">
                     <div class="col d-flex align-items-center gap-3">
                         <?php if ($is_admin_general): ?>
+                        <input type="hidden" name="club_responsable" value="<?= (int)(class_exists('FvdConfig') ? FvdConfig::organizacionId() : 1) ?>">
                         <div class="flex-grow-1">
-                            <label for="club_responsable" class="form-label mb-1">Organización *</label>
-                            <select class="form-select form-select-lg" id="club_responsable" name="club_responsable" <?= $action === 'new' ? 'required' : '' ?>>
-                                <option value="">Seleccionar organización...</option>
-                                <?php foreach ($organizaciones_list as $org): ?>
-                                <option value="<?= (int)$org['id'] ?>"
-                                    <?= ($action === 'edit' && ((int)($tournament['organizacion_ref'] ?? 0)) == (int)$org['id']) || ($action === 'new' && $organizacion_id_cuentas_new !== null && $organizacion_id_cuentas_new == $org['id']) ? 'selected' : '' ?>>
-                                    <?= htmlspecialchars($org['nombre']) ?>
-                                </option>
-                                <?php endforeach; ?>
-                            </select>
+                            <label class="form-label mb-1 text-muted">Organizador</label>
+                            <p class="mb-0 fs-5 fw-bold"><?= htmlspecialchars(class_exists('FvdConfig') ? FvdConfig::ORGANIZACION_NOMBRE : 'FEDERACION VENEZOLANA DE DOMINO') ?></p>
                         </div>
                         <?php else: ?>
                         <?php $org_id = ($action === 'edit' && isset($tournament['organizacion_ref'])) ? (int)$tournament['organizacion_ref'] : (int)($default_organizacion_id ?? 0); ?>

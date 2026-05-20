@@ -1,7 +1,7 @@
 <?php
 /**
  * Configuración de Desarrollo
- * Usa variables de entorno (.env). base_url vacía = auto (localhost → /mistorneos).
+ * Usa variables de entorno (.env). base_url vacía = auto (localhost → /mistorneos_fvd).
  *
  * NOTA: Para búsqueda de personas en desarrollo, necesitas tener
  * una copia local de la tabla dbo.persona en la base de datos fvdadmin
@@ -21,7 +21,7 @@ return [
   'db' => [
     'host' => $env('DB_HOST', 'localhost'),
     'port' => $env('DB_PORT', '3306'),
-    'name' => $env('DB_DATABASE', 'mistorneos'),
+    'name' => $env('DB_DATABASE', 'mistorneos_fvd'),
     'user' => $env('DB_USERNAME', 'root'),
     'pass' => $env('DB_PASSWORD', ''),
     'charset' => $env('DB_CHARSET', 'utf8mb4'),
@@ -48,7 +48,7 @@ return [
     'environment' => 'development',
   ],
   'whatsapp' => [
-    'base_url' => $env('APP_URL', 'http://localhost/mistorneos'),
+    'base_url' => $env('APP_URL', 'http://localhost/mistorneos_fvd'),
   ],
 ];
 

@@ -10,7 +10,7 @@ if (!empty($_SESSION['user']) && isset($_SESSION['user']['id'])) {
       $q->execute([':id' => $_SESSION['user']['id']]);
       $m = $q->fetch();
       if ($m && isset($m['must_change_password']) && (int)$m['must_change_password'] === 1) {
-        $url = class_exists('AppHelpers') ? AppHelpers::url('index.php', ['page' => 'users/change_password', 'force' => 1]) : (($_SERVER['REQUEST_SCHEME'] ?? 'https') . '://' . ($_SERVER['HTTP_HOST'] ?? 'localhost') . '/mistorneos/public/index.php?page=users/change_password&force=1');
+        $url = class_exists('AppHelpers') ? AppHelpers::url('index.php', ['page' => 'users/change_password', 'force' => 1]) : (rtrim(FvdConfig::resolvePublicUrl(), '/') . '/index.php?page=users/change_password&force=1');
         header('Location: ' . $url, true, 302);
         exit;
       }
