@@ -33,3 +33,4 @@ jobs:
           **/.vscode/**
           **/vendor/**
           **/*.zip
+          **/_LEGACY_RAW/**

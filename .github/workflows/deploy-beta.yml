@@ -38,3 +38,4 @@ jobs:
             **/.vscode/**
             **/*.zip
             **/tests/**
+            **/_LEGACY_RAW/**

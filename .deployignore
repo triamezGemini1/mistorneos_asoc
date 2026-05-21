@@ -10,6 +10,7 @@ storage/sessions/*
 *.sql.backup
 confiprrod.php
 config/config.development.php
+_LEGACY_RAW
 tests
 phpunit.xml
 composer.json
