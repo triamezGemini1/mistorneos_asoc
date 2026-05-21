@@ -107,6 +107,38 @@ $homeFiles = [
     'core Dashboard factory' => $root . '/core/Modules/Dashboard/DashboardControllerFactory.php',
     'output.css Tailwind' => $root . '/public/assets/dist/output.css',
 ];
+
+$estructuraFiles = [
+    'layout menú Estructura' => $root . '/public/includes/layout.php',
+    'organizaciones_particulares' => $root . '/modules/organizaciones_particulares.php',
+    'torneos_estructura' => $root . '/modules/torneos_estructura.php',
+    'TorneosEstructuraService' => $root . '/lib/TorneosEstructuraService.php',
+    'OrganizacionDashboardStats' => $root . '/lib/OrganizacionDashboardStats.php',
+];
+foreach ($estructuraFiles as $label => $path) {
+    $checks[] = [
+        'grupo' => 'Estructura org/torneos',
+        'nombre' => $label,
+        'ok' => is_file($path),
+        'detalle' => is_file($path) ? 'Presente' : 'FALTA — deploy incompleto (FTP #609/#610 fallaron)',
+    ];
+}
+
+$layoutHasParticulares = false;
+$layoutPath = $root . '/public/includes/layout.php';
+if (is_file($layoutPath)) {
+    $layoutSnippet = (string) file_get_contents($layoutPath, false, null, 0, 200000);
+    $layoutHasParticulares = str_contains($layoutSnippet, 'organizaciones_particulares')
+        && str_contains($layoutSnippet, "context' => 'particulares'");
+}
+$checks[] = [
+    'grupo' => 'Estructura org/torneos',
+    'nombre' => 'Menú Org. particulares en layout',
+    'ok' => $layoutHasParticulares,
+    'detalle' => $layoutHasParticulares
+        ? 'layout.php actualizado'
+        : 'layout.php viejo — subir public/includes/layout.php',
+];
 foreach ($homeFiles as $label => $path) {
     $checks[] = [
         'grupo' => 'Inicio (home)',

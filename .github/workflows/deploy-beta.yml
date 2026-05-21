@@ -26,6 +26,8 @@ jobs:
           server-dir: public_html/mistorneos_beta/
           security: loose
           dangerous-clean-slate: false
+          # Estado nuevo: evita fallos 550 por rutas borradas en el repo (PROD_MISTORNEOS, _LEGACY_RAW).
+          state-name: .ftp-deploy-sync-state-beta.json
           exclude: |
             **/.git*
             **/.github*
@@ -39,3 +41,4 @@ jobs:
             **/*.zip
             **/tests/**
             **/_LEGACY_RAW/**
+            **/PROD_MISTORNEOS/**

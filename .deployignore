@@ -11,6 +11,7 @@ storage/sessions/*
 confiprrod.php
 config/config.development.php
 _LEGACY_RAW
+PROD_MISTORNEOS
 tests
 phpunit.xml
 composer.json
