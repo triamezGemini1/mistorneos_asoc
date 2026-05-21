@@ -45,6 +45,8 @@ if (!defined('ORGANIZACION_NOMBRE')) {
 
 // Load logging helper
 require_once __DIR__ . '/../lib/Log.php';
+require_once __DIR__ . '/../lib/StoragePaths.php';
+StoragePaths::ensureWritableDirs($projectRoot);
 
 // =================================================================
 // DETECCIÓN DE HTTPS (debe estar antes de configurar sesiones)

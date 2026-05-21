@@ -569,12 +569,20 @@ if (
     && $page === 'home'
     && ($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'GET'
 ) {
-    $contextType = \Core\Http\Context::resolve();
-    $controller = \Core\Modules\Dashboard\DashboardControllerFactory::make($contextType);
+    try {
+        $contextType = \Core\Http\Context::resolve();
+        $controller = \Core\Modules\Dashboard\DashboardControllerFactory::make($contextType);
 
-    if ($controller !== null) {
-        $controller->index();
-        exit;
+        if ($controller !== null) {
+            $controller->index();
+            exit;
+        }
+    } catch (Throwable $e) {
+        error_log(
+            'index.php MODERN_HOME fallback legacy: ' . $e->getMessage()
+            . ' en ' . $e->getFile() . ':' . $e->getLine()
+        );
+        // Continúa con layout legacy (modules/home.php) para evitar HTTP 500 en producción.
     }
 }
 

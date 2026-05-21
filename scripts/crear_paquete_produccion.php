@@ -37,7 +37,9 @@ $excluir = array_merge($excluir, [
 
 $sql_obligatorios = [
     'sql/migracion_produccion_2026.sql',
+    'sql/migracion_estructura_organizaciones_2026.sql',
     'sql/fix_cod_org_organizaciones_particulares.sql',
+    'DEPLOY_ESTRUCTURA_ORGANIZACIONES.md',
 ];
 
 function debeExcluirRuta(string $ruta_relativa, string $nombre_archivo, array $excluir): bool

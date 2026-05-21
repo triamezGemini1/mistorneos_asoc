@@ -30,5 +30,6 @@ jobs:
           .env
           **/upload/**
           **/uploads/**
-          **/.vscode/**cls
-          
+          **/.vscode/**
+          **/vendor/**
+          **/*.zip

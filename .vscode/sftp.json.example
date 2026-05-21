@@ -1,0 +1,30 @@
+{
+  "name": "MisTorneos — copiar a sftp.json (no commitear)",
+  "profiles": {
+    "Beta": {
+      "host": "laestaciondeldominohoy.com",
+      "protocol": "ftp",
+      "port": 21,
+      "username": "TU_USUARIO_FTP",
+      "password": "TU_PASSWORD_FTP",
+      "remotePath": "/public_html/mistorneos_beta",
+      "uploadOnSave": true,
+      "passive": true,
+      "secure": false,
+      "ignore": [".git", "node_modules", "vendor", ".env", "*.zip"]
+    },
+    "Produccion": {
+      "host": "laestaciondeldominohoy.com",
+      "protocol": "ftp",
+      "port": 21,
+      "username": "TU_USUARIO_FTP",
+      "password": "TU_PASSWORD_FTP",
+      "remotePath": "/public_html/mistorneos",
+      "uploadOnSave": false,
+      "passive": true,
+      "secure": false,
+      "ignore": [".git", "node_modules", "vendor", ".env", "*.zip"]
+    }
+  },
+  "defaultProfile": "Beta"
+}
