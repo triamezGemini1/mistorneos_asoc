@@ -60,6 +60,10 @@ $id = $_GET['id'] ?? null;
 $success_message = $_GET['success'] ?? null;
 $error_message = $_GET['error'] ?? null;
 
+require_once __DIR__ . '/../lib/AsociacionHubNavigation.php';
+$hub_return_list_url = AsociacionHubNavigation::redirectAfterTournamentForm($_GET);
+$hub_form_context = AsociacionHubNavigation::isHubContext($_GET);
+
 // Procesar eliminaci�n si se solicita
 if ($action === 'delete' && $id) {
     try {
@@ -1161,8 +1165,8 @@ function getModalidadLabel($modalidad) {
         <div class="card shadow-sm">
             <div class="card-footer bg-white">
                 <div class="d-flex flex-wrap gap-2">
-                    <a href="index.php?page=tournaments" class="btn btn-secondary">
-                        <i class="fas fa-arrow-left me-2"></i>Volver a la Lista
+                    <a href="<?= htmlspecialchars($hub_return_list_url ?: 'index.php?page=tournaments') ?>" class="btn btn-secondary">
+                        <i class="fas fa-arrow-left me-2"></i>Volver al listado
                     </a>
                     <?php if (Auth::canAccessTournament($tournament_id)): ?>
                         <a href="panel_torneo.php?torneo_id=<?= $tournament_id ?>" class="btn btn-success">
@@ -1236,6 +1240,12 @@ function getModalidadLabel($modalidad) {
             ?>
             <form method="POST" action="<?= htmlspecialchars($form_action) ?>" enctype="multipart/form-data">
                 <?= CSRF::input(); ?>
+                <?php if ($hub_form_context): ?>
+                    <input type="hidden" name="from" value="asociacion_hub">
+                    <input type="hidden" name="hub_org_id" value="<?= (int) ($_GET['hub_org_id'] ?? 0) ?>">
+                    <input type="hidden" name="hub_tab" value="<?= htmlspecialchars((string) ($_GET['hub_tab'] ?? 'torneos'), ENT_QUOTES, 'UTF-8') ?>">
+                    <input type="hidden" name="hub_estado" value="<?= htmlspecialchars((string) ($_GET['hub_estado'] ?? 'en_proceso'), ENT_QUOTES, 'UTF-8') ?>">
+                <?php endif; ?>
                 <?php if ($action === 'edit'): ?>
                     <input type="hidden" name="id" value="<?= (int)$tournament['id'] ?>">
                 <?php endif;
@@ -1650,7 +1660,13 @@ function getModalidadLabel($modalidad) {
                 <?php endif; ?>
                 
                 <div class="d-flex justify-content-between mt-4 pt-3 border-top">
-                    <a href="<?= htmlspecialchars((isset($dashboard_href) && is_callable($dashboard_href)) ? $dashboard_href('tournaments') : 'index.php?page=tournaments') ?>" class="btn btn-secondary">
+                    <?php
+                    $cancel_href = $hub_return_list_url
+                        ?: ((isset($dashboard_href) && is_callable($dashboard_href))
+                            ? $dashboard_href('tournaments')
+                            : 'index.php?page=tournaments');
+                    ?>
+                    <a href="<?= htmlspecialchars($cancel_href) ?>" class="btn btn-secondary">
                         <i class="fas fa-times me-2"></i>Cancelar
                     </a>
                     <button type="submit" class="btn btn-<?= $action === 'edit' ? 'warning' : 'success' ?>">

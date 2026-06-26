@@ -78,11 +78,15 @@ $role_activo_layout = (string)($user['role'] ?? '');
 $is_admin_general_base = ($role_original_layout === 'admin_general');
 
 require_once __DIR__ . '/../../lib/AdminGeneralNav.php';
+require_once __DIR__ . '/../../lib/AsociacionAdminNav.php';
 if (! class_exists('SegmentConfig', false)) {
     require_once __DIR__ . '/../../lib/SegmentConfig.php';
 }
 $use_admin_general_header_nav = AdminGeneralNav::useHeaderNav($role_original_layout, $role_activo_layout);
+$use_asociacion_header_nav = AsociacionAdminNav::useHeaderNav($role_original_layout, $role_activo_layout);
+$use_sector_header_nav = $use_admin_general_header_nav || $use_asociacion_header_nav;
 $is_admin_general_home_page = ($current_page === 'home' && $role_activo_layout === 'admin_general');
+$is_asociacion_home_page = ($current_page === 'home' && $role_activo_layout === 'admin_club' && $use_asociacion_header_nav);
 
 // Contar solicitudes pendientes (visible para admin_general base, incluso en modo prueba)
 $solicitudes_pendientes = 0;
@@ -149,10 +153,10 @@ $modo_prueba_badge_class = $role_badge_class[$role_activo_layout] ?? 'bg-warning
 <?php if ($is_estacion_hub_page): ?>
   <link rel="stylesheet" href="<?= htmlspecialchars($layout_asset_base) ?>/assets/css/estacion-hub.css">
 <?php endif; ?>
-<?php if ($use_admin_general_header_nav): ?>
+<?php if ($use_sector_header_nav): ?>
   <link rel="stylesheet" href="<?= htmlspecialchars($layout_asset_base) ?>/assets/css/admin-general-header-nav.css">
 <?php endif; ?>
-<?php if ($is_admin_general_home_page): ?>
+<?php if ($is_admin_general_home_page || $is_asociacion_home_page): ?>
   <link rel="stylesheet" href="<?= htmlspecialchars($layout_asset_base) ?>/assets/css/admin-general-home.css">
 <?php endif; ?>
 <?php include __DIR__ . '/partials/brand_theme.php'; ?>
@@ -199,7 +203,7 @@ if ($is_estacion_hub_page) {
     $body_page_extra .= ' estacion-hub-page';
 }
 ?>
-<body class="bg-light<?= $is_panel_control_torneos ? ' page-panel-control-torneos' : '' ?><?= $use_admin_general_header_nav ? ' admin-general-header-nav-active' : '' ?><?= $is_admin_general_home_page ? ' admin-general-home-page' : '' ?><?= htmlspecialchars($body_page_extra, ENT_QUOTES, 'UTF-8') ?>"<?= $nav_origin !== '' ? ' data-nav-origin="' . $nav_origin . '"' : '' ?>>
+<body class="bg-light<?= $is_panel_control_torneos ? ' page-panel-control-torneos' : '' ?><?= $use_sector_header_nav ? ' admin-general-header-nav-active' : '' ?><?= ($is_admin_general_home_page || $is_asociacion_home_page) ? ' admin-general-home-page' : '' ?><?= htmlspecialchars($body_page_extra, ENT_QUOTES, 'UTF-8') ?>"<?= $nav_origin !== '' ? ' data-nav-origin="' . $nav_origin . '"' : '' ?>>
   <!-- Contenedor para notificaciones toast (Push + tarjeta visual) -->
   <div id="notification-container" aria-live="polite"></div>
 
@@ -236,10 +240,10 @@ if ($is_estacion_hub_page) {
     <?php } ?>
   </div>
 
-  <div class="d-flex<?= $use_admin_general_header_nav ? ' admin-general-header-nav' : '' ?>" id="wrapper">
+  <div class="d-flex<?= $use_sector_header_nav ? ' admin-general-header-nav' : '' ?>" id="wrapper">
     
-    <!-- Sidebar (legacy: oculto para admin_general con menú header; no eliminar) -->
-    <nav id="sidebar" class="bg-dark text-white border-end shadow d-flex flex-column<?= $use_admin_general_header_nav ? ' legacy-sidebar-hidden' : '' ?>" style="height: 100vh;"<?= $use_admin_general_header_nav ? ' aria-hidden="true"' : '' ?>>
+    <!-- Sidebar (legacy: oculto con menú header; no eliminar) -->
+    <nav id="sidebar" class="bg-dark text-white border-end shadow d-flex flex-column<?= $use_sector_header_nav ? ' legacy-sidebar-hidden' : '' ?>" style="height: 100vh;"<?= $use_sector_header_nav ? ' aria-hidden="true"' : '' ?>>
       <div class="sidebar-header p-4 border-bottom">
         <h4 class="mb-0 text-center d-flex align-items-center justify-content-center flex-nowrap">
           <?= AppHelpers::appLogo('me-2', null, 35, true) ?>
@@ -593,13 +597,13 @@ if ($is_estacion_hub_page) {
       <!-- Topbar -->
       <nav class="navbar navbar-expand-lg navbar-light bg-white border-bottom shadow-sm">
         <div class="container-fluid flex-wrap">
-          <?php if (! $use_admin_general_header_nav): ?>
+          <?php if (! $use_sector_header_nav): ?>
           <button class="btn btn-outline-secondary me-3" id="menu-toggle">
             <i class="fas fa-bars"></i>
           </button>
           <?php endif; ?>
           
-          <div class="navbar-nav d-flex align-items-center flex-row<?= $use_admin_general_header_nav ? '' : ' me-auto' ?>">
+          <div class="navbar-nav d-flex align-items-center flex-row<?= $use_sector_header_nav ? '' : ' me-auto' ?>">
             <?php
             $topbar_org = $dashboard_org;
             if (!$topbar_org) {
@@ -609,28 +613,33 @@ if ($is_estacion_hub_page) {
               ? AppHelpers::imageUrl($topbar_org['logo'])
               : AppHelpers::getAppLogo();
             $topbar_nombre = htmlspecialchars($topbar_org['nombre']);
-            $topbar_product_name = $use_admin_general_header_nav
+            $topbar_product_name = $use_sector_header_nav
               ? SegmentConfig::productName()
               : $topbar_nombre;
-            $topbar_short_name = $use_admin_general_header_nav
+            $topbar_short_name = $use_sector_header_nav
               ? SegmentConfig::productShortName()
               : (strlen($topbar_nombre) > 20 ? 'Dashboard' : $topbar_nombre);
             ?>
             <a href="<?= htmlspecialchars($dashboard_href('home')) ?>" class="d-flex align-items-center text-decoration-none text-muted">
               <img src="<?= htmlspecialchars($topbar_logo_src) ?>" alt="<?= $topbar_product_name ?>" height="32" class="me-2 d-none d-md-inline-block" style="object-fit: contain;">
-              <h5 class="mb-0 d-none d-md-block"><?= htmlspecialchars($topbar_product_name) ?></h5>
-              <h6 class="mb-0 d-md-none"><?= htmlspecialchars($use_admin_general_header_nav ? $topbar_short_name : (strlen($topbar_nombre) > 20 ? 'Dashboard' : $topbar_nombre)) ?></h6>
+              <h5 class="mb-0 d-none d-md-block"><?= htmlspecialchars($use_asociacion_header_nav ? $topbar_nombre : $topbar_product_name) ?></h5>
+              <h6 class="mb-0 d-md-none"><?= htmlspecialchars($use_sector_header_nav ? ($use_asociacion_header_nav ? (strlen($topbar_nombre) > 20 ? 'Asociación' : $topbar_nombre) : $topbar_short_name) : (strlen($topbar_nombre) > 20 ? 'Dashboard' : $topbar_nombre)) ?></h6>
             </a>
             <?php if ($use_admin_general_header_nav): ?>
               <?php
               $layout_nav_action = $layout_nav_action ?? trim((string) ($_GET['action'] ?? ''));
               include __DIR__ . '/partials/admin_general_header_nav.php';
               ?>
+            <?php elseif ($use_asociacion_header_nav): ?>
+              <?php
+              $layout_nav_action = $layout_nav_action ?? trim((string) ($_GET['action'] ?? ''));
+              include __DIR__ . '/partials/asociacion_header_nav.php';
+              ?>
             <?php endif; ?>
           </div>
           
           <div class="d-flex align-items-center ms-auto">
-            <?php if ($use_admin_general_header_nav): ?>
+            <?php if ($use_sector_header_nav): ?>
             <a
               href="<?= htmlspecialchars(AppHelpers::landingUrl()) ?>"
               class="btn btn-outline-secondary btn-sm me-2"
@@ -639,7 +648,7 @@ if ($is_estacion_hub_page) {
               <i class="fas fa-globe me-1"></i><span class="d-none d-md-inline">Landing</span>
             </a>
             <?php endif; ?>
-            <?php if ($is_admin_general_base && $solicitudes_pendientes > 0 && ! $use_admin_general_header_nav): ?>
+            <?php if ($is_admin_general_base && $solicitudes_pendientes > 0 && ! $use_sector_header_nav): ?>
             <!-- Indicador de Solicitudes Pendientes -->
             <div class="me-3">
               <a href="<?= htmlspecialchars($dashboard_href('affiliate_requests')) ?>" class="btn btn-warning position-relative" title="Solicitudes de Afiliación Pendientes">
@@ -679,7 +688,7 @@ if ($is_estacion_hub_page) {
             </span>
             <?php endif; ?>
             
-            <?php if ($user['role'] === 'admin_club'): ?>
+            <?php if ($user['role'] === 'admin_club' && ! $use_asociacion_header_nav): ?>
             <?php
               $topbar_org_id = isset($admin_club_org_id) ? (int) $admin_club_org_id : (int) (Auth::getUserOrganizacionId() ?: 0);
               $topbar_org_href = $topbar_org_id > 0

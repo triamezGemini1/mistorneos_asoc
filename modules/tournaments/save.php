@@ -565,9 +565,21 @@ try {
         $stmt_update->execute($file_updates);
     }
     
-    // Redirigir con éxito a la lista de torneos
+    // Redirigir con éxito al listado del hub o legacy
     $success_msg = 'Torneo creado exitosamente';
     $_SESSION['success'] = $success_msg;
+    require_once __DIR__ . '/../../lib/AsociacionHubNavigation.php';
+    $hubReturn = AsociacionHubNavigation::redirectAfterTournamentForm($_POST);
+    if (is_string($hubReturn) && $hubReturn !== '') {
+        $_SESSION['success_msg'] = $success_msg;
+        if (ob_get_level()) {
+            ob_end_clean();
+        }
+        if (! headers_sent()) {
+            header('Location: ' . $hubReturn, true, 302);
+            exit;
+        }
+    }
     $script_path = isset($_SERVER['SCRIPT_NAME']) ? $_SERVER['SCRIPT_NAME'] : 'index.php';
     $redirect_url = $script_path . '?page=tournaments&success=' . urlencode($success_msg);
     if (ob_get_level()) ob_end_clean();

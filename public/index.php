@@ -196,6 +196,14 @@ if ($user['role'] === 'usuario' && (($user['role_original'] ?? '') !== 'admin_ge
 }
 
 // Obtener página solicitada
+if (empty($_GET['page'])) {
+    $uriPathLegacy = parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH) ?: '/';
+    $uriPathLegacy = rtrim($uriPathLegacy, '/');
+    if ($uriPathLegacy === '/asociacion_hub' || str_ends_with($uriPathLegacy, '/asociacion_hub')) {
+        $_GET['page'] = 'asociacion_hub';
+    }
+}
+
 $page = $_GET['page'] ?? 'home';
 
 // Sanitizar nombre de página (solo letras, números, guiones y barras)
@@ -523,6 +531,21 @@ if ($page === 'tournaments') {
 }
 
 if ($page === 'tournaments' && ($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'GET') {
+    require_once __DIR__ . '/../lib/AsociacionHubNavigation.php';
+    if (AsociacionHubNavigation::isHubContext($_GET)) {
+        $hubReturn = AsociacionHubNavigation::returnUrlFromRequest($_GET);
+        if (is_string($hubReturn) && $hubReturn !== '') {
+            $qs = [];
+            if (isset($_GET['success'])) {
+                $_SESSION['success_msg'] = (string) $_GET['success'];
+            }
+            if (isset($_GET['error'])) {
+                $_SESSION['error'] = (string) $_GET['error'];
+            }
+            header('Location: ' . $hubReturn);
+            exit;
+        }
+    }
     $tg_action = $_GET['action'] ?? 'index';
     if ($tg_action === '' || $tg_action === 'index' || $tg_action === 'list') {
         header('Location: index.php?page=torneo_gestion&action=index' . (isset($_GET['error']) ? '&error=' . urlencode($_GET['error']) : '') . (isset($_GET['success']) ? '&success=' . urlencode($_GET['success']) : ''));

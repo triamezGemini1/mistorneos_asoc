@@ -105,6 +105,10 @@ try {
 
     $hubNav = AsociacionHubNavigation::captureEntry($org_id);
 
+    $estadoTorneos = AsociacionHubNavigation::normalizeEstadoTorneos(
+        (string) ($_GET['estado'] ?? 'en_proceso')
+    );
+
     // 6. Preparar variables para la vista
     $viewData = [
         'org_id' => $org_id,
@@ -119,7 +123,10 @@ try {
         'es_super_admin' => $esSuperAdmin,
         'hub_origin_url' => $hubNav['origin_url'],
         'hub_origin_label' => $hubNav['origin_label'],
-        'torneos' => TorneoService::getByOrg($org_id),
+        'estado_torneos' => $estadoTorneos,
+        'torneos' => $tab === 'torneos'
+            ? TorneoService::enrichForHubAdmin(TorneoService::getByOrg($org_id, $estadoTorneos))
+            : [],
     ];
 
     // 7. Cargar vista shell + pestaña activa

@@ -47,7 +47,7 @@ return [
     ],
     'branding' => [
         'theme_css' => 'assets/css/estacion-hub.css',
-        'logo' => 'assets/logo.png',
+        'logo' => 'img/nuevaimagen1.png',
         'primary_color' => '#1a5276',
         'theme_color' => '#1a5276',
         'meta_description' => 'La Estación del Dominó — Plataforma para torneos de dominó en Venezuela. Consulta asociaciones, resultados y documentos oficiales.',

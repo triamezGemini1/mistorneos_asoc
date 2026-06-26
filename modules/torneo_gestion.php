@@ -2190,15 +2190,34 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $torneo_id = (int)($_POST['torneo_id'] ?? 0);
             ensureTournamentsLockedColumn();
             try {
+                if ($torneo_id <= 0) {
+                    throw new Exception('Torneo no válido.');
+                }
+                verificarPermisosTorneo($torneo_id, $user_id, $is_admin_general);
+                require_once __DIR__ . '/../lib/TorneoService.php';
+                $finalizeState = TorneoService::getFinalizeState($torneo_id);
+                if (! $finalizeState['puede_finalizar']) {
+                    throw new Exception('El torneo no puede finalizarse: deben completarse todas las rondas pautadas y sus resultados.');
+                }
                 if ($torneo_id > 0 && tournamentsLockedColumnExists()) {
                     $stmt = DB::pdo()->prepare("UPDATE tournaments SET locked = 1 WHERE id = ?");
                     $stmt->execute([$torneo_id]);
-                    $_SESSION['success'] = 'Torneo cerrado definitivamente. No se podrÃ¡n realizar mÃ¡s cambios.';
+                    $_SESSION['success'] = 'Torneo finalizado definitivamente. No se podrán realizar más cambios.';
                 } else {
                     $_SESSION['error'] = 'No fue posible cerrar el torneo (estructura no disponible).';
                 }
             } catch (Exception $e) {
                 $_SESSION['error'] = 'Error al cerrar el torneo: ' . $e->getMessage();
+            }
+            if (class_exists('AsociacionHubNavigation', false) === false) {
+                require_once __DIR__ . '/../lib/AsociacionHubNavigation.php';
+            }
+            if (AsociacionHubNavigation::isHubContext($_POST)) {
+                $hubReturn = AsociacionHubNavigation::returnUrlFromRequest($_POST);
+                if (is_string($hubReturn) && $hubReturn !== '') {
+                    header('Location: ' . $hubReturn);
+                    exit;
+                }
             }
             header('Location: ' . buildRedirectUrl('panel', ['torneo_id' => $torneo_id]));
             exit;

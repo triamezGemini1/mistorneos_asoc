@@ -84,30 +84,71 @@ final class AsociacionHubNavigation
         return self::captureEntry($orgId);
     }
 
-    public static function hubUrl(int $orgId, string $tab = 'info'): string
+    public static function hubUrl(int $orgId, string $tab = 'info', array $extra = []): string
     {
         if (! class_exists('AppHelpers', false)) {
             require_once __DIR__ . '/app_helpers.php';
         }
 
-        return AppHelpers::dashboard('asociacion_hub', [
+        return AppHelpers::dashboard('asociacion_hub', array_merge([
             'org_id' => $orgId,
-            'tab' => $tab,
+            'tab' => $tab !== '' ? $tab : 'info',
+        ], $extra));
+    }
+
+    public static function normalizeEstadoTorneos(?string $estado): string
+    {
+        $estado = strtolower(trim((string) $estado));
+        if ($estado === 'por_realizar') {
+            return 'pendientes';
+        }
+        if (in_array($estado, ['realizados', 'en_proceso', 'pendientes'], true)) {
+            return $estado;
+        }
+
+        return 'en_proceso';
+    }
+
+    public static function torneosListUrl(int $orgId, string $estado = 'en_proceso'): string
+    {
+        return self::hubUrl($orgId, 'torneos', [
+            'estado' => self::normalizeEstadoTorneos($estado),
         ]);
     }
 
     /**
-     * Parámetros para enlaces que salen del hub (torneos, clubes, etc.).
-     *
-     * @return array{from: string, hub_org_id: int, hub_tab: string}
+     * URL de retorno al listado de torneos del hub tras crear/editar torneo.
      */
-    public static function outboundParams(int $orgId, string $tab): array
+    public static function redirectAfterTournamentForm(?array $request = null): ?string
     {
-        return [
+        $request = $request ?? array_merge($_GET, $_POST);
+        if (! self::isHubContext($request)) {
+            return null;
+        }
+        $orgId = (int) ($request['hub_org_id'] ?? 0);
+        if ($orgId <= 0) {
+            return null;
+        }
+        $estado = (string) ($request['hub_estado'] ?? 'en_proceso');
+
+        return self::torneosListUrl($orgId, $estado);
+    }
+
+    /**
+     * @return array{from: string, hub_org_id: int, hub_tab: string, hub_estado?: string}
+     */
+    public static function outboundParams(int $orgId, string $tab, ?string $estadoTorneos = null): array
+    {
+        $out = [
             'from' => 'asociacion_hub',
             'hub_org_id' => $orgId,
             'hub_tab' => $tab !== '' ? $tab : 'info',
         ];
+        if ($tab === 'torneos') {
+            $out['hub_estado'] = self::normalizeEstadoTorneos($estadoTorneos ?? 'en_proceso');
+        }
+
+        return $out;
     }
 
     public static function isHubContext(?array $request = null): bool
@@ -132,8 +173,12 @@ final class AsociacionHubNavigation
         if ($tab === '') {
             $tab = 'info';
         }
+        $extra = [];
+        if ($tab === 'torneos' && isset($request['hub_estado'])) {
+            $extra['estado'] = self::normalizeEstadoTorneos((string) $request['hub_estado']);
+        }
 
-        return self::hubUrl($orgId, $tab);
+        return self::hubUrl($orgId, $tab, $extra);
     }
 
     public static function returnLabelFromRequest(?array $request = null): string

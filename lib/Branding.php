@@ -218,6 +218,11 @@ final class Branding
             return self::publicAssetUrl('assets/segments/' . $segmentKey . '/logo.png');
         }
 
+        $defaultLogo = $root . '/public/img/nuevaimagen1.png';
+        if (is_file($defaultLogo)) {
+            return self::publicAssetUrl('img/nuevaimagen1.png');
+        }
+
         $defaultLogo = $root . '/public/assets/logo.png';
         if (is_file($defaultLogo)) {
             return self::publicAssetUrl('assets/logo.png');
@@ -298,6 +303,12 @@ final class Branding
         if (strpos($path, 'http') === 0) {
             return $path;
         }
+        $path = ltrim($path, '/\\');
+        $root = defined('APP_ROOT') ? (string) APP_ROOT : dirname(__DIR__);
+        $publicFile = $root . '/public/' . str_replace('/', DIRECTORY_SEPARATOR, $path);
+        if (is_file($publicFile)) {
+            return self::publicAssetUrl($path);
+        }
         if (class_exists('AppHelpers', false)) {
             $url = AppHelpers::imageUrl($path);
             if ($url !== '') {
@@ -305,6 +316,6 @@ final class Branding
             }
         }
 
-        return self::publicAssetUrl(ltrim($path, '/'));
+        return self::publicAssetUrl($path);
     }
 }

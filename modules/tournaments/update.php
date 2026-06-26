@@ -342,7 +342,18 @@ try {
     }
     
     // Redirigir con �xito
-    $redirect_url = class_exists('AppHelpers') ? AppHelpers::dashboard('tournaments', ['success' => 'Torneo actualizado exitosamente']) : 'index.php?page=tournaments&success=' . urlencode('Torneo actualizado exitosamente');
+    require_once __DIR__ . '/../../lib/AsociacionHubNavigation.php';
+    $hubReturn = AsociacionHubNavigation::redirectAfterTournamentForm($_POST);
+    $success_msg = 'Torneo actualizado exitosamente';
+    if (is_string($hubReturn) && $hubReturn !== '') {
+        $_SESSION['success_msg'] = $success_msg;
+        if (ob_get_level()) {
+            ob_end_clean();
+        }
+        header('Location: ' . $hubReturn, true, 302);
+        exit;
+    }
+    $redirect_url = class_exists('AppHelpers') ? AppHelpers::dashboard('tournaments', ['success' => $success_msg]) : 'index.php?page=tournaments&success=' . urlencode($success_msg);
     if (ob_get_level()) ob_end_clean();
     header('Location: ' . $redirect_url, true, 302);
     exit;

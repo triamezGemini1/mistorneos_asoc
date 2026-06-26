@@ -24,6 +24,19 @@ $hubHref = static function (string $tabId) use ($orgId, $dashboard_href): string
 
 $listadoHref = (string) ($viewData['hub_origin_url'] ?? '');
 $listadoLabel = (string) ($viewData['hub_origin_label'] ?? 'Origen');
+$hideHubTabs = false;
+if (class_exists('Auth', false) && class_exists('AsociacionAdminNav', false) === false) {
+    require_once __DIR__ . '/../../../../lib/AsociacionAdminNav.php';
+}
+if (class_exists('Auth', false) && class_exists('AsociacionAdminNav', false)) {
+    $hubUser = Auth::user();
+    if (is_array($hubUser) && ($hubUser['role'] ?? '') === 'admin_club') {
+        $hideHubTabs = AsociacionAdminNav::useHeaderNav(
+            (string) ($hubUser['role_original'] ?? $hubUser['role'] ?? ''),
+            (string) ($hubUser['role'] ?? '')
+        );
+    }
+}
 if ($listadoHref === '') {
     $listadoHref = is_callable($dashboard_href ?? null)
         ? $dashboard_href('listado_asociaciones')
@@ -35,6 +48,7 @@ if ($listadoHref === '') {
     <div class="estacion-hub-header">
         <div class="row align-items-center">
             <div class="col">
+                <?php if (! $hideHubTabs): ?>
                 <nav aria-label="breadcrumb">
                     <ol class="breadcrumb mb-2">
                         <li class="breadcrumb-item">
@@ -43,16 +57,21 @@ if ($listadoHref === '') {
                         <li class="breadcrumb-item active" aria-current="page"><?= $nombre ?></li>
                     </ol>
                 </nav>
+                <?php endif; ?>
                 <h1 class="h3 mb-0">
                     <i class="fas fa-building me-2"></i><?= $nombre ?>
                 </h1>
+                <?php if (! $hideHubTabs): ?>
                 <p class="estacion-hub-subtitle small mt-1">Organización #<?= $orgId ?></p>
+                <?php endif; ?>
             </div>
+            <?php if (! $hideHubTabs): ?>
             <div class="col-auto">
                 <a href="<?= htmlspecialchars($listadoHref, ENT_QUOTES, 'UTF-8') ?>" class="btn btn-outline-light btn-sm">
                     <i class="fas fa-arrow-left me-1"></i>Volver a <?= htmlspecialchars($listadoLabel, ENT_QUOTES, 'UTF-8') ?>
                 </a>
             </div>
+            <?php endif; ?>
         </div>
     </div>
 
@@ -82,6 +101,7 @@ if ($listadoHref === '') {
 
     <?php if ($tabsVisibles !== []): ?>
     <div class="estacion-hub-tabs-shell">
+    <?php if (! $hideHubTabs): ?>
     <ul class="nav nav-tabs flex-nowrap overflow-auto" role="tablist">
         <?php foreach ($tabsVisibles as $tabId):
             $label = (string) ($tabs[$tabId]['label'] ?? ucfirst($tabId));
@@ -97,6 +117,7 @@ if ($listadoHref === '') {
         </li>
         <?php endforeach; ?>
     </ul>
+    <?php endif; ?>
 
     <div class="tab-content">
         <?php
