@@ -3,9 +3,9 @@ name: Despliegue de PRUEBAS (BETA)
 on:
   push:
     branches:
+      - main
       - develop
       - mistorneos_beta
-      - feature-final-unification
   workflow_dispatch:
 
 jobs:
