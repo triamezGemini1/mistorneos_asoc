@@ -279,6 +279,23 @@ class Auth {
   }
 
   /**
+   * Delegado de asociación o admin_club acotado al club operativo (sin panel admin general).
+   */
+  public static function isOperativoSoloAsociacion(): bool {
+    $u = self::user();
+    if (!$u) {
+      return false;
+    }
+    require_once __DIR__ . '/../lib/AsociacionAdminHelper.php';
+
+    return AsociacionAdminHelper::esOperativoSoloAsociacion(
+      DB::pdo(),
+      self::id(),
+      (string) ($u['role'] ?? '')
+    );
+  }
+
+  /**
    * Obtiene el club_id del usuario actual
    * @return int|null
    */

@@ -239,7 +239,14 @@ final class Context
      */
     private static function classifyOrganizacion(array $org): string
     {
-        if (self::isFederacionVenezolanaDomino((string) ($org['nombre'] ?? ''))) {
+        $rootId = 0;
+        if (class_exists('SegmentConfig', false)) {
+            $rootId = (int) SegmentConfig::organizacionRaizId();
+        }
+        if ($rootId <= 0 && class_exists('FvdConfig', false)) {
+            $rootId = (int) FvdConfig::organizacionId();
+        }
+        if ($rootId > 0 && (int) ($org['id'] ?? 0) === $rootId) {
             return self::FEDERACION;
         }
 
@@ -248,24 +255,6 @@ final class Context
         }
 
         return self::ASOCIACION;
-    }
-
-    private static function isFederacionVenezolanaDomino(string $nombre): bool
-    {
-        $normalized = self::normalizeNombre($nombre);
-
-        return str_contains($normalized, 'FEDERACION VENEZOLANA DE DOMINO');
-    }
-
-    private static function normalizeNombre(string $value): string
-    {
-        $value = trim($value);
-        $value = strtr($value, [
-            'Á' => 'A', 'É' => 'E', 'Í' => 'I', 'Ó' => 'O', 'Ú' => 'U', 'Ñ' => 'N',
-            'á' => 'a', 'é' => 'e', 'í' => 'i', 'ó' => 'o', 'ú' => 'u', 'ñ' => 'n',
-        ]);
-
-        return mb_strtoupper($value, 'UTF-8');
     }
 
     private static function organizacionesHasColumn(string $column): bool

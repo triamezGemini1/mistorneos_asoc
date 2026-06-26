@@ -30,10 +30,16 @@ $uid = (int) ($user['id'] ?? 0);
 $role = (string) ($user['role'] ?? '');
 
 $clubOperativo = AsociacionAdminHelper::clubOperativo($pdo, $uid, $role);
+$esAdminOrganizacionParticular = AsociacionAdminHelper::usuarioAdministraOrganizacionParticular($pdo, $uid);
+$orgParticular = $esAdminOrganizacionParticular
+    ? AsociacionAdminHelper::usuarioAdministraOrganizacionActiva($pdo, $uid)
+    : null;
 $entidadForzada = 0;
 
 if ($isAdminGeneral) {
     $entidadForzada = (int) ($_GET['entidad_id'] ?? 0);
+} elseif ($orgParticular !== null && (int) ($orgParticular['entidad'] ?? 0) > 0) {
+    $entidadForzada = (int) $orgParticular['entidad'];
 } elseif ($clubOperativo !== null) {
     $entidadForzada = (int) ($clubOperativo['entidad'] ?? 0);
 } elseif ($role === 'admin_club' && (int) ($user['entidad'] ?? 0) > 0) {
@@ -106,11 +112,17 @@ if ($entidadId > 0) {
         ];
         $historial = FinanzasAsociacionData::historialInscripcionesTorneoAsociacion($pdo, $torneoIdFin, $entidadId, $clubIdFin, 400);
     } else {
-        $cardAfili = FinanzasAsociacionData::totalesMovimientoConcepto($pdo, $entidadId, '(m.afiliacion + m.anualidad)');
-        $cardTras = FinanzasAsociacionData::totalesMovimientoConcepto($pdo, $entidadId, 'm.traspaso');
-        $cardCarnet = FinanzasAsociacionData::totalesMovimientoConcepto($pdo, $entidadId, 'm.carnet');
-        $cardInscr = FinanzasAsociacionData::totalesInscripcionesTorneoFvd($pdo, $entidadId, $orgFvd);
-        $historial = FinanzasAsociacionData::historialTransacciones($pdo, $entidadId, $orgFvd, 400);
+        if (!$esAdminOrganizacionParticular) {
+            $cardAfili = FinanzasAsociacionData::totalesMovimientoConcepto($pdo, $entidadId, '(m.afiliacion + m.anualidad)');
+            $cardTras = FinanzasAsociacionData::totalesMovimientoConcepto($pdo, $entidadId, 'm.traspaso');
+            $cardCarnet = FinanzasAsociacionData::totalesMovimientoConcepto($pdo, $entidadId, 'm.carnet');
+            $cardInscr = FinanzasAsociacionData::totalesInscripcionesTorneoFvd($pdo, $entidadId, $orgFvd);
+            $historial = FinanzasAsociacionData::historialTransacciones($pdo, $entidadId, $orgFvd, 400);
+        } else {
+            $orgPk = (int) ($orgParticular['id'] ?? 0);
+            $cardInscr = FinanzasAsociacionData::totalesInscripcionesOrganizacionParticular($pdo, $orgPk);
+            $historial = FinanzasAsociacionData::historialInscripcionesOrganizacionParticular($pdo, $orgPk, 400);
+        }
     }
 }
 
@@ -119,11 +131,18 @@ $fmtMoney = static function (float $n): string {
 };
 
 $urlForm = AppHelpers::url('index.php');
+if ($modoEventoMasivo && $torneoIdFin > 0 && !$esAdminOrganizacionParticular) {
+    $hrefInicioFin = AppHelpers::dashboard('asociacion_panel', ['tab' => 2, 'torneo_id' => $torneoIdFin]);
+} elseif ($isAdminGeneral || $esAdminOrganizacionParticular) {
+    $hrefInicioFin = AppHelpers::dashboard('home');
+} else {
+    $hrefInicioFin = AppHelpers::dashboard('asociacion_panel');
+}
 ?>
 <div class="container-fluid py-3">
     <nav aria-label="breadcrumb" class="mb-3">
         <ol class="breadcrumb mb-0">
-            <li class="breadcrumb-item"><a href="<?= htmlspecialchars($modoEventoMasivo && $torneoIdFin > 0 ? AppHelpers::dashboard('asociacion_panel', ['tab' => 2, 'torneo_id' => $torneoIdFin]) : AppHelpers::dashboard($isAdminGeneral ? 'home' : 'asociacion_panel')) ?>">Inicio</a></li>
+            <li class="breadcrumb-item"><a href="<?= htmlspecialchars($hrefInicioFin) ?>">Inicio</a></li>
             <li class="breadcrumb-item active" aria-current="page">Finanzas por asociación</li>
         </ol>
     </nav>
@@ -136,12 +155,14 @@ $urlForm = AppHelpers::url('index.php');
             <p class="text-muted mb-0 small">
                 <?php if ($modoEventoMasivo && $torneoNombreFin !== ''): ?>
                     Inscripciones de su asociación en <strong><?= htmlspecialchars($torneoNombreFin) ?></strong> (tabla <code>inscritos</code>). Torneo organizado por la FVD.
+                <?php elseif ($esAdminOrganizacionParticular): ?>
+                    Inscripciones en los torneos de su organización particular. No incluye solicitudes ni movimientos hacia la FVD.
                 <?php else: ?>
                     Consolidado administrativo (sin pasarelas de pago). Moneda de referencia: <strong><?= htmlspecialchars($monedaEtiqueta) ?></strong>.
                     Los importes de afiliaciones, traspasos y carnets provienen de la tabla <code>movimiento_torneo</code> cuando existe en la base de datos.
                 <?php endif; ?>
             </p>
-            <?php if ($modoEventoMasivo): ?>
+            <?php if ($modoEventoMasivo && !$esAdminOrganizacionParticular): ?>
                 <a href="<?= htmlspecialchars(AppHelpers::dashboard('asociacion_panel', ['tab' => 2, 'torneo_id' => $torneoIdFin])) ?>" class="btn btn-sm btn-outline-primary mt-2">
                     <i class="fas fa-arrow-left me-1"></i>Volver al panel
                 </a>
@@ -189,7 +210,7 @@ $urlForm = AppHelpers::url('index.php');
     <?php else: ?>
         <div class="alert alert-info shadow-sm mb-4">
             <i class="fas fa-shield-alt me-2"></i>
-            <strong>Vista restringida:</strong> solo se muestran datos de su asociación
+            <strong>Vista restringida:</strong> solo se muestran datos de su <?= $esAdminOrganizacionParticular ? 'organización particular' : 'asociación' ?>
             <?php if ($entidadNombre !== ''): ?>
                 (<strong><?= htmlspecialchars($entidadNombre) ?></strong>, entidad ID <?= (int) $entidadId ?>).
             <?php elseif ($entidadId > 0): ?>
@@ -208,7 +229,7 @@ $urlForm = AppHelpers::url('index.php');
     <?php else: ?>
 
         <div class="row g-3 mb-4">
-            <?php if (!$modoEventoMasivo): ?>
+            <?php if (!$modoEventoMasivo && !$esAdminOrganizacionParticular): ?>
             <div class="col-md-6 col-xl-3">
                 <div class="card h-100 border-0 shadow-sm border-start border-primary border-4">
                     <div class="card-body">
@@ -240,17 +261,17 @@ $urlForm = AppHelpers::url('index.php');
                 </div>
             </div>
             <?php endif; ?>
-            <div class="<?= $modoEventoMasivo ? 'col-md-12' : 'col-md-6 col-xl-3' ?>">
+            <div class="<?= ($modoEventoMasivo || $esAdminOrganizacionParticular) ? 'col-md-12' : 'col-md-6 col-xl-3' ?>">
                 <div class="card h-100 border-0 shadow-sm border-start border-success border-4">
                     <div class="card-body">
-                        <div class="text-muted small text-uppercase fw-semibold mb-1"><?= $modoEventoMasivo ? 'Inscripciones del evento (inscritos)' : 'Inscripciones (torneos FVD)' ?></div>
+                        <div class="text-muted small text-uppercase fw-semibold mb-1"><?= $modoEventoMasivo ? 'Inscripciones del evento (inscritos)' : ($esAdminOrganizacionParticular ? 'Inscripciones (mis torneos)' : 'Inscripciones (torneos FVD)') ?></div>
                         <div class="fs-5 fw-bold text-success"><?= $fmtMoney($cardInscr['recaudado']) ?> <span class="small fw-normal text-muted">recaudado</span></div>
                         <div class="fs-6 text-warning fw-bold"><?= $fmtMoney($cardInscr['pendiente']) ?> <span class="small fw-normal text-muted">pendiente</span></div>
                         <div class="small text-muted mt-2">
                             <?= (int) $cardInscr['inscripciones'] ?> inscripciones
                             <?php if ($modoEventoMasivo): ?>
                                 · <?= (int) ($cardInscr['confirmados'] ?? 0) ?> confirmados · <?= (int) ($cardInscr['pendientes_cnt'] ?? 0) ?> pendientes
-                            <?php else: ?>
+                            <?php elseif (!$esAdminOrganizacionParticular): ?>
                                 · org. <?= (int) $orgFvd ?>
                             <?php endif; ?>
                         </div>

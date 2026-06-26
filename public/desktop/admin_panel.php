@@ -2,7 +2,6 @@
 /**
  * Panel de control simplificado (Desktop): torneos, inscritos, mesas y puntajes sobre SQLite.
  */
-declare(strict_types=1);
 require_once __DIR__ . '/desktop_auth.php';
 require_once __DIR__ . '/db_local.php';
 require_once __DIR__ . '/../../desktop/core/db_bridge.php';
@@ -38,9 +37,8 @@ try {
             $ultima_ronda = (int)$stmt->fetchColumn();
             if ($ultima_ronda > 0) {
                 // Solo mesas de juego (mesa > 0); mesa 0 = bye, no cuenta como pendiente
-                $stmt = $pdo->prepare("SELECT COUNT(*) FROM (SELECT partida, mesa FROM partiresul WHERE id_torneo = ? AND partida = ? AND mesa > 0 AND (registrado = 0 OR registrado IS NULL) GROUP BY partida, mesa)");
-                $stmt->execute([$tid, $ultima_ronda]);
-                $mesas_incompletas_ultima = (int)$stmt->fetchColumn();
+                require_once __DIR__ . '/../../lib/PartiresulEstatusSql.php';
+                $mesas_incompletas_ultima = PartiresulEstatusSql::contarMesasIncompletas($pdo, $tid, $ultima_ronda);
             }
         }
         // Inscripciones: individual → bloqueado al iniciar 2ª ronda; equipos → bloqueado al iniciar torneo (1ª ronda generada)
@@ -54,8 +52,16 @@ try {
         ];
     }
     if ($tabla_partiresul) {
-        $stmt = $pdo->query("SELECT COUNT(*) FROM (SELECT id_torneo, partida, mesa FROM partiresul WHERE mesa > 0 AND (registrado = 0 OR registrado IS NULL) GROUP BY id_torneo, partida, mesa)");
-        $mesas_pendientes = (int) $stmt->fetchColumn();
+        require_once __DIR__ . '/../../lib/PartiresulEstatusSql.php';
+        $mesas_pendientes = 0;
+        $stTorneos = $pdo->query('SELECT DISTINCT id_torneo, partida FROM partiresul WHERE CAST(mesa AS SIGNED) > 0');
+        while ($rowT = $stTorneos->fetch(PDO::FETCH_ASSOC)) {
+            $mesas_pendientes += PartiresulEstatusSql::contarMesasIncompletas(
+                $pdo,
+                (int) ($rowT['id_torneo'] ?? 0),
+                (int) ($rowT['partida'] ?? 0)
+            );
+        }
     }
 } catch (Throwable $e) {
 }

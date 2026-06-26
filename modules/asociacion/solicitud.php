@@ -17,13 +17,20 @@ require_once __DIR__ . '/../../lib/app_helpers.php';
 
 Auth::requireRole(['admin_general', 'admin_torneo', 'admin_club']);
 
+$pdo = DB::pdo();
+
+if (AsociacionAdminHelper::usuarioAdministraOrganizacionParticular($pdo, (int) Auth::id())) {
+    header('Location: ' . AppHelpers::dashboard('home', [
+        'error' => 'Las solicitudes a la FVD no aplican a organizaciones particulares.',
+    ]));
+    exit;
+}
+
 if (!Auth::isOperativoSoloAsociacion()) {
     http_response_code(403);
     echo '<div class="alert alert-danger m-4">Acceso restringido al administrador operativo de asociación.</div>';
     return;
 }
-
-$pdo = DB::pdo();
 $club = Auth::clubOperativoAsociacion();
 if ($club === null) {
     echo '<div class="alert alert-warning m-4">No se encontró la asociación asignada a su usuario.</div>';

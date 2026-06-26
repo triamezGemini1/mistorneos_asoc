@@ -29,10 +29,10 @@ final class PartiresulEstatusSql
                 return self::$numeric;
             }
             $t = strtolower((string) $row['Type']);
-            if (str_starts_with($t, 'enum')
-                || str_starts_with($t, 'varchar')
-                || str_starts_with($t, 'char')
-                || str_starts_with($t, 'text')) {
+            if (self::strStartsWith($t, 'enum')
+                || self::strStartsWith($t, 'varchar')
+                || self::strStartsWith($t, 'char')
+                || self::strStartsWith($t, 'text')) {
                 self::$numeric = false;
             }
         } catch (Throwable $e) {
@@ -139,6 +139,43 @@ final class PartiresulEstatusSql
         $c = $alias === '' ? 'registrado' : $alias . '.registrado';
 
         return "(COALESCE(TRIM(CAST({$c} AS CHAR)), '') <> '1')";
+    }
+
+    /**
+     * Expresión SQL (en SELECT … GROUP BY mesa): 1 si todos los jugadores de la mesa tienen registrado=1.
+     */
+    public static function exprMesaTodosJugadoresRegistrados(string $alias = 'pr'): string
+    {
+        if ($alias !== '' && !self::aliasTablaValido($alias)) {
+            throw new InvalidArgumentException('exprMesaTodosJugadoresRegistrados: alias inválido');
+        }
+        $w = self::whereRegistradoUno($alias);
+
+        return "MIN(CASE WHEN {$w} THEN 1 ELSE 0 END)";
+    }
+
+    /**
+     * Mesas de la ronda donde falta al menos un jugador con registrado=1 (misma regla que el contador «Faltan»).
+     */
+    public static function contarMesasIncompletas(PDO $pdo, int $torneoId, int $ronda): int
+    {
+        $exprOk = self::exprMesaTodosJugadoresRegistrados('pr');
+        $sql = "SELECT COUNT(*) FROM (
+            SELECT pr.mesa
+            FROM partiresul pr
+            WHERE pr.id_torneo = ? AND pr.partida = ? AND CAST(pr.mesa AS SIGNED) > 0
+            GROUP BY pr.mesa
+            HAVING {$exprOk} = 0
+        ) mesas_pendientes";
+        $stmt = $pdo->prepare($sql);
+        $stmt->execute([$torneoId, $ronda]);
+
+        return (int) $stmt->fetchColumn();
+    }
+
+    private static function strStartsWith(string $haystack, string $needle): bool
+    {
+        return $needle === '' || strpos($haystack, $needle) === 0;
     }
 
     /**

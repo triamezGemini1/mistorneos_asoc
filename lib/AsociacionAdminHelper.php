@@ -7,7 +7,8 @@ require_once __DIR__ . '/OrganizacionDashboardStats.php';
 require_once __DIR__ . '/FvdConfig.php';
 
 /**
- * Administrador operativo de una asociación (club estatal) — delegado_user_id o admin_club acotado al club.
+ * Administrador operativo de asociación territorial (delegado o admin_club sin org propia).
+ * El admin de una organización (asociación o particular, admin_user_id) tiene panel completo.
  */
 final class AsociacionAdminHelper
 {
@@ -38,6 +39,7 @@ final class AsociacionAdminHelper
 
     /** Páginas del dashboard accesibles (el resto redirige al panel). */
     public const PAGINAS_OPERATIVO = [
+        'asociacion_hub',
         'asociacion_panel',
         'asociacion/torneo_ver',
         'asociacion/solicitud',
@@ -68,11 +70,89 @@ final class AsociacionAdminHelper
     }
 
     /**
+     * Responsable de una fila en organizaciones (admin_user_id), asociación o particular.
+     */
+    public static function usuarioAdministraOrganizacionActiva(PDO $pdo, int $userId): ?array
+    {
+        if ($userId <= 0) {
+            return null;
+        }
+        try {
+            $cols = 'id, nombre, entidad, estatus';
+            if (OrganizacionDashboardStats::sqlWhereSoloParticulares($pdo, 'o') !== '1=0') {
+                $cols .= ', tipo_org';
+            }
+            if ((bool) $pdo->query("SHOW COLUMNS FROM organizaciones LIKE 'cod_org'")->fetch(PDO::FETCH_ASSOC)) {
+                $cols .= ', cod_org';
+            }
+            $st = $pdo->prepare("SELECT {$cols} FROM organizaciones WHERE admin_user_id = ? AND estatus = 1 ORDER BY id ASC LIMIT 1");
+            $st->execute([$userId]);
+            $row = $st->fetch(PDO::FETCH_ASSOC);
+
+            return is_array($row) && $row !== [] ? $row : null;
+        } catch (Throwable $e) {
+            return null;
+        }
+    }
+
+    public static function usuarioAdministraOrganizacionParticular(PDO $pdo, int $userId): bool
+    {
+        $org = self::usuarioAdministraOrganizacionActiva($pdo, $userId);
+
+        return $org !== null && OrganizacionDashboardStats::isOrganizacionParticular($org);
+    }
+
+    /**
+     * Panel asociacion_panel y solicitudes movimiento_torneo → FVD (no aplica a org. particulares).
+     */
+    public static function usaPanelAsociacionFvd(PDO $pdo, int $userId, string $role): bool
+    {
+        if ($userId <= 0) {
+            return false;
+        }
+        if (self::usuarioAdministraOrganizacionParticular($pdo, $userId)) {
+            return false;
+        }
+
+        return self::esOperativoSoloAsociacion($pdo, $userId, $role);
+    }
+
+    /**
+     * Crear/editar torneos (page=tournaments): admin general, admin torneo, responsable de organización
+     * (asociación o particular). No aplica al delegado operativo acotado sin org propia.
+     */
+    public static function puedeCrearYAdministrarTorneos(PDO $pdo, int $userId, string $role): bool
+    {
+        if ($userId <= 0) {
+            return false;
+        }
+        if ($role === 'admin_general') {
+            return true;
+        }
+        if (self::usuarioAdministraOrganizacionActiva($pdo, $userId) !== null) {
+            return true;
+        }
+        if ($role === 'admin_torneo') {
+            return true;
+        }
+        if ($role === 'admin_club' && self::clubOperativo($pdo, $userId, $role) !== null) {
+            return true;
+        }
+
+        return false;
+    }
+
+    /**
      * Usuario con alcance solo operativo de asociación (no administra torneos ni crea entidades).
+     * No aplica al admin_user_id de una organización (particular o asociación territorial).
      */
     public static function esOperativoSoloAsociacion(PDO $pdo, int $userId, string $role): bool
     {
         if ($userId <= 0 || $role === 'admin_general') {
+            return false;
+        }
+        // Responsable de organización (asociación o particular): panel operativo FVD no aplica.
+        if (self::usuarioAdministraOrganizacionActiva($pdo, $userId) !== null) {
             return false;
         }
         if (self::usuarioEsDelegadoAsociacion($pdo, $userId)) {

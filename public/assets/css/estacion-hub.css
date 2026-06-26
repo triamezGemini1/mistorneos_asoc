@@ -1,0 +1,339 @@
+/**
+ * La Estación del Dominó — Hub de Asociaciones
+ * Paleta: azul, blanco, rojo, negro
+ */
+.estacion-hub-page {
+  --eh-azul: #1a365d;
+  --eh-azul-medio: #2d4a6b;
+  --eh-azul-claro: #e8eef5;
+  --eh-blanco: #ffffff;
+  --eh-rojo: #c41e3a;
+  --eh-rojo-hover: #9e1830;
+  --eh-negro: #111827;
+  --eh-texto: #1f2937;
+  --eh-texto-muted: #4b5563;
+  --eh-borde: #cbd5e1;
+  --eh-tabs-fondo: #3085fc;
+}
+
+.estacion-hub-page main.container-fluid {
+  background: var(--eh-blanco);
+}
+
+/* —— Encabezado de página —— */
+.estacion-hub-page .estacion-hub-header {
+  background: linear-gradient(120deg, var(--eh-azul) 0%, var(--eh-azul-medio) 55%, var(--eh-negro) 100%);
+  color: var(--eh-blanco);
+  border-radius: 12px;
+  padding: 1.25rem 1.5rem;
+  margin-bottom: 1.25rem;
+  border-left: 5px solid var(--eh-rojo);
+  box-shadow: 0 4px 14px rgba(17, 24, 39, 0.15);
+}
+
+.estacion-hub-page .estacion-hub-header h1,
+.estacion-hub-page .estacion-hub-header .h3 {
+  color: var(--eh-blanco);
+  margin-bottom: 0.25rem;
+}
+
+.estacion-hub-page .estacion-hub-header .estacion-hub-subtitle,
+.estacion-hub-page .estacion-hub-header p {
+  color: rgba(255, 255, 255, 0.88);
+  margin-bottom: 0;
+}
+
+.estacion-hub-page .estacion-hub-header .breadcrumb {
+  margin-bottom: 0.5rem;
+}
+
+.estacion-hub-page .estacion-hub-header .breadcrumb-item,
+.estacion-hub-page .estacion-hub-header .breadcrumb-item a {
+  color: rgba(255, 255, 255, 0.85);
+}
+
+.estacion-hub-page .estacion-hub-header .breadcrumb-item a:hover {
+  color: var(--eh-blanco);
+}
+
+.estacion-hub-page .estacion-hub-header .breadcrumb-item.active {
+  color: var(--eh-blanco);
+}
+
+.estacion-hub-page .estacion-hub-header .btn-outline-light {
+  border-color: rgba(255, 255, 255, 0.65);
+  color: var(--eh-blanco);
+}
+
+.estacion-hub-page .estacion-hub-header .btn-outline-light:hover {
+  background: var(--eh-rojo);
+  border-color: var(--eh-rojo);
+  color: var(--eh-blanco);
+}
+
+/* —— Pestañas + contenedor —— */
+.estacion-hub-page .estacion-hub-tabs-shell {
+  background: var(--eh-tabs-fondo);
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: 0 4px 14px rgba(48, 133, 252, 0.25);
+}
+
+.estacion-hub-page .nav-tabs {
+  background: var(--eh-tabs-fondo);
+  border: none;
+  border-bottom: 2px solid rgba(0, 0, 0, 0.12);
+  border-radius: 0;
+  padding: 0.5rem 0.5rem 0;
+  margin-bottom: 0;
+  gap: 0.25rem;
+}
+
+.estacion-hub-page .nav-tabs .nav-link {
+  color: var(--eh-negro);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 8px 8px 0 0;
+  font-weight: 600;
+  padding: 0.55rem 1rem;
+  white-space: nowrap;
+}
+
+.estacion-hub-page .nav-tabs .nav-link:hover {
+  color: var(--eh-negro);
+  background: rgba(255, 255, 255, 0.55);
+  border-color: rgba(0, 0, 0, 0.08);
+}
+
+.estacion-hub-page .nav-tabs .nav-link.active {
+  color: var(--eh-negro);
+  background: #37c569;
+  border-color: rgba(0, 0, 0, 0.08) rgba(0, 0, 0, 0.08) #37c569;
+  border-bottom: 3px solid var(--eh-rojo);
+  font-weight: 700;
+}
+
+.estacion-hub-page .estacion-hub-tabs-shell .tab-content {
+  background: var(--eh-tabs-fondo);
+  padding: 1rem;
+}
+
+/* —— Tarjetas —— */
+.estacion-hub-page .card {
+  border: 1px solid var(--eh-borde);
+  border-top: 4px solid var(--eh-azul);
+  border-radius: 10px;
+  overflow: hidden;
+  background: var(--eh-blanco);
+}
+
+.estacion-hub-page .card-header {
+  background: var(--eh-azul-claro);
+  color: var(--eh-negro);
+  border-bottom: 2px solid var(--eh-rojo);
+  font-weight: 600;
+}
+
+.estacion-hub-page .card-header .h5,
+.estacion-hub-page .card-header h2 {
+  color: var(--eh-azul);
+}
+
+.estacion-hub-page .card-body {
+  color: var(--eh-texto);
+}
+
+.estacion-hub-page .card-body dt {
+  color: var(--eh-azul);
+  font-weight: 600;
+}
+
+.estacion-hub-page .card-body dd {
+  color: var(--eh-texto);
+}
+
+/* —— Tablas —— */
+.estacion-hub-page .table-responsive {
+  border-radius: 0 0 8px 8px;
+}
+
+.estacion-hub-page .table {
+  color: var(--eh-texto);
+  margin-bottom: 0;
+}
+
+.estacion-hub-page .table thead th,
+.estacion-hub-page .table-light th {
+  background: var(--eh-azul) !important;
+  color: var(--eh-blanco) !important;
+  border-color: var(--eh-azul-medio) !important;
+  font-weight: 600;
+  font-size: 0.875rem;
+  vertical-align: middle;
+}
+
+.estacion-hub-page .table-striped > tbody > tr:nth-of-type(odd) > * {
+  background-color: var(--eh-azul-claro);
+}
+
+.estacion-hub-page .table-hover > tbody > tr:hover > * {
+  background-color: rgba(26, 54, 93, 0.12);
+}
+
+.estacion-hub-page .table tbody td {
+  border-color: var(--eh-borde);
+  vertical-align: middle;
+}
+
+.estacion-hub-page .table tbody td strong {
+  color: var(--eh-negro);
+}
+
+/* —— Badges —— */
+.estacion-hub-page .badge.bg-info {
+  background-color: var(--eh-azul-medio) !important;
+  color: var(--eh-blanco);
+}
+
+.estacion-hub-page .badge.bg-success {
+  background-color: var(--eh-azul) !important;
+  color: var(--eh-blanco);
+}
+
+.estacion-hub-page .badge.bg-secondary {
+  background-color: var(--eh-negro) !important;
+  color: var(--eh-blanco);
+}
+
+.estacion-hub-page .badge.bg-primary {
+  background-color: var(--eh-rojo) !important;
+  color: var(--eh-blanco);
+}
+
+/* —— Botones —— */
+.estacion-hub-page .btn-primary {
+  background-color: var(--eh-azul);
+  border-color: var(--eh-azul);
+  color: var(--eh-blanco);
+}
+
+.estacion-hub-page .btn-primary:hover,
+.estacion-hub-page .btn-primary:focus {
+  background-color: var(--eh-azul-medio);
+  border-color: var(--eh-azul-medio);
+  color: var(--eh-blanco);
+}
+
+.estacion-hub-page .btn-outline-primary {
+  color: var(--eh-azul);
+  border-color: var(--eh-azul);
+}
+
+.estacion-hub-page .btn-outline-primary:hover {
+  background-color: var(--eh-azul);
+  border-color: var(--eh-azul);
+  color: var(--eh-blanco);
+}
+
+.estacion-hub-page .btn-outline-success {
+  color: var(--eh-azul);
+  border-color: var(--eh-azul);
+}
+
+.estacion-hub-page .btn-outline-success:hover {
+  background-color: var(--eh-azul);
+  border-color: var(--eh-azul);
+  color: var(--eh-blanco);
+}
+
+.estacion-hub-page .btn-outline-secondary {
+  color: var(--eh-negro);
+  border-color: var(--eh-negro);
+}
+
+.estacion-hub-page .btn-outline-secondary:hover {
+  background-color: var(--eh-negro);
+  color: var(--eh-blanco);
+}
+
+.estacion-hub-page .btn-outline-danger {
+  color: var(--eh-rojo);
+  border-color: var(--eh-rojo);
+}
+
+.estacion-hub-page .btn-outline-danger:hover {
+  background-color: var(--eh-rojo);
+  border-color: var(--eh-rojo);
+  color: var(--eh-blanco);
+}
+
+/* —— Alertas —— */
+.estacion-hub-page .alert-danger {
+  background-color: #fef2f2;
+  border-color: var(--eh-rojo);
+  color: var(--eh-rojo-hover);
+}
+
+.estacion-hub-page .alert-warning {
+  background-color: #fffbeb;
+  border-color: #d97706;
+  color: var(--eh-negro);
+}
+
+.estacion-hub-page .alert-info {
+  background-color: var(--eh-azul-claro);
+  border-color: var(--eh-azul);
+  color: var(--eh-azul);
+}
+
+/* —— Texto auxiliar —— */
+.estacion-hub-page .text-muted {
+  color: var(--eh-texto-muted) !important;
+}
+
+.estacion-hub-page .text-primary {
+  color: var(--eh-azul) !important;
+}
+
+.estacion-hub-page .estacion-empty-state {
+  padding: 2.5rem 1.5rem;
+  text-align: center;
+  color: var(--eh-texto-muted);
+}
+
+.estacion-hub-page .estacion-empty-state i {
+  color: var(--eh-azul-medio);
+  opacity: 0.65;
+}
+
+.estacion-hub-page .estacion-count-badge {
+  background: var(--eh-negro);
+  color: var(--eh-blanco);
+  font-weight: 600;
+}
+
+/* —— Breadcrumb fuera del header (fallback) —— */
+.estacion-hub-page .breadcrumb a {
+  color: var(--eh-azul);
+  text-decoration: none;
+}
+
+.estacion-hub-page .breadcrumb a:hover {
+  color: var(--eh-rojo);
+}
+
+@media (max-width: 576px) {
+  .estacion-hub-page .estacion-hub-header {
+    padding: 1rem;
+  }
+
+  .estacion-hub-page .nav-tabs .nav-link {
+    font-size: 0.875rem;
+    padding: 0.45rem 0.65rem;
+  }
+
+  .estacion-hub-page .table thead th,
+  .estacion-hub-page .table tbody td {
+    font-size: 0.8125rem;
+  }
+}

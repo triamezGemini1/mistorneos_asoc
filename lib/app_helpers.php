@@ -177,8 +177,19 @@ class AppHelpers {
         return self::url('index.php', $params);
     }
 
+    /** Landing pública principal (SPA). */
+    public static function landingUrl(): string
+    {
+        return self::url('landing-spa.php');
+    }
+
     /** URL segura a torneo_gestion (siempre vía public/index.php; evita enlaces rotos a modules/). */
     public static function torneoGestionUrl(string $action, int $torneoId, array $extra = []): string {
+        if (! class_exists('AsociacionHubNavigation', false)) {
+            require_once __DIR__ . '/AsociacionHubNavigation.php';
+        }
+        $extra = AsociacionHubNavigation::mergeTorneoGestionParams($extra);
+
         return self::url('index.php', array_merge([
             'page' => 'torneo_gestion',
             'action' => $action,
@@ -191,6 +202,14 @@ class AppHelpers {
      */
     public static function urlPanelTorneoReturn(int $torneoId = 0, array $extra = []): string
     {
+        if (! class_exists('AsociacionHubNavigation', false)) {
+            require_once __DIR__ . '/AsociacionHubNavigation.php';
+        }
+        $hubReturn = AsociacionHubNavigation::returnUrlFromRequest();
+        if ($hubReturn !== null) {
+            return $hubReturn;
+        }
+
         if (class_exists('Auth') && Auth::isOperativoSoloAsociacion()) {
             $params = $extra;
             if ($torneoId > 0) {
@@ -322,6 +341,9 @@ class AppHelpers {
      * Prioridad: public/assets/logo.png (estático) si existe; si no, view_image.php con lib/Assets/mislogos/logo4.png.
      */
     public static function getAppLogo(): string {
+        if (class_exists('Branding', false)) {
+            return Branding::logoUrl();
+        }
         $publicLogo = __DIR__ . '/../public/assets/logo.png';
         if (is_file($publicLogo)) {
             return rtrim(self::getPublicUrl(), '/') . '/assets/logo.png';
@@ -332,15 +354,19 @@ class AppHelpers {
     /**
      * Genera el HTML para mostrar el logo de la aplicación
      * @param string $class Clases CSS adicionales
-     * @param string $alt Texto alternativo
+     * @param string|null $alt Texto alternativo (null = nombre del sitio según segmento)
      * @param int $height Altura en píxeles (por defecto 40)
      * @param bool $priority Si true, añade fetchpriority="high" para LCP (logo principal del dashboard)
      */
-    public static function appLogo(string $class = '', string $alt = 'La Estación del Dominó', int $height = 40, bool $priority = false): string {
+    public static function appLogo(string $class = '', $alt = null, int $height = 40, bool $priority = false): string {
+        if (class_exists('Branding', false)) {
+            return Branding::logoHtml($class, $alt, $height, $priority);
+        }
         $logo_url = self::getAppLogo();
+        $altText = ($alt !== null && $alt !== '') ? $alt : (class_exists('Branding', false) ? Branding::siteName() : 'La Estación del Dominó');
         $class_attr = $class ? ' class="' . htmlspecialchars($class) . '"' : '';
         $priority_attr = $priority ? ' fetchpriority="high"' : '';
-        return '<img src="' . htmlspecialchars($logo_url) . '" alt="' . htmlspecialchars($alt) . '" height="' . $height . '"' . $class_attr . $priority_attr . '>';
+        return '<img src="' . htmlspecialchars($logo_url) . '" alt="' . htmlspecialchars($altText) . '" height="' . $height . '"' . $class_attr . $priority_attr . '>';
     }
 
     /**

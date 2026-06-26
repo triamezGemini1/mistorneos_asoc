@@ -100,7 +100,48 @@ function generarRonda($torneo_id, $user_id, $is_admin_general, array $opciones =
 /**
  * Actualizar estadísticas de todos los inscritos basándose en PartiResul
  */
-function actualizarEstadisticasInscritos($torneo_id) {
+function contarMesasIncompletasDesktop($torneo_id, $ronda) {
+    $pdo = DB::pdo();
+    $entP = logica_torneo_where_entidad('pr');
+    require_once __DIR__ . '/../../lib/PartiresulEstatusSql.php';
+    $exprOk = \PartiresulEstatusSql::exprMesaTodosJugadoresRegistrados('pr');
+    $st = $pdo->prepare(
+        "SELECT COUNT(*) FROM (
+            SELECT pr.mesa
+            FROM partiresul pr
+            WHERE pr.id_torneo = ? AND pr.partida = ? AND CAST(pr.mesa AS SIGNED) > 0" . $entP['sql'] . "
+            GROUP BY pr.mesa
+            HAVING {$exprOk} = 0
+        ) mesas_pendientes"
+    );
+    $st->execute(array_merge([$torneo_id, $ronda], $entP['bind']));
+
+    return (int) ($st->fetchColumn() ?: 0);
+}
+
+function actualizarClasificacionDesdePartiresul($torneo_id) {
+    $torneo_id = (int) $torneo_id;
+    if ($torneo_id <= 0) {
+        return;
+    }
+    actualizarEstadisticasInscritos($torneo_id, true);
+}
+
+function recalcularClasificacionSiRondaCompleta($torneo_id, $ronda) {
+    $torneo_id = (int) $torneo_id;
+    $ronda = (int) $ronda;
+    if ($torneo_id <= 0 || $ronda <= 0) {
+        return false;
+    }
+    if (contarMesasIncompletasDesktop($torneo_id, $ronda) > 0) {
+        return false;
+    }
+    actualizarClasificacionDesdePartiresul($torneo_id);
+
+    return true;
+}
+
+function actualizarEstadisticasInscritos($torneo_id, $recalcularClasificacion = true) {
     $pdo = DB::pdo();
     $stmt = $pdo->prepare("SELECT puntos FROM tournaments WHERE id = ?");
     $stmt->execute([$torneo_id]);
@@ -197,7 +238,9 @@ function actualizarEstadisticasInscritos($torneo_id) {
         $stmt->execute(array_merge([$totalGanados, $totalPerdidos, $totalEfectividad, $totalPuntos, $totalSancion, $totalChancletas, $totalZapatos, $ultimaTarjeta, $torneo_id, $idUsuario], $entU['bind']));
     }
 
-    recalcularClasificacionEquiposYJugadores($torneo_id);
+    if ($recalcularClasificacion) {
+        recalcularClasificacionEquiposYJugadores($torneo_id);
+    }
 }
 
 function recalcularRankingSegunModalidad($torneo_id) {

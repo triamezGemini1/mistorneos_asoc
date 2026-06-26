@@ -7,6 +7,7 @@
 require_once __DIR__ . '/../config/bootstrap.php';
 require_once __DIR__ . '/../config/db_config.php';
 require_once __DIR__ . '/../lib/app_helpers.php';
+require_once __DIR__ . '/includes/branding_init.php';
 
 // Función helper para construir URL de imagen
 function getImageUrl($ruta_imagen) {
@@ -145,7 +146,7 @@ $logo_url = AppHelpers::getAppLogo();
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Galería de Fotos - La Estación del Dominó</title>
+    <title><?= htmlspecialchars(Branding::pageTitle('Galería de Fotos')) ?></title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
@@ -230,7 +231,7 @@ $logo_url = AppHelpers::getAppLogo();
         <div class="container">
             <a class="navbar-brand d-flex align-items-center" href="<?= $app_url ?>/public/landing.php">
                 <img src="<?= htmlspecialchars($logo_url) ?>" alt="Logo" style="height: 40px; width: auto;" class="me-2">
-                <span class="fw-bold">La Estación del Dominó</span>
+                <span class="fw-bold"><?= htmlspecialchars($brand_name) ?></span>
             </a>
             <div class="navbar-nav ms-auto">
                 <a class="nav-link" href="<?= $app_url ?>/public/landing.php">

@@ -8,6 +8,7 @@ require_once __DIR__ . '/../config/db_config.php';
 require_once __DIR__ . '/../config/auth_service.php';
 require_once __DIR__ . '/../config/auth.php';
 require_once __DIR__ . '/../config/csrf.php';
+require_once __DIR__ . '/includes/branding_init.php';
 AuthService::requireAuth();
 
 $user = $_SESSION['user'];
@@ -281,7 +282,7 @@ $tiene_telegram = !empty($telegram_chat_id_actual);
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Portal del Jugador - La Estación del Dominó</title>
+    <title><?= htmlspecialchars(Branding::pageTitle('Portal del Jugador')) ?></title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet" media="print" onload="this.media='all'">
     <noscript><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet"></noscript>
@@ -648,7 +649,7 @@ $tiene_telegram = !empty($telegram_chat_id_actual);
                 <?php 
                 $logo_url = AppHelpers::getAppLogo();
                 ?>
-                <img src="<?= htmlspecialchars($logo_url) ?>" alt="La Estación del Dominó" class="me-2" style="height: 35px;">
+                <img src="<?= htmlspecialchars($logo_url) ?>" alt="<?= htmlspecialchars($brand_name) ?>" class="me-2" style="height: 35px;">
                 Portal del Jugador
             </a>
             <div class="d-flex align-items-center">
@@ -906,7 +907,7 @@ $tiene_telegram = !empty($telegram_chat_id_actual);
                                                 <?php 
                                                 $logo_url = AppHelpers::getAppLogo();
                                                 ?>
-                                                <img src="<?= htmlspecialchars($logo_url) ?>" alt="La Estación del Dominó" style="height: 40px;">
+                                                <img src="<?= htmlspecialchars($logo_url) ?>" alt="<?= htmlspecialchars($brand_name) ?>" style="height: 40px;">
                                             </div>
                                             <h6 class="mb-2"><?= htmlspecialchars($c['nombre']) ?></h6>
                                         <?php if (!empty($c['delegado'])): ?>
@@ -1152,7 +1153,7 @@ $tiene_telegram = !empty($telegram_chat_id_actual);
                                          alt="QR Code" style="border-radius: 8px; background: white; padding: 5px;">
                                 </div>
                                 <div class="mt-2 text-white-50" style="font-size: 0.75rem;">
-                                    La Estación del Dominó
+                                    <?= htmlspecialchars($brand_name) ?>
                                 </div>
                             </div>
                         </div>

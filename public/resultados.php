@@ -12,11 +12,40 @@ require_once __DIR__ . '/../config/auth.php';
 require_once __DIR__ . '/../lib/InscritosPartiresulHelper.php';
 require_once __DIR__ . '/../lib/app_helpers.php';
 require_once __DIR__ . '/../lib/Pagination.php';
+require_once __DIR__ . '/../lib/OrganizacionDashboardStats.php';
+require_once __DIR__ . '/../lib/ResultadosAsociacionContext.php';
+require_once __DIR__ . '/includes/branding_init.php';
 
 $pdo = DB::pdo();
 $base_url = app_base_url();
 $user = Auth::user();
 $is_logged_in = !empty($user);
+$orgCtx = ResultadosAsociacionContext::fromGet($pdo);
+$organizacion_id = $orgCtx->organizacionId;
+if ($organizacion_id <= 0) {
+    $role = is_array($user) ? (string) ($user['role'] ?? '') : '';
+    $rolesAdmin = ['admin_general', 'admin_club', 'admin_torneo', 'operador'];
+    if (! in_array($role, $rolesAdmin, true)) {
+        $landingUrl = rtrim(class_exists('AppHelpers') ? AppHelpers::getPublicUrl() : (rtrim(app_base_url(), '/') . '/public'), '/') . '/landing-spa.php#asociaciones-afiliadas';
+        header('Location: ' . $landingUrl, true, 302);
+        exit;
+    }
+}
+[$orgWhereSql, $orgWhereParams] = $orgCtx->tournamentWhere();
+$orgWhereClause = $orgWhereSql !== '' ? ' AND (' . $orgWhereSql . ')' : '';
+$volver_eventos_url = $orgCtx->urlEventos();
+$volver_hub_url = $orgCtx->urlHubAfiliado();
+$solo_torneos_realizados = $organizacion_id > 0;
+$extraWhereRealizados = $solo_torneos_realizados ? ' AND DATE(t.fechator) < CURDATE()' : '';
+$has_publicar_landing = false;
+try {
+    $has_publicar_landing = (bool) $pdo->query("SHOW COLUMNS FROM tournaments LIKE 'publicar_landing'")->fetch(PDO::FETCH_ASSOC);
+} catch (Throwable $ignored) {
+    $has_publicar_landing = false;
+}
+if ($solo_torneos_realizados && $has_publicar_landing) {
+    $extraWhereRealizados .= ' AND (t.publicar_landing = 1 OR t.publicar_landing IS NULL)';
+}
 $has_cod_org = false;
 try {
     $has_cod_org = (bool)$pdo->query("SHOW COLUMNS FROM organizaciones LIKE 'cod_org'")->fetch(PDO::FETCH_ASSOC);
@@ -34,11 +63,12 @@ $per_page = isset($_GET['per_page']) ? max(10, min(100, (int)$_GET['per_page']))
 // Obtener total de torneos
 $total_torneos = 0;
 try {
-    $stmt = $pdo->query("
+    $stmt = $pdo->prepare("
         SELECT COUNT(*) 
         FROM tournaments t
-        WHERE t.estatus = 1
+        WHERE t.estatus = 1{$orgWhereClause}{$extraWhereRealizados}
     ");
+    $stmt->execute($orgWhereParams);
     $total_torneos = (int)$stmt->fetchColumn();
 } catch (Exception $e) {
     error_log("Error contando torneos: " . $e->getMessage());
@@ -66,11 +96,11 @@ try {
             (SELECT COUNT(*) FROM club_photos WHERE torneo_id = t.id) as total_fotos
         FROM tournaments t
         {$org_join}
-        WHERE t.estatus = 1
+        WHERE t.estatus = 1{$orgWhereClause}{$extraWhereRealizados}
         ORDER BY t.fechator DESC
         LIMIT {$pagination->getLimit()} OFFSET {$pagination->getOffset()}
     ");
-    $stmt->execute();
+    $stmt->execute($orgWhereParams);
     $torneos = $stmt->fetchAll(PDO::FETCH_ASSOC);
 } catch (Exception $e) {
     error_log("Error obteniendo torneos: " . $e->getMessage());
@@ -87,7 +117,7 @@ $clases = [1 => 'Abierto', 2 => 'Por Categorías'];
     <meta name="theme-color" content="#1a365d">
     
     <!-- SEO Meta Tags -->
-    <title>Resultados de Torneos de Dominó - La Estación del Dominó</title>
+    <title><?= htmlspecialchars(Branding::pageTitle($solo_torneos_realizados ? 'Torneos realizados' : 'Resultados de Torneos de Dominó')) ?></title>
     <meta name="description" content="Consulta los resultados de todos los torneos de dominó realizados. Clasificaciones, estadísticas y fotos de eventos en Venezuela.">
     <meta name="keywords" content="resultados dominó, torneos dominó venezuela, clasificaciones dominó, estadísticas torneos">
     <meta name="robots" content="index, follow">
@@ -95,13 +125,13 @@ $clases = [1 => 'Abierto', 2 => 'Por Categorías'];
     <!-- Open Graph -->
     <meta property="og:type" content="website">
     <meta property="og:url" content="<?= htmlspecialchars(app_base_url() . '/public/resultados.php') ?>">
-    <meta property="og:title" content="Resultados de Torneos - La Estación del Dominó">
+    <meta property="og:title" content="<?= htmlspecialchars(Branding::pageTitle('Resultados de Torneos')) ?>">
     <meta property="og:description" content="Consulta los resultados de todos los torneos de dominó realizados en Venezuela.">
     <meta property="og:image" content="<?= htmlspecialchars(AppHelpers::getAppLogo()) ?>">
     
     <!-- Twitter -->
     <meta name="twitter:card" content="summary_large_image">
-    <meta name="twitter:title" content="Resultados de Torneos - La Estación del Dominó">
+    <meta name="twitter:title" content="<?= htmlspecialchars(Branding::pageTitle('Resultados de Torneos')) ?>">
     <meta name="twitter:description" content="Consulta los resultados de todos los torneos de dominó realizados en Venezuela.">
     
     <!-- Canonical -->
@@ -160,18 +190,88 @@ $clases = [1 => 'Abierto', 2 => 'Por Categorías'];
             border-radius: 20px;
             font-size: 0.85rem;
         }
+        .torneos-realizados-list { display: grid; gap: 0.45rem; }
+        .torneo-realizado-item {
+            border: 1px solid #e2e8f0;
+            border-radius: 10px;
+            padding: 0.55rem 0.7rem;
+            background: #f8fafc;
+        }
+        .torneo-realizado-grid {
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) auto;
+            grid-template-rows: auto auto;
+            gap: 0.12rem 0.65rem;
+            align-items: center;
+        }
+        .torneo-realizado-title {
+            grid-column: 1;
+            grid-row: 1;
+            margin: 0;
+            font-size: 0.95rem;
+            font-weight: 700;
+            color: #1a365d;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .torneo-realizado-meta {
+            grid-column: 1;
+            grid-row: 2;
+            margin: 0;
+            display: flex;
+            flex-wrap: nowrap;
+            gap: 0.5rem 0.75rem;
+            font-size: 0.78rem;
+            color: #64748b;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .torneo-realizado-meta span { display: inline-flex; align-items: center; gap: 0.25rem; }
+        .torneo-realizado-action {
+            white-space: nowrap;
+            font-size: 0.78rem;
+            padding: 0.35rem 0.65rem;
+        }
+        .torneo-realizado-actions {
+            grid-column: 2;
+            grid-row: 1 / 3;
+            align-self: center;
+            display: flex;
+            flex-direction: column;
+            gap: 0.35rem;
+        }
+        @media (min-width: 480px) {
+            .torneo-realizado-actions {
+                flex-direction: row;
+                flex-wrap: wrap;
+                justify-content: flex-end;
+            }
+        }
     </style>
 </head>
 <body>
     <div class="container">
         <div class="main-card mx-auto">
             <div class="header">
-                <?= AppHelpers::appLogo('mb-3', 'La Estación del Dominó', 48) ?>
-                <h2 class="mb-0">Resultados de Eventos</h2>
-                <p class="mb-0 mt-2 opacity-75">Consulta los resultados de todos los eventos realizados y en desarrollo</p>
+                <?= AppHelpers::appLogo('mb-3', null, 48) ?>
+                <h2 class="mb-0"><?= $solo_torneos_realizados ? 'Torneos realizados' : 'Resultados de Eventos' ?></h2>
+                <p class="mb-0 mt-2 opacity-75"><?php if ($solo_torneos_realizados): ?>
+                    <?php if ($orgCtx->entidadNombre !== ''): ?>
+                        <?= htmlspecialchars($orgCtx->entidadNombre) ?> · <?= htmlspecialchars($orgCtx->organizacionNombre) ?>
+                    <?php else: ?>
+                        <?= htmlspecialchars($orgCtx->organizacionNombre) ?>
+                    <?php endif; ?>
+                <?php else: ?>
+                    Consulta los resultados de todos los eventos realizados y en desarrollo
+                <?php endif; ?></p>
                 <p class="mb-0 mt-3">
-                    <a href="ranking_atletas.php?genero=F" class="btn btn-sm btn-light text-primary fw-semibold me-1"><i class="fas fa-medal me-1"></i>Ranking atletas</a>
-                    <a href="landing-spa.php" class="btn btn-sm btn-outline-light">Inicio</a>
+                    <?php if ($organizacion_id > 0): ?>
+                        <a href="<?= htmlspecialchars($volver_hub_url) ?>" class="btn btn-sm btn-outline-light me-1"><i class="fas fa-arrow-left me-1"></i>Asociación</a>
+                    <?php else: ?>
+                        <a href="landing-spa.php" class="btn btn-sm btn-outline-light">Inicio</a>
+                    <?php endif; ?>
                 </p>
             </div>
             
@@ -179,8 +279,38 @@ $clases = [1 => 'Abierto', 2 => 'Por Categorías'];
                 <?php if (empty($torneos)): ?>
                     <div class="alert alert-info text-center">
                         <i class="fas fa-info-circle me-2"></i>
-                        No hay eventos disponibles en este momento.
+                        <?= $solo_torneos_realizados
+                            ? 'No hay torneos realizados publicados para esta asociación.'
+                            : 'No hay eventos disponibles en este momento.' ?>
                     </div>
+                <?php elseif ($solo_torneos_realizados): ?>
+                    <div class="torneos-realizados-list mb-4">
+                        <?php foreach ($torneos as $torneo): ?>
+                            <article class="torneo-realizado-item">
+                                <div class="torneo-realizado-grid">
+                                    <h3 class="torneo-realizado-title" title="<?= htmlspecialchars($torneo['nombre']) ?>">
+                                        <i class="fas fa-trophy text-warning me-1"></i><?= htmlspecialchars($torneo['nombre']) ?>
+                                    </h3>
+                                    <p class="torneo-realizado-meta">
+                                        <span><i class="fas fa-calendar"></i><?= date('d/m/Y', strtotime($torneo['fechator'])) ?></span>
+                                        <span><i class="fas fa-map-marker-alt"></i><?= htmlspecialchars($torneo['lugar'] ?: '—') ?></span>
+                                        <span><i class="fas fa-users"></i><?= number_format((int) $torneo['total_inscritos']) ?></span>
+                                    </p>
+                                    <div class="torneo-realizado-actions">
+                                        <a href="<?= htmlspecialchars($orgCtx->urlEventoResultadosRelative((int) $torneo['id'])) ?>"
+                                           class="btn btn-primary btn-sm torneo-realizado-action">
+                                            <i class="fas fa-chart-bar me-1"></i>Resultados
+                                        </a>
+                                        <a href="<?= htmlspecialchars($orgCtx->urlTorneoDetalleRelative((int) $torneo['id'])) ?>"
+                                           class="btn btn-outline-primary btn-sm torneo-realizado-action">
+                                            <i class="fas fa-info-circle me-1"></i>Detalles
+                                        </a>
+                                    </div>
+                                </div>
+                            </article>
+                        <?php endforeach; ?>
+                    </div>
+                    <?= $pagination->render() ?>
                 <?php else: ?>
                     <!-- Listado de Torneos -->
                     <div class="mb-4">
@@ -249,7 +379,7 @@ $clases = [1 => 'Abierto', 2 => 'Por Categorías'];
                                         </div>
                                     </div>
                                     <div class="torneo-actions">
-                                        <a href="evento_resultados.php?torneo_id=<?= $torneo['id'] ?>" 
+                                        <a href="<?= htmlspecialchars($orgCtx->urlEventoResultados((int) $torneo['id'])) ?>" 
                                            class="btn btn-primary btn-sm">
                                             <i class="fas fa-chart-bar me-1"></i>Ver Resultados
                                         </a>
@@ -278,15 +408,19 @@ $clases = [1 => 'Abierto', 2 => 'Por Categorías'];
                     <!-- Paginación -->
                     <?= $pagination->render() ?>
                 <?php endif; ?>
-                
-                <!-- Botón Volver -->
                 <div class="mt-4 text-center">
-                    <a href="<?= htmlspecialchars($base_url) ?>/public/landing.php" class="btn btn-primary">
-                        <i class="fas fa-arrow-left me-2"></i>Volver al Inicio
-                    </a>
-                    <a href="torneos_historico.php" class="btn btn-outline-primary ms-2">
-                        <i class="fas fa-history me-2"></i>Torneos Realizados
-                    </a>
+                    <?php if ($organizacion_id > 0): ?>
+                        <a href="<?= htmlspecialchars($volver_hub_url) ?>" class="btn btn-primary">
+                            <i class="fas fa-arrow-left me-2"></i>Volver a la asociación
+                        </a>
+                    <?php else: ?>
+                        <a href="<?= htmlspecialchars($base_url) ?>/public/landing.php" class="btn btn-primary">
+                            <i class="fas fa-arrow-left me-2"></i>Volver al Inicio
+                        </a>
+                        <a href="torneos_historico.php" class="btn btn-outline-primary ms-2">
+                            <i class="fas fa-history me-2"></i>Torneos Realizados
+                        </a>
+                    <?php endif; ?>
                 </div>
             </div>
         </div>

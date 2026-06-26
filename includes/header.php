@@ -5,7 +5,18 @@
  * Uso: definir $header_title opcional; luego include_once __DIR__ . '/../includes/header.php';
  * No cierra </head> para que la página pueda añadir estilos o meta adicionales.
  */
-$header_title = $header_title ?? 'La Estación del Dominó';
+if (! class_exists('Branding', false)) {
+    $brandingPath = __DIR__ . '/../lib/Branding.php';
+    if (is_file($brandingPath)) {
+        require_once $brandingPath;
+    }
+}
+
+$header_title = $header_title ?? (class_exists('Branding', false) ? Branding::siteName() : 'La Estación del Dominó');
+$header_theme_color = class_exists('Branding', false) ? Branding::themeColor() : '#1a365d';
+$header_meta_description = class_exists('Branding', false)
+    ? Branding::metaDescription()
+    : 'mistorneos - La Estación del Dominó. Gestión de torneos, inscripciones y resultados.';
 // Favicon: EXCLUSIVAMENTE PNG (favicon.png ~88ms). No usar favicon.ico (363KB). Innegociable para rendimiento.
 $header_asset_base = '';
 if (defined('URL_BASE') && URL_BASE !== '' && URL_BASE !== '/') {
@@ -18,14 +29,21 @@ if ($header_asset_base === null || $header_asset_base === '') {
     $header_asset_base = '/mistorneos_beta/public';
 }
 $header_asset_base = rtrim($header_asset_base, '/');
-// Favicon: siempre ruta absoluta al PNG ligero (ej. /mistorneos_beta/public/favicon.png)
-$header_favicon_url = $header_asset_base . '/favicon.png';
+$header_favicon_url = class_exists('Branding', false)
+    ? Branding::faviconUrl()
+    : ($header_asset_base . '/favicon.png');
 ?>
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes">
-  <meta name="theme-color" content="#1a365d">
+  <meta name="theme-color" content="<?= htmlspecialchars($header_theme_color) ?>">
   <!-- Favicon: solo PNG (favicon.png). Nunca .ico. Ejecutar make_favicon.php para generar. -->
   <link rel="icon" type="image/png" sizes="32x32" href="<?= htmlspecialchars($header_favicon_url) ?>">
   <title><?= htmlspecialchars($header_title) ?></title>
-  <meta name="description" content="mistorneos - La Estación del Dominó. Gestión de torneos, inscripciones y resultados.">
+  <meta name="description" content="<?= htmlspecialchars($header_meta_description) ?>">
+<?php
+$brandThemePartial = __DIR__ . '/../public/includes/partials/brand_theme.php';
+if (is_file($brandThemePartial)) {
+    include $brandThemePartial;
+}
+?>

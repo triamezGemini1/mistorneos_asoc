@@ -9,6 +9,7 @@ require_once __DIR__ . '/../config/bootstrap.php';
 require_once __DIR__ . '/../config/db_config.php';
 require_once __DIR__ . '/../config/auth_service.php';
 AuthService::requireAuth();
+require_once __DIR__ . '/includes/branding_init.php';
 
 $pdo = DB::pdo();
 $base_url = app_base_url();
@@ -110,7 +111,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['buscar'])) {
 $modalidades = [1 => 'Individual', 2 => 'Parejas', 3 => 'Equipos'];
 $clases = [1 => 'Abierto', 2 => 'Por Categorías'];
 
-$header_title = 'Consulta de Torneo - La Estación del Dominó';
+$header_title = Branding::pageTitle('Consulta de Torneo');
 ?>
 <!DOCTYPE html>
 <html lang="es">
@@ -282,9 +283,9 @@ $header_title = 'Consulta de Torneo - La Estación del Dominó';
                 require_once __DIR__ . '/../lib/app_helpers.php';
                 $logo_url = AppHelpers::getAppLogo();
                 ?>
-                <img src="<?= htmlspecialchars($logo_url) ?>" alt="La Estación del Dominó" style="height: 60px; margin-bottom: 1rem;">
+                <img src="<?= htmlspecialchars($logo_url) ?>" alt="<?= htmlspecialchars($brand_name) ?>" style="height: 60px; margin-bottom: 1rem;">
                 <h2 class="mb-1">Consulta de Información de Torneo</h2>
-                <p class="mb-0 opacity-75">La Estación del Dominó</p>
+                <p class="mb-0 opacity-75"><?= htmlspecialchars($brand_name) ?></p>
             </div>
             
             <div class="p-4">

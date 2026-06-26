@@ -3,15 +3,21 @@
  * Configuración de la Landing Page - Variables centralizadas
  * Incluir antes de los componentes para tenerlas disponibles
  */
+if (! defined('APP_BOOTSTRAPPED')) {
+    require_once __DIR__ . '/../config/bootstrap.php';
+}
+if (! class_exists('Branding', false)) {
+    require_once __DIR__ . '/../lib/Branding.php';
+}
 
-$SITE_NAME = 'La Estación del Dominó';
-$SITE_TAGLINE = 'Sistema integral para la gestión de torneos de dominó';
-$META_TITLE = 'La Estación del Dominó - Sistema de Gestión de Torneos de Dominó en Venezuela';
-$META_DESCRIPTION = 'Plataforma integral para la gestión de torneos de dominó en Venezuela. Participa en eventos, consulta resultados, inscríbete en torneos y únete a nuestra comunidad de jugadores.';
-$META_KEYWORDS = 'dominó, torneos dominó, dominó venezuela, torneos, campeonatos, clubes dominó, resultados dominó, inscripciones torneos';
-$META_AUTHOR = 'La Estación del Dominó';
-$META_OG_TITLE = 'La Estación del Dominó - Sistema de Gestión de Torneos';
-$META_OG_DESCRIPTION = 'Plataforma integral para la gestión de torneos de dominó en Venezuela. Participa en eventos, consulta resultados y únete a nuestra comunidad.';
-$SITE_EMAIL = 'info@laestaciondeldomino.com';
+$SITE_NAME = Branding::siteName();
+$SITE_TAGLINE = Branding::tagline();
+$META_TITLE = Branding::landingMetaTitle();
+$META_DESCRIPTION = Branding::metaDescription();
+$META_KEYWORDS = Branding::metaKeywords();
+$META_AUTHOR = Branding::siteName();
+$META_OG_TITLE = Branding::ogTitle();
+$META_OG_DESCRIPTION = Branding::ogDescription();
+$SITE_EMAIL = Branding::contactEmail();
 $SITE_URL = rtrim(app_base_url(), '/') . '/public/landing-spa.php';
-$OG_IMAGE = class_exists('AppHelpers') ? AppHelpers::getAppLogo() : (rtrim(app_base_url(), '/') . '/public/view_image.php?path=' . rawurlencode('lib/Assets/mislogos/logo4.png'));
+$OG_IMAGE = Branding::logoUrl();

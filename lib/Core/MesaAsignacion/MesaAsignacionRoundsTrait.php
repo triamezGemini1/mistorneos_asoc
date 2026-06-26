@@ -170,8 +170,8 @@ trait MesaAsignacionRoundsTrait
         }
 
         $byePool = array_values($jugadoresBye);
-        $this->ajustarMesasMaxDosMismoClub($mesasArray, $byePool, null);
-        if (! $this->todasLasMesasCumplenLimiteClub($mesasArray)) {
+        $this->ajustarMesasMaxDosMismoClubSiAplica((int) $torneoId, $mesasArray, $byePool, null);
+        if (! $this->mesasCumplenLimiteClubSiAplica((int) $torneoId, $mesasArray)) {
             if ($esInterclub) {
                 $advertenciasInterclubR1[] = 'Aviso: alguna mesa supera «2 jugadores del mismo club (id > 0)» por reparto inevitable; se guardó la ronda priorizando mesas completas y alternancia.';
             } else {
@@ -333,8 +333,8 @@ trait MesaAsignacionRoundsTrait
 
         $mesasArray = $this->validarYRotarRonda2($mesasArray, $matrizCompañeros);
 
-        $this->ajustarMesasMaxDosMismoClub($mesasArray, $jugadoresBye, $matrizCompañeros);
-        if (! $this->todasLasMesasCumplenLimiteClub($mesasArray)) {
+        $this->ajustarMesasMaxDosMismoClubSiAplica((int) $torneoId, $mesasArray, $jugadoresBye, $matrizCompañeros);
+        if (! $this->mesasCumplenLimiteClubSiAplica((int) $torneoId, $mesasArray)) {
             return [
                 'success' => false,
                 'message' => 'No se pudo generar la segunda ronda cumpliendo como máximo 2 jugadores del mismo club por mesa (y respeto de parejas previas).',
@@ -494,8 +494,8 @@ trait MesaAsignacionRoundsTrait
         // Garantizar exactamente numMesas mesas de 4: si hay mesas de más, redistribuir
         $mesas = $this->ajustarMesasExactas($mesas, $numMesas, $jugadoresParaMesas);
 
-        $this->ajustarMesasMaxDosMismoClub($mesas, $jugadoresBye, $matrizCompañeros);
-        if (! $this->todasLasMesasCumplenLimiteClub($mesas)) {
+        $this->ajustarMesasMaxDosMismoClubSiAplica((int) $torneoId, $mesas, $jugadoresBye, $matrizCompañeros);
+        if (! $this->mesasCumplenLimiteClubSiAplica((int) $torneoId, $mesas)) {
             return [
                 'success' => false,
                 'message' => "No se pudo generar la ronda {$numRonda}: máximo 2 jugadores del mismo club por mesa no se cumple con la clasificación actual.",
@@ -568,8 +568,8 @@ trait MesaAsignacionRoundsTrait
         }
 
         $matrizUlt = $this->obtenerMatrizCompañerosParaRonda($torneoId, $numRonda - 1);
-        $this->ajustarMesasMaxDosMismoClub($mesas, $jugadoresBye, $matrizUlt);
-        if (! $this->todasLasMesasCumplenLimiteClub($mesas)) {
+        $this->ajustarMesasMaxDosMismoClubSiAplica((int) $torneoId, $mesas, $jugadoresBye, $matrizUlt);
+        if (! $this->mesasCumplenLimiteClubSiAplica((int) $torneoId, $mesas)) {
             return [
                 'success' => false,
                 'message' => 'No se pudo generar la última ronda cumpliendo como máximo 2 jugadores del mismo club por mesa.',

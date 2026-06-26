@@ -98,18 +98,35 @@ try {
 }
 
 $org_nombre_encabezado = '';
+$entidad_nombre_encabezado = '';
 if ($organizacion_id > 0) {
     try {
-        $stHdr = $pdo->prepare('SELECT nombre FROM organizaciones WHERE estatus = 1 AND id = ? LIMIT 1');
+        $stHdr = $pdo->prepare('
+            SELECT o.nombre, e.nombre AS entidad_nombre
+            FROM organizaciones o
+            LEFT JOIN entidad e ON e.id = o.entidad
+            WHERE o.estatus = 1 AND o.id = ?
+            LIMIT 1
+        ');
         $stHdr->execute([$organizacion_id]);
-        $org_nombre_encabezado = trim((string) ($stHdr->fetchColumn() ?: ''));
+        $hdrRow = $stHdr->fetch(PDO::FETCH_ASSOC);
+        $org_nombre_encabezado = trim((string) ($hdrRow['nombre'] ?? ''));
+        $entidad_nombre_encabezado = trim((string) ($hdrRow['entidad_nombre'] ?? ''));
     } catch (Throwable $e) {
         $org_nombre_encabezado = '';
+        $entidad_nombre_encabezado = '';
     }
     if ($org_nombre_encabezado === '' && $role === 'admin_club' && $org_nombre_sesion !== '') {
         $org_nombre_encabezado = $org_nombre_sesion;
     }
 }
+
+$ranking_del_estado = $organizacion_id > 0;
+
+require_once __DIR__ . '/../../lib/ResultadosAsociacionContext.php';
+$rankingOrgCtx = ResultadosAsociacionContext::fromOrganizacionId($pdo, $organizacion_id);
+$resultados_volver_url = $rankingOrgCtx->urlEventosRelative();
+$landing_volver_url = $rankingOrgCtx->urlHubAfiliadoRelative();
 
 $svc = new RankingAtletasPublicoService($pdo);
 if ($role === 'admin_general' && $ranking_sin_org_admin_general) {

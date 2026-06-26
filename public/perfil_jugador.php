@@ -8,11 +8,12 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/../config/bootstrap.php';
 require_once __DIR__ . '/../lib/app_helpers.php';
+require_once __DIR__ . '/includes/branding_init.php';
 
 $torneo_id = isset($_GET['torneo_id']) ? (int)$_GET['torneo_id'] : 0;
 $base_url = rtrim(AppHelpers::getPublicUrl(), '/') . '/';
 $api_url = $base_url . 'api_perfil_jugador.php';
-$logo_url = AppHelpers::getAppLogo();
+$logo_url = $brand_logo_url;
 $landing_url = $base_url . 'landing-spa.php';
 ?>
 <!DOCTYPE html>
@@ -22,7 +23,7 @@ $landing_url = $base_url . 'landing-spa.php';
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes">
     <meta name="theme-color" content="#0f172a">
     <meta name="mobile-web-app-capable" content="yes">
-    <title>Mi torneo - La Estación del Dominó</title>
+    <title><?= htmlspecialchars(Branding::pageTitle('Mi torneo')) ?></title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11" defer></script>
     <style>
@@ -196,7 +197,7 @@ $landing_url = $base_url . 'landing-spa.php';
     <div class="wrap">
         <header class="header">
             <a href="<?= htmlspecialchars($landing_url) ?>" id="btn-retorno-header" class="btn-retorno-header" title="Retorno" style="margin-right: auto;"><i class="fas fa-arrow-left"></i><span>Retorno</span></a>
-            <img src="<?= htmlspecialchars($logo_url) ?>" alt="La Estación del Dominó">
+            <img src="<?= htmlspecialchars($logo_url) ?>" alt="<?= htmlspecialchars($brand_name) ?>">
             <div id="header-actions"></div>
         </header>
 

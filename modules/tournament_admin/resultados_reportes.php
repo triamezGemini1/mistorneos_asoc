@@ -6,7 +6,8 @@ require_once __DIR__ . '/../../lib/app_helpers.php';
 
 $torneo_id = (int)($torneo_id ?? 0);
 $esEquipos = (int)($torneo['modalidad'] ?? 0) === 3;
-$generoRep = (isset($_GET['genero']) && $_GET['genero'] === 'F') ? 'F' : 'M';
+$generoRep = (isset($_GET['genero']) && strtoupper((string)$_GET['genero']) === 'F') ? 'F' : 'todos';
+$paramsGeneroRep = $generoRep === 'F' ? ['genero' => 'F'] : [];
 
 $tg = static function (string $action, array $extra = []) use ($torneo_id): string {
     return AppHelpers::url('index.php', array_merge([
@@ -16,25 +17,25 @@ $tg = static function (string $action, array $extra = []) use ($torneo_id): stri
     ], $extra));
 };
 
-$urlPdf = static function (string $tipo) use ($torneo_id, $generoRep): string {
+$urlPdf = static function (string $tipo) use ($torneo_id, $paramsGeneroRep): string {
     return AppHelpers::url('index.php', [
         'page' => 'torneo_gestion',
         'action' => 'export_resultados_pdf',
         'torneo_id' => $torneo_id,
         'tipo' => $tipo,
-        'genero' => $generoRep,
-    ]);
+    ] + $paramsGeneroRep);
 };
 $urlExcel = AppHelpers::url('index.php', [
     'page' => 'torneo_gestion',
     'action' => 'export_resultados_excel',
     'torneo_id' => $torneo_id,
-    'genero' => $generoRep,
-]);
-$urlPrint = static function (string $tipo) use ($tg, $generoRep): string {
-    return $tg('resultados_reportes_print', ['tipo' => $tipo, 'genero' => $generoRep]);
+ ] + $paramsGeneroRep);
+$urlPrint = static function (string $tipo) use ($tg, $paramsGeneroRep): string {
+    return $tg('resultados_reportes_print', ['tipo' => $tipo] + $paramsGeneroRep);
 };
 $urlPanel = $tg('panel');
+$urlFiltroTodos = $tg('resultados_reportes');
+$urlFiltroFemenino = $tg('resultados_reportes', ['genero' => 'F']);
 
 $bloques = [
     ['tipo' => 'posiciones', 'titulo' => 'Clasificación general', 'desc' => 'Tabla de posiciones (individual).', 'action_origen' => 'posiciones', 'siempre' => true],
@@ -60,6 +61,11 @@ $bloques = [
         <h1 class="text-2xl font-bold text-gray-900"><i class="fas fa-file-alt text-amber-600 mr-2"></i> Reportes de resultados</h1>
         <p class="text-gray-700 font-medium"><?= htmlspecialchars($torneo['nombre'] ?? '') ?></p>
         <p class="text-sm text-gray-600 mt-2">Impresión y PDF en formato <strong class="text-black">Letter</strong>. Cada bloque es un reporte independiente.</p>
+        <div class="mt-4 mb-2 flex flex-wrap gap-2">
+            <a href="<?= htmlspecialchars($urlFiltroTodos) ?>" class="inline-flex items-center px-4 py-2 rounded-lg border text-sm font-bold <?= $generoRep === 'F' ? 'bg-white text-slate-700 border-slate-400' : 'bg-blue-200 text-black border-blue-700' ?>">Todos</a>
+            <a href="<?= htmlspecialchars($urlFiltroFemenino) ?>" class="inline-flex items-center px-4 py-2 rounded-lg border text-sm font-bold <?= $generoRep === 'F' ? 'bg-blue-200 text-black border-blue-700' : 'bg-white text-slate-700 border-slate-400' ?>">Femenino</a>
+        </div>
+        <p class="text-sm text-gray-700"><?= $generoRep === 'F' ? 'Filtro activo: solo féminas.' : 'Vista de resultados: todos los participantes, en orden de clasificación.' ?></p>
         <div class="mt-4 p-4 bg-green-50 border border-green-300 rounded-lg">
             <strong class="text-black">Excel (varias hojas):</strong>
             <a href="<?= htmlspecialchars($urlExcel) ?>" class="ml-2 text-black font-bold underline">Descargar Excel</a>

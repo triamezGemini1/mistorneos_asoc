@@ -110,7 +110,7 @@ try {
     $mensaje .= "Recuerda mantener actualizada la información de tus clubes y torneos.\n";
     $mensaje .= "Si tienes alguna consulta, no dudes en contactarnos.\n\n";
     $mensaje .= "¡Gracias por ser parte de nuestro proyecto! 🎲\n\n";
-    $mensaje .= "_La Estación del Dominó_";
+    $mensaje .= '_' . (class_exists('Branding', false) ? Branding::siteName() : 'La Estación del Dominó') . '_';
     
     // Generar URL de WhatsApp
     $mensaje_encoded = urlencode($mensaje);

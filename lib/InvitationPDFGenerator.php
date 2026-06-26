@@ -12,6 +12,24 @@ if (!class_exists('DB')) {
 class InvitationPDFGenerator {
     
     private static $pdf_dir = __DIR__ . '/../upload/pdfs/';
+
+    private static function brandSiteName(): string
+    {
+        if (! class_exists('Branding', false)) {
+            $brandingFile = __DIR__ . '/Branding.php';
+            if (is_file($brandingFile)) {
+                if (! class_exists('SegmentConfig', false)) {
+                    require_once __DIR__ . '/SegmentConfig.php';
+                }
+                require_once $brandingFile;
+                if (class_exists('SegmentConfig', false)) {
+                    SegmentConfig::boot();
+                }
+            }
+        }
+
+        return class_exists('Branding', false) ? Branding::siteName() : 'La Estación del Dominó';
+    }
     
     /**
      * Genera PDF de invitación a afiliarse a un club
@@ -394,7 +412,7 @@ class InvitationPDFGenerator {
         <div class="header">
             <div class="icon">🎲</div>
             <h1>Invitación a Afiliarse</h1>
-            <p>La Estación del Dominó</p>
+            <p>' . htmlspecialchars(self::brandSiteName()) . '</p>
         </div>
         
         ' . ($logo_path ? '
@@ -509,7 +527,7 @@ class InvitationPDFGenerator {
         $html .= '
         
         <div class="footer">
-            <p>Este documento es una invitación oficial - La Estación del Dominó</p>
+            <p>Este documento es una invitación oficial - ' . htmlspecialchars(self::brandSiteName()) . '</p>
             <p>Fecha de generación: ' . date('d/m/Y H:i') . '</p>
         </div>
     </div>
@@ -674,7 +692,7 @@ class InvitationPDFGenerator {
         <div class="header">
             <div class="icon">🏆</div>
             <h1>Invitación al Torneo</h1>
-            <p>La Estación del Dominó</p>
+            <p>' . htmlspecialchars(self::brandSiteName()) . '</p>
         </div>
         
         ' . ($logo_path ? '
@@ -817,7 +835,7 @@ class InvitationPDFGenerator {
         $html .= '
         
         <div class="footer">
-            <p>Este documento es una invitación oficial al torneo - La Estación del Dominó</p>
+            <p>Este documento es una invitación oficial al torneo - ' . htmlspecialchars(self::brandSiteName()) . '</p>
             <p>Fecha de generación: ' . date('d/m/Y H:i') . '</p>
         </div>
     </div>
@@ -901,7 +919,7 @@ class InvitationPDFGenerator {
         // Intentar usar TCPDF
         elseif (class_exists('TCPDF')) {
             $pdf = new TCPDF(PDF_PAGE_ORIENTATION, PDF_UNIT, PDF_PAGE_FORMAT, true, 'UTF-8', false);
-            $pdf->SetCreator('La Estación del Dominó');
+            $pdf->SetCreator(self::brandSiteName());
             $pdf->SetAuthor('Sistema Mistorneos');
             $pdf->SetTitle('Invitación');
             $pdf->SetMargins(15, 15, 15);
@@ -1299,17 +1317,17 @@ class InvitationPDFGenerator {
         <div class="top-logo-section">';
         
         if ($logo_path) {
-            $html .= '<img src="' . htmlspecialchars($logo_path) . '" alt="La Estación del Dominó" />';
+            $html .= '<img src="' . htmlspecialchars($logo_path) . '" alt="' . htmlspecialchars(self::brandSiteName()) . '" />';
         }
         
         $html .= '<div class="invitation-text">
-            La Estación del Dominó te invita a participar como aliado en la masificación deportiva del Dominó
+            ' . htmlspecialchars(self::brandSiteName()) . ' te invita a participar como aliado en la masificación deportiva del Dominó
         </div>
         </div>
         
         <div class="header">
             <h1>Invitación Especial</h1>
-            <p>La Estación del Dominó</p>
+            <p>' . htmlspecialchars(self::brandSiteName()) . '</p>
         </div>
         
         <div class="greeting">
@@ -1317,7 +1335,7 @@ class InvitationPDFGenerator {
         </div>
         
         <div class="intro-text">
-            <p>Nos complace invitarte a formar parte de <strong>La Estación del Dominó</strong> como <strong>Administrador de organización</strong>.</p>
+            <p>Nos complace invitarte a formar parte de <strong>' . htmlspecialchars(self::brandSiteName()) . '</strong> como <strong>Administrador de organización</strong>.</p>
             <p>Como administrador de club, tendrás acceso a herramientas profesionales que te permitirán gestionar tu club de manera eficiente, organizar torneos, administrar afiliados y mucho más.</p>
         </div>';
         
@@ -1407,7 +1425,7 @@ class InvitationPDFGenerator {
         </div>
         
         <div class="footer">
-            <p><strong>La Estación del Dominó</strong></p>
+            <p><strong>' . htmlspecialchars(self::brandSiteName()) . '</strong></p>
             <p>Sistema de Gestión de Torneos y Clubes</p>
             <p>Fecha de emisión: ' . date('d/m/Y') . '</p>
         </div>

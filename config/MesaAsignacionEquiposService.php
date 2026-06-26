@@ -748,16 +748,6 @@ ORDER BY er.rn_equipo ASC, jr.posicion_equipo ASC
      */
     public function contarMesasIncompletas($torneoId, $ronda)
     {
-        $noReg = PartiresulEstatusSql::whereRegistradoNoCompleto();
-        $sql = "SELECT COUNT(DISTINCT mesa) as mesas_incompletas
-                FROM partiresul
-                WHERE id_torneo = ? AND partida = ? AND mesa > 0
-                AND {$noReg}";
-
-        $stmt = $this->pdo->prepare($sql);
-        $stmt->execute([$torneoId, $ronda]);
-        $result = $stmt->fetch(PDO::FETCH_ASSOC);
-
-        return (int) ($result['mesas_incompletas'] ?? 0);
+        return PartiresulEstatusSql::contarMesasIncompletas($this->pdo, (int) $torneoId, (int) $ronda);
     }
 }

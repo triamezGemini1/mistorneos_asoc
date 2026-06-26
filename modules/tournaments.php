@@ -4,6 +4,8 @@ require_once __DIR__ . '/../config/auth.php';
 require_once __DIR__ . '/../config/db.php';
 require_once __DIR__ . '/../config/csrf.php';
 require_once __DIR__ . '/../lib/Pagination.php';
+require_once __DIR__ . '/../lib/OrganizacionDashboardStats.php';
+require_once __DIR__ . '/../lib/AsociacionAdminHelper.php';
 
 // Verificar permisos
 Auth::requireRole(['admin_general', 'admin_torneo', 'admin_club']);
@@ -129,6 +131,7 @@ if ($action === 'delete' && $id) {
 $organizaciones_list = [];
 $default_organizacion_id = null;
 $default_organizacion_nombre = null;
+$form_club_responsable_id = 0;
 if (in_array($action, ['new', 'edit'])) {
     try {
         if ($is_admin_general) {
@@ -138,13 +141,18 @@ if (in_array($action, ['new', 'edit'])) {
             // admin_club / admin_torneo: el torneo se asigna a la organización que lo genera
             if ($user_role === 'admin_club') {
                 $default_organizacion_id = Auth::getUserOrganizacionId();
+                $form_club_responsable_id = $default_organizacion_id ? (int) $default_organizacion_id : 0;
                 if ($default_organizacion_id) {
-                    $sql_org_nombre = $has_cod_org
-                        ? "SELECT nombre FROM organizaciones WHERE (id = ? OR cod_org = ?) AND estatus = 1"
-                        : "SELECT nombre FROM organizaciones WHERE id = ? AND estatus = 1";
-                    $stmt = DB::pdo()->prepare($sql_org_nombre);
-                    $stmt->execute($has_cod_org ? [$default_organizacion_id, $default_organizacion_id] : [$default_organizacion_id]);
-                    $default_organizacion_nombre = $stmt->fetchColumn();
+                    $stOrgForm = DB::pdo()->prepare('SELECT id, nombre, cod_org, entidad, tipo_org FROM organizaciones WHERE id = ? AND estatus = 1 LIMIT 1');
+                    $stOrgForm->execute([(int) $default_organizacion_id]);
+                    $orgFormRow = $stOrgForm->fetch(PDO::FETCH_ASSOC);
+                    if (is_array($orgFormRow) && $orgFormRow !== []) {
+                        $default_organizacion_nombre = (string) ($orgFormRow['nombre'] ?? '');
+                        $vinculosForm = OrganizacionDashboardStats::torneoVinculosParaOrganizacion($orgFormRow);
+                        $form_club_responsable_id = (int) $vinculosForm['club_responsable'];
+                    } else {
+                        $default_organizacion_nombre = null;
+                    }
                 }
             } elseif ($user_role === 'admin_torneo' && $user_club_id) {
                 $stmt = DB::pdo()->prepare("SELECT cod_org FROM clubes WHERE id = ?");
@@ -1260,7 +1268,11 @@ function getModalidadLabel($modalidad) {
                             <p class="mb-0 fs-5 fw-bold"><?= htmlspecialchars(class_exists('FvdConfig') ? FvdConfig::ORGANIZACION_NOMBRE : 'FEDERACION VENEZOLANA DE DOMINO') ?></p>
                         </div>
                         <?php else: ?>
-                        <?php $org_id = ($action === 'edit' && isset($tournament['organizacion_ref'])) ? (int)$tournament['organizacion_ref'] : (int)($default_organizacion_id ?? 0); ?>
+                        <?php
+                        $org_id = ($action === 'edit' && isset($tournament['organizacion_ref']))
+                            ? (int) $tournament['organizacion_ref']
+                            : (int) ($form_club_responsable_id ?? $default_organizacion_id ?? 0);
+                        ?>
                         <input type="hidden" name="club_responsable" value="<?= $org_id ?>">
                         <div class="flex-grow-1">
                             <label class="form-label mb-1 text-muted">Organización</label>

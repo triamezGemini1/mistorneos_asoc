@@ -27,6 +27,11 @@
             <a href="index.php?page=torneo_gestion&action=index" class="btn btn-outline-secondary btn-sm">
                 <i class="fas fa-cog me-1"></i>Gestión operativa
             </a>
+            <?php if ($scope_solo_mi_org): ?>
+            <a href="index.php?page=tournaments&action=new" class="btn btn-success btn-sm">
+                <i class="fas fa-plus-circle me-1"></i>Nuevo torneo
+            </a>
+            <?php endif; ?>
             <?php if ($is_admin_general): ?>
                 <?php if ($es_particulares): ?>
                     <a href="index.php?page=organizaciones_particulares" class="btn btn-outline-primary btn-sm">Ver particulares</a>

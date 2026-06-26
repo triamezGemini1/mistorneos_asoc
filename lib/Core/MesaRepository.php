@@ -11,6 +11,7 @@ declare(strict_types=1);
 
 require_once dirname(__DIR__, 2) . '/lib/InscritosHelper.php';
 require_once dirname(__DIR__, 2) . '/lib/PartiresulEstatusSql.php';
+require_once dirname(__DIR__) . '/TorneosEstructuraService.php';
 require_once __DIR__ . '/MesaAsignacionMatriz.php';
 require_once __DIR__ . '/MesaRepositoryPersistTrait.php';
 
@@ -58,7 +59,7 @@ final class MesaRepository
                 FROM inscritos i
                 INNER JOIN usuarios u ON i.id_usuario = u.id
                 LEFT JOIN clubes c ON c.id = ' . $clubIdExpr . '
-                WHERE i.torneo_id = ? AND ' . InscritosHelper::sqlWhereSoloConfirmadoConAlias('i') . $ent['sql'] . '
+                WHERE i.torneo_id = ? AND ' . InscritosHelper::sqlWhereElegibleParaMesaConAlias('i') . $ent['sql'] . '
                 ORDER BY i.posicion ASC, ' . $og . ' DESC, ' . $oe . ' DESC, ' . $op . ' DESC, i.id_usuario ASC';
         $stmt = $this->pdo->prepare($sql);
         $stmt->execute(array_merge([$torneoId], $ent['bind']));
@@ -138,7 +139,7 @@ final class MesaRepository
                 INNER JOIN usuarios u ON i.id_usuario = u.id
                 LEFT JOIN clubes c ON c.id = ' . $clubIdExprR2 . '
                 LEFT JOIN partiresul pr1 ON pr1.id_torneo = i.torneo_id AND pr1.id_usuario = i.id_usuario AND pr1.partida = 1
-                WHERE i.torneo_id = ? AND ' . InscritosHelper::sqlWhereSoloConfirmadoConAlias('i') . $entI['sql'] . '
+                WHERE i.torneo_id = ? AND ' . InscritosHelper::sqlWhereElegibleParaMesaConAlias('i') . $entI['sql'] . '
                 ORDER BY
                     ' . $ganadorR1Expr . ' DESC,
                     ' . $byeR1Expr . ' ASC,
@@ -274,5 +275,66 @@ final class MesaRepository
         }
 
         return $matriz;
+    }
+
+    /**
+     * Sin tope de «máximo 2 del mismo club por mesa»: organización particular o un solo club en inscritos.
+     */
+    public function torneoOmiteLimiteClubPorMesa(int $torneoId): bool
+    {
+        if ($torneoId <= 0) {
+            return false;
+        }
+
+        return $this->torneoEsOrganizacionParticular($torneoId)
+            || $this->torneoInscritosUnSoloClub($torneoId);
+    }
+
+    /**
+     * Torneo responsable de una organización particular (tipo_org = 1).
+     */
+    public function torneoEsOrganizacionParticular(int $torneoId): bool
+    {
+        if ($torneoId <= 0 || ! TorneosEstructuraService::hasTipoOrg($this->pdo)) {
+            return false;
+        }
+
+        $joinParts = ['o.id = t.club_responsable'];
+        if (TorneosEstructuraService::hasTournamentCodOrg($this->pdo)) {
+            $joinParts[] = '(COALESCE(t.cod_org, 0) > 0 AND o.cod_org = t.cod_org)';
+            $joinParts[] = '(COALESCE(t.cod_org, 0) > 0 AND o.id = t.cod_org)';
+        }
+        $joinOn = implode(' OR ', $joinParts);
+        $sql = "SELECT 1 FROM tournaments t
+                INNER JOIN organizaciones o ON ({$joinOn})
+                WHERE t.id = ? AND COALESCE(o.tipo_org, 0) = 1
+                LIMIT 1";
+        $stmt = $this->pdo->prepare($sql);
+        $stmt->execute([$torneoId]);
+
+        return (bool) $stmt->fetchColumn();
+    }
+
+    /**
+     * Entre inscritos confirmados hay como máximo un club distinto (id > 0).
+     */
+    public function torneoInscritosUnSoloClub(int $torneoId): bool
+    {
+        if ($torneoId <= 0) {
+            return false;
+        }
+
+        $ent = $this->whereEntidad('i');
+        $clubIdExpr = 'COALESCE(NULLIF(i.id_club, 0), NULLIF(u.club_id, 0))';
+        $sql = "SELECT COUNT(DISTINCT {$clubIdExpr}) AS n_clubs
+                FROM inscritos i
+                INNER JOIN usuarios u ON i.id_usuario = u.id
+                WHERE i.torneo_id = ? AND {$clubIdExpr} > 0 AND "
+            . InscritosHelper::sqlWhereElegibleParaMesaConAlias('i') . $ent['sql'];
+        $stmt = $this->pdo->prepare($sql);
+        $stmt->execute(array_merge([$torneoId], $ent['bind']));
+        $n = (int) $stmt->fetchColumn();
+
+        return $n <= 1;
     }
 }

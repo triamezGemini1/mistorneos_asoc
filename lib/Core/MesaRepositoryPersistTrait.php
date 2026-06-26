@@ -254,16 +254,7 @@ trait MesaRepositoryPersistTrait
 
     public function contarMesasIncompletas(int $torneoId, int $ronda): int
     {
-        $noReg = PartiresulEstatusSql::whereRegistradoNoCompleto();
-        $sql = 'SELECT COUNT(DISTINCT mesa) as mesas_incompletas
-                FROM partiresul
-                WHERE id_torneo = ? AND partida = ? AND mesa > 0
-                AND ' . $noReg;
-        $stmt = $this->pdo->prepare($sql);
-        $stmt->execute([$torneoId, $ronda]);
-        $result = $stmt->fetch(PDO::FETCH_ASSOC);
-
-        return (int) ($result['mesas_incompletas'] ?? 0);
+        return PartiresulEstatusSql::contarMesasIncompletas($this->pdo, $torneoId, $ronda);
     }
 
     public function rondaTieneResultadosEnMesas(int $torneoId, int $ronda): bool

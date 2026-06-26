@@ -21,6 +21,7 @@ if (in_array($_SERVER['REMOTE_ADDR'] ?? '', $allowed_ips)) {
 // Enviar código 503 (Service Unavailable) para SEO
 http_response_code(503);
 header('Retry-After: 3600'); // Indicar a bots que vuelvan en 1 hora
+require_once __DIR__ . '/includes/branding_lite.php';
 ?>
 <!DOCTYPE html>
 <html lang="es">
@@ -28,7 +29,7 @@ header('Retry-After: 3600'); // Indicar a bots que vuelvan en 1 hora
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="robots" content="noindex, nofollow">
-    <title>En Mantenimiento - La Estación del Dominó</title>
+    <title><?= htmlspecialchars(Branding::pageTitle('En Mantenimiento')) ?></title>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" rel="stylesheet">
     <style>
@@ -209,7 +210,7 @@ header('Retry-After: 3600'); // Indicar a bots que vuelvan en 1 hora
         </div>
         
         <h1>¡Estamos Mejorando!</h1>
-        <p class="subtitle">La Estación del Dominó</p>
+        <p class="subtitle"><?= htmlspecialchars($brand_name) ?></p>
         
         <p>
             Estamos realizando mejoras en nuestra plataforma para brindarte 

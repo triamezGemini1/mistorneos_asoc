@@ -73,7 +73,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes">
   <meta name="theme-color" content="#1a365d">
-  <title>Restablecer contraseña - La Estación del Dominó</title>
+  <title><?= htmlspecialchars(class_exists('Branding', false) ? Branding::pageTitle('Restablecer contraseña') : 'Restablecer contraseña - La Estación del Dominó') ?></title>
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
   <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
@@ -121,8 +121,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             <?php 
             $logo_url = AppHelpers::getAppLogo();
             ?>
-            <img src="<?= htmlspecialchars($logo_url) ?>" alt="La Estación del Dominó" style="height: 60px; margin-bottom: 1rem;">
-            <h4 class="mb-1">La Estación del Dominó</h4>
+            <?php $auth_brand = class_exists('Branding', false) ? Branding::siteName() : 'La Estación del Dominó'; ?>
+            <img src="<?= htmlspecialchars($logo_url) ?>" alt="<?= htmlspecialchars($auth_brand) ?>" style="height: 60px; margin-bottom: 1rem;">
+            <h4 class="mb-1"><?= htmlspecialchars($auth_brand) ?></h4>
             <p class="mb-0 opacity-75">Restablecer contraseña (sin correo)</p>
           </div>
           <div class="card-body">

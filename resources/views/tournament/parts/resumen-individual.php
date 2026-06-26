@@ -127,49 +127,83 @@ $base_url = $use_standalone ? $script_actual : 'index.php?page=torneo_gestion';
             </div>
         </div>
         <div class="col-md-6">
+            <?php
+            $esEqResumen = !empty($es_modalidad_equipos) && !empty($equipo);
+            if ($esEqResumen) {
+                $posCabecera = (int)($inscrito['clasiequi'] ?? 0);
+                $gCabecera = (int)($equipo['ganados'] ?? 0);
+                $pCabecera = (int)($equipo['perdidos'] ?? 0);
+                $efCabecera = (int)($equipo['efectividad'] ?? 0);
+                $ptsCabecera = (int)($equipo['puntos'] ?? 0);
+                $sancCabecera = (int)($equipo['sancion'] ?? 0);
+                $tituloStats = 'Estadísticas del equipo';
+                $lblPos = 'Pos. equipo';
+            } else {
+                $posCabecera = (int)($inscrito['posicion'] ?? 0);
+                $gCabecera = (int)($inscrito['ganados'] ?? 0);
+                $pCabecera = (int)($inscrito['perdidos'] ?? 0);
+                $efCabecera = (int)($inscrito['efectividad'] ?? 0);
+                $ptsCabecera = (int)($inscrito['puntos'] ?? 0);
+                $sancCabecera = (int)($inscrito['sancion'] ?? 0);
+                $tituloStats = 'Estadísticas generales';
+                $lblPos = 'Posición';
+            }
+            ?>
             <div class="card">
                 <div class="card-header bg-success text-white py-2">
-                    <h6 class="mb-0"><i class="fas fa-chart-line mr-2"></i> Estadísticas Generales</h6>
+                    <h6 class="mb-0"><i class="fas fa-chart-line mr-2"></i> <?php echo htmlspecialchars($tituloStats); ?></h6>
                 </div>
                 <div class="card-body p-3">
+                    <?php if ($esEqResumen): ?>
+                    <p class="small text-muted mb-3">Totales agregados del equipo (mismos para todos los integrantes). El desglose por ronda es tu participación individual.</p>
+                    <?php endif; ?>
                     <div class="row text-center">
                         <div class="col-2">
                             <div class="border rounded p-3 bg-light">
-                                <h3 class="text-primary mb-0"><?php echo (int)($inscrito['posicion'] ?? 0); ?>°</h3>
-                                <small class="text-muted">Posición</small>
+                                <h3 class="text-primary mb-0"><?php echo $posCabecera > 0 ? $posCabecera . '°' : '—'; ?></h3>
+                                <small class="text-muted"><?php echo htmlspecialchars($lblPos); ?></small>
                             </div>
                         </div>
                         <div class="col-2">
                             <div class="border rounded p-3 bg-light">
-                                <h3 class="text-success mb-0"><?php echo (int)($inscrito['ganados'] ?? 0); ?></h3>
+                                <h3 class="text-success mb-0"><?php echo $gCabecera; ?></h3>
                                 <small class="text-muted">Ganados</small>
                             </div>
                         </div>
                         <div class="col-2">
                             <div class="border rounded p-3 bg-light">
-                                <h3 class="text-danger mb-0"><?php echo (int)($inscrito['perdidos'] ?? 0); ?></h3>
+                                <h3 class="text-danger mb-0"><?php echo $pCabecera; ?></h3>
                                 <small class="text-muted">Perdidos</small>
                             </div>
                         </div>
                         <div class="col-2">
                             <div class="border rounded p-3 bg-light">
-                                <h3 class="text-info mb-0"><?php echo (int)($inscrito['efectividad'] ?? 0); ?></h3>
+                                <h3 class="text-info mb-0"><?php echo $efCabecera; ?></h3>
                                 <small class="text-muted">Efectividad</small>
                             </div>
                         </div>
                         <div class="col-2">
                             <div class="border rounded p-3 bg-light">
-                                <h3 class="text-primary mb-0"><?php echo (int)($inscrito['puntos'] ?? 0); ?></h3>
+                                <h3 class="text-primary mb-0"><?php echo $ptsCabecera; ?></h3>
                                 <small class="text-muted">Puntos</small>
                             </div>
                         </div>
                         <div class="col-2">
                             <div class="border rounded p-3 bg-warning">
-                                <h3 class="text-dark mb-0"><?php echo (int)($inscrito['sancion'] ?? 0); ?></h3>
+                                <h3 class="text-dark mb-0"><?php echo $sancCabecera; ?></h3>
                                 <small class="text-muted">Sanciones</small>
                             </div>
                         </div>
                     </div>
+                    <?php if ($esEqResumen): ?>
+                    <p class="small text-muted mt-3 mb-0">
+                        Registro individual en el torneo:
+                        G <?php echo (int)($inscrito['ganados'] ?? 0); ?> ·
+                        P <?php echo (int)($inscrito['perdidos'] ?? 0); ?> ·
+                        pos. en listado general <?php echo (int)($inscrito['posicion'] ?? 0); ?>° ·
+                        pts. ranking <?php echo (int)($inscrito['ptosrnk'] ?? 0); ?>
+                    </p>
+                    <?php endif; ?>
                 </div>
             </div>
         </div>
@@ -225,9 +259,16 @@ $base_url = $use_standalone ? $script_actual : 'index.php?page=torneo_gestion';
                                             <td><?php echo $partida['partida']; ?></td>
                                             <td><?php echo $partida['mesa']; ?></td>
                                             <td class="col-pareja" style="background-color: #e0e0e0;">
-                                                <?php 
-                                                if (!empty($partida['compañero'])) {
-                                                    echo '<span class="nombre-compacto" title="' . htmlspecialchars($partida['compañero']['nombre']) . '">' . htmlspecialchars($partida['compañero']['nombre']) . '</span>';
+                                                <?php
+                                                $parejaRonda = $partida['companero'] ?? $partida['compañero'] ?? null;
+                                                $nombrePareja = '';
+                                                if (is_array($parejaRonda)) {
+                                                    $nombrePareja = trim((string) ($parejaRonda['nombre'] ?? ''));
+                                                } elseif (is_string($parejaRonda)) {
+                                                    $nombrePareja = trim($parejaRonda);
+                                                }
+                                                if ($nombrePareja !== '') {
+                                                    echo '<span class="nombre-compacto" title="' . htmlspecialchars($nombrePareja) . '">' . htmlspecialchars($nombrePareja) . '</span>';
                                                 } else {
                                                     echo '<span class="text-muted">-</span>';
                                                 }

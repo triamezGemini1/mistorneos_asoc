@@ -8,6 +8,38 @@ declare(strict_types=1);
  */
 trait MesaAsignacionLimiteClubMesaTrait
 {
+    /**
+     * Norma «máx. 2 del mismo club por mesa» no aplica en org. particular ni torneo con un solo club inscrito.
+     */
+    private function aplicaLimiteClubPorMesa(int $torneoId): bool
+    {
+        return ! $this->repo->torneoOmiteLimiteClubPorMesa($torneoId);
+    }
+
+    /**
+     * @param array<int, array<int, true>>|null $matrizCompañeros
+     */
+    private function ajustarMesasMaxDosMismoClubSiAplica(
+        int $torneoId,
+        array &$mesas,
+        array &$byePool,
+        ?array $matrizCompañeros = null
+    ): void {
+        if ($this->aplicaLimiteClubPorMesa($torneoId)) {
+            $this->ajustarMesasMaxDosMismoClub($mesas, $byePool, $matrizCompañeros);
+        }
+    }
+
+    /** @param list<list<array<string, mixed>>> $mesas */
+    private function mesasCumplenLimiteClubSiAplica(int $torneoId, array $mesas): bool
+    {
+        if (! $this->aplicaLimiteClubPorMesa($torneoId)) {
+            return true;
+        }
+
+        return $this->todasLasMesasCumplenLimiteClub($mesas);
+    }
+
     /** @return array<int, int> club_id (0 = sin club) => cantidad en la mesa */
     private function conteosPorClubEnMesa(array $mesa4): array
     {

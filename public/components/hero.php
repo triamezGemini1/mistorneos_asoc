@@ -1,10 +1,24 @@
 ﻿<?php
 /**
  * Componente Hero - Sección principal de bienvenida (layout compacto)
- * Dos columnas: texto y CTA a la izquierda, imagen/media a la derecha
- * Variables globales disponibles: $user, app_base_url()
+ * Variables globales disponibles: $user, app_base_url(), $SITE_NAME (config.php)
  */
-$hero_logo_url = class_exists('AppHelpers') ? AppHelpers::getAppLogo() : (rtrim(app_base_url(), '/') . '/public/view_image.php?path=' . rawurlencode('lib/Assets/mislogos/logo4.png'));
+if (! isset($brand_name)) {
+    if (! class_exists('Branding', false)) {
+        $brandingPath = dirname(__DIR__, 2) . '/lib/Branding.php';
+        if (is_file($brandingPath)) {
+            require_once dirname(__DIR__, 2) . '/lib/Env.php';
+            require_once dirname(__DIR__, 2) . '/lib/SegmentConfig.php';
+            require_once $brandingPath;
+            SegmentConfig::boot();
+        }
+    }
+    $brand_name = class_exists('Branding', false) ? Branding::siteName() : ($SITE_NAME ?? 'La Estación del Dominó');
+}
+$hero_logo_url = class_exists('Branding', false)
+    ? Branding::logoUrl()
+    : (class_exists('AppHelpers') ? AppHelpers::getAppLogo() : (rtrim(app_base_url(), '/') . '/public/view_image.php?path=' . rawurlencode('lib/Assets/mislogos/logo4.png')));
+$hero_tagline = class_exists('Branding', false) ? Branding::tagline() : ($SITE_TAGLINE ?? 'La plataforma integral para la gestión de torneos de dominó en Venezuela.');
 ?>
     <!-- Hero Section (compacto, dos columnas) -->
     <section class="relative bg-gradient-to-br from-primary-700 via-primary-600 to-primary-500 text-white overflow-hidden min-h-[100vh] flex items-center">
@@ -20,11 +34,11 @@ $hero_logo_url = class_exists('AppHelpers') ? AppHelpers::getAppLogo() : (rtrim(
                 <div class="order-2 lg:order-1 text-center lg:text-left">
                     <h1 class="text-3xl sm:text-4xl md:text-5xl font-bold mb-4 leading-tight">
                         Bienvenido a<br>
-                        <span class="text-accent">La Estación del Dominó</span>
+                        <span class="text-accent"><?= htmlspecialchars($brand_name) ?></span>
                     </h1>
                     <p class="text-base md:text-lg lg:text-xl mb-6 text-white/90 leading-relaxed max-w-xl mx-auto lg:mx-0">
-                        La plataforma integral para la gestión de torneos de dominó en Venezuela.
-                        Participa en eventos cerca de ti o únete como organizador.
+                        <?= htmlspecialchars($hero_tagline) ?>
+                        Participa en torneos de tu asociación o únete como organizador.
                     </p>
                     <div class="flex flex-col sm:flex-row gap-3 justify-center lg:justify-start">
                         <a href="#registro" class="inline-flex items-center justify-center px-6 py-3 bg-accent text-primary-700 font-semibold rounded-xl hover:bg-accentDark hover:text-white transition-all duration-300 shadow-lg hover:shadow-xl">
@@ -40,7 +54,7 @@ $hero_logo_url = class_exists('AppHelpers') ? AppHelpers::getAppLogo() : (rtrim(
                     <div class="relative w-48 h-48 sm:w-64 sm:h-64 md:w-80 md:h-80 lg:w-96 lg:h-96 flex items-center justify-center">
                         <div class="absolute inset-0 bg-white/10 rounded-3xl blur-2xl"></div>
                         <img src="<?= htmlspecialchars($hero_logo_url) ?>" 
-                             alt="La Estación del Dominó" 
+                             alt="<?= htmlspecialchars($brand_name) ?>" 
                              class="relative w-full h-full object-contain drop-shadow-2xl">
                     </div>
                 </div>

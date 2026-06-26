@@ -7,6 +7,7 @@ require_once __DIR__ . '/../config/bootstrap.php';
 require_once __DIR__ . '/../config/db_config.php';
 require_once __DIR__ . '/../config/csrf.php';
 require_once __DIR__ . '/../lib/ClubHelper.php';
+require_once __DIR__ . '/includes/branding_init.php';
 
 $pdo = DB::pdo();
 $base_url = app_base_url();
@@ -150,7 +151,7 @@ $clases = [1 => 'Abierto', 2 => 'Por Categorías'];
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes">
     <meta name="theme-color" content="#48bb78">
-    <title>Inscripción al Torneo - La Estación del Dominó</title>
+    <title><?= htmlspecialchars(Branding::pageTitle('Inscripción al Torneo')) ?></title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
@@ -229,7 +230,7 @@ $clases = [1 => 'Abierto', 2 => 'Por Categorías'];
                         require_once __DIR__ . '/../lib/app_helpers.php';
                         $logo_url = AppHelpers::getAppLogo();
                         ?>
-                        <img src="<?= htmlspecialchars($logo_url) ?>" alt="La Estación del Dominó" style="height: 60px; margin-bottom: 1rem;">
+                        <img src="<?= htmlspecialchars($logo_url) ?>" alt="<?= htmlspecialchars($brand_name) ?>" style="height: 60px; margin-bottom: 1rem;">
                         <h3 class="mb-1">Inscripción al Torneo</h3>
                         <p class="mb-0 opacity-75">Completa tus datos para participar</p>
                     </div>

@@ -76,14 +76,21 @@ final class FvdConfig
 
     public static function organizacionId(): int
     {
+        if (class_exists('SegmentConfig', false)) {
+            $fromSegment = SegmentConfig::organizacionRaizId();
+            if ($fromSegment > 0) {
+                return $fromSegment;
+            }
+        }
+
         return self::ORGANIZACION_ID;
     }
 
-    /** La organización canónica FVD es federación de ámbito nacional. */
+    /** Organización raíz del segmento (federación / ámbito nacional). */
     public static function organizacionEsAmbitoNacional(?array $organizacion): bool
     {
         return is_array($organizacion)
-            && (int) ($organizacion['id'] ?? 0) === self::ORGANIZACION_ID;
+            && (int) ($organizacion['id'] ?? 0) === self::organizacionId();
     }
 
     /**
@@ -106,12 +113,12 @@ final class FvdConfig
      */
     public static function resolveOrganizacionId(mixed $ignored = null): int
     {
-        return self::ORGANIZACION_ID;
+        return self::organizacionId();
     }
 
     public static function clubResponsableTorneo(mixed $ignored = null): int
     {
-        return self::ORGANIZACION_ID;
+        return self::organizacionId();
     }
 
     /**
@@ -123,13 +130,14 @@ final class FvdConfig
             return;
         }
 
-        $_SESSION['organizacion_id'] = self::ORGANIZACION_ID;
-        $_SESSION['organizacion_nombre'] = self::ORGANIZACION_NOMBRE;
-        $_SESSION['organizacion_siglas'] = self::ORGANIZACION_SIGLAS;
+        $rootId = self::organizacionId();
+        $_SESSION['organizacion_id'] = $rootId;
+        $_SESSION['organizacion_nombre'] = self::getOrganizacionNombre();
+        $_SESSION['organizacion_siglas'] = self::organizacionSiglas();
         $_SESSION['fvd_anchor'] = true;
 
         if (isset($_SESSION['user']) && is_array($_SESSION['user'])) {
-            $_SESSION['user']['organizacion_id'] = self::ORGANIZACION_ID;
+            $_SESSION['user']['organizacion_id'] = $rootId;
         }
     }
 
@@ -153,7 +161,24 @@ final class FvdConfig
      */
     public static function isOrganizacionOperativa(int $organizacionId): bool
     {
-        return $organizacionId === self::ORGANIZACION_ID;
+        return $organizacionId === self::organizacionId();
+    }
+
+    public static function organizacionSiglas(): string
+    {
+        $row = self::getOrganizacionMaestra();
+        $siglas = trim((string) ($row['siglas'] ?? ''));
+        if ($siglas !== '') {
+            return $siglas;
+        }
+        if (class_exists('SegmentConfig', false)) {
+            $fromSegment = trim((string) SegmentConfig::get('product.short_name', ''));
+            if ($fromSegment !== '') {
+                return $fromSegment;
+            }
+        }
+
+        return self::ORGANIZACION_SIGLAS;
     }
 
     /** @alias isOrganizacionOperativa */
@@ -181,8 +206,9 @@ final class FvdConfig
             return;
         }
 
+        $rootId = self::organizacionId();
         self::$maestraCache = [
-            'id' => self::ORGANIZACION_ID,
+            'id' => $rootId,
             'nombre' => self::ORGANIZACION_NOMBRE,
             'siglas' => self::ORGANIZACION_SIGLAS,
             'estatus' => 1,
@@ -205,11 +231,11 @@ final class FvdConfig
             }
             $sql = 'SELECT ' . implode(', ', $select) . ' FROM organizaciones WHERE id = ? LIMIT 1';
             $stmt = $pdo->prepare($sql);
-            $stmt->execute([self::ORGANIZACION_ID]);
+            $stmt->execute([$rootId]);
             $row = $stmt->fetch(PDO::FETCH_ASSOC);
             if (is_array($row) && !empty($row)) {
                 self::$maestraCache = array_merge(self::$maestraCache, $row);
-                self::$maestraCache['id'] = self::ORGANIZACION_ID;
+                self::$maestraCache['id'] = $rootId;
                 if (empty(self::$maestraCache['nombre'])) {
                     self::$maestraCache['nombre'] = self::ORGANIZACION_NOMBRE;
                 }

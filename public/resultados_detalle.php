@@ -15,6 +15,7 @@ require_once __DIR__ . '/../lib/app_helpers.php';
 require_once __DIR__ . '/../lib/UrlHelper.php';
 require_once __DIR__ . '/../lib/TournamentScopeHelper.php';
 require_once __DIR__ . '/../lib/LandingDataService.php';
+require_once __DIR__ . '/includes/branding_init.php';
 
 $pdo = DB::pdo();
 $base_url = app_base_url();
@@ -26,7 +27,14 @@ $torneo_id = isset($_GET['torneo_id']) ? (int)$_GET['torneo_id'] : 0;
 
 // Redirigir a la página dinámica de resultados (compatible con enlaces antiguos)
 if ($torneo_id > 0) {
-    header('Location: evento_resultados.php?torneo_id=' . $torneo_id . (isset($_GET['msg']) ? '&msg=' . urlencode($_GET['msg']) : ''));
+    $qs = ['torneo_id' => $torneo_id];
+    if (isset($_GET['organizacion_id']) && (int) $_GET['organizacion_id'] > 0) {
+        $qs['organizacion_id'] = (int) $_GET['organizacion_id'];
+    }
+    if (isset($_GET['msg'])) {
+        $qs['msg'] = (string) $_GET['msg'];
+    }
+    header('Location: evento_resultados.php' . (http_build_query($qs) !== '' ? '?' . http_build_query($qs) : ''));
     exit;
 }
 
@@ -199,7 +207,7 @@ $total_pages = ceil($total_posiciones / $per_page);
     <meta name="theme-color" content="#1a365d">
     
     <!-- SEO Meta Tags -->
-    <title>Resultados <?= htmlspecialchars($torneo_data['nombre']) ?> - La Estación del Dominó</title>
+    <title><?= htmlspecialchars(Branding::pageTitle('Resultados ' . ($torneo_data['nombre'] ?? ''))) ?></title>
     <meta name="description" content="Resultados y clasificación del torneo <?= htmlspecialchars($torneo_data['nombre']) ?>. <?= (int)($torneo_data['total_inscritos'] ?? 0) ?> participantes. Fecha: <?= date('d/m/Y', strtotime($torneo_data['fechator'])) ?>">
     <meta name="keywords" content="resultados <?= htmlspecialchars($torneo_data['nombre']) ?>, torneo dominó, clasificación dominó">
     <meta name="robots" content="index, follow">
@@ -232,7 +240,7 @@ $total_pages = ceil($total_posiciones / $per_page);
         },
         "organizer": {
             "@type": "Organization",
-            "name": "<?= htmlspecialchars($torneo_data['organizacion_nombre'] ?? 'La Estación del Dominó') ?>"
+            "name": "<?= htmlspecialchars(Branding::orgNameOrSite($torneo_data['organizacion_nombre'] ?? '')) ?>"
         }
     }
     </script>
@@ -469,7 +477,7 @@ $total_pages = ceil($total_posiciones / $per_page);
             <div class="header-section">
                 <div class="d-flex align-items-center justify-content-between flex-wrap gap-3">
                     <div>
-                        <?= AppHelpers::appLogo('', 'La Estación del Dominó', 40) ?>
+                        <?= AppHelpers::appLogo('', null, 40) ?>
                     </div>
                     <div class="text-end">
                         <h4 class="mb-1"><i class="fas fa-trophy me-2"></i>Resultados</h4>

@@ -102,9 +102,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['guardar_resultados'])
                     }
                 }
             }
-            
+
+            $pdo->prepare('UPDATE partiresul SET registrado = 1 WHERE id_torneo = ? AND partida = ? AND mesa = ?')
+                ->execute([$torneo_id, $partida, $mesa]);
+
             $pdo->commit();
-            
+
+            if (!defined('TORNEO_GESTION_SKIP_AUTH')) {
+                define('TORNEO_GESTION_SKIP_AUTH', true);
+            }
+            if (!defined('TORNEO_GESTION_SKIP_ROUTER')) {
+                define('TORNEO_GESTION_SKIP_ROUTER', true);
+            }
+            require_once __DIR__ . '/../torneo_gestion.php';
+            recalcularClasificacionSiRondaCompleta($torneo_id, $partida);
+
             header('Location: index.php?page=tournament_admin&torneo_id=' . $torneo_id . '&action=ingreso_resultados&success=' . urlencode('Resultados guardados exitosamente'));
             exit;
         } catch (Exception $e) {

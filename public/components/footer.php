@@ -3,10 +3,20 @@
  * Componente Footer - Pie de página con contacto
  * Variables globales: $SITE_NAME, $SITE_TAGLINE, $SITE_EMAIL (desde config.php), app_base_url()
  */
-$logo_url = class_exists('AppHelpers') ? AppHelpers::getAppLogo() : (rtrim(app_base_url(), '/') . '/public/view_image.php?path=' . rawurlencode('lib/Assets/mislogos/logo4.png'));
-$site_name = $SITE_NAME ?? 'La Estación del Dominó';
-$site_tagline = $SITE_TAGLINE ?? 'Sistema integral para la gestión de torneos de dominó';
-$site_email = $SITE_EMAIL ?? 'info@laestaciondeldomino.com';
+if (! class_exists('Branding', false)) {
+    $brandingPath = dirname(__DIR__, 2) . '/lib/Branding.php';
+    if (is_file($brandingPath)) {
+        require_once $brandingPath;
+    }
+}
+
+$logo_url = class_exists('Branding', false)
+    ? Branding::logoUrl()
+    : (class_exists('AppHelpers') ? AppHelpers::getAppLogo() : (rtrim(app_base_url(), '/') . '/public/view_image.php?path=' . rawurlencode('lib/Assets/mislogos/logo4.png')));
+$site_name = $SITE_NAME ?? (class_exists('Branding', false) ? Branding::siteName() : 'La Estación del Dominó');
+$site_tagline = $SITE_TAGLINE ?? (class_exists('Branding', false) ? Branding::tagline() : 'Sistema integral para la gestión de torneos de dominó');
+$site_email = $SITE_EMAIL ?? (class_exists('Branding', false) ? Branding::contactEmail() : 'info@laestaciondeldomino.com');
+$site_copyright = class_exists('Branding', false) ? Branding::copyrightNotice() : ('&copy; ' . date('Y') . ' ' . $site_name . '. Todos los derechos reservados.');
 ?>
     <footer id="contacto" class="bg-gray-900 text-white py-12">
         <div class="container mx-auto px-4 sm:px-6 lg:px-8">
@@ -22,7 +32,7 @@ $site_email = $SITE_EMAIL ?? 'info@laestaciondeldomino.com';
                     <p class="text-gray-400 mb-1 flex items-center justify-center md:justify-end">
                         <i class="fas fa-envelope mr-2"></i><?= htmlspecialchars($site_email) ?>
                     </p>
-                    <p class="text-gray-500 text-sm">&copy; <?= date('Y') ?> <?= htmlspecialchars($site_name) ?>. Todos los derechos reservados.</p>
+                    <p class="text-gray-500 text-sm"><?= htmlspecialchars($site_copyright) ?></p>
                 </div>
             </div>
         </div>

@@ -111,13 +111,6 @@ function generarPaginador($pagina_actual, $total_paginas, $base_url, $parametros
 $participantes = [];
 
 try {
-    // Asegurar que las posiciones estén actualizadas
-    if (function_exists('recalcularRankingSegunModalidad')) {
-        recalcularRankingSegunModalidad($torneo_id);
-    } elseif (function_exists('recalcularPosiciones')) {
-        recalcularPosiciones($torneo_id);
-    }
-    
     // Contar total de participantes para paginación
     $sql_count = "
         SELECT COUNT(*) as total
@@ -324,14 +317,10 @@ $base_url_return = $use_standalone ? $script_actual : 'index.php?page=torneo_ges
                 </thead>
                 <tbody>
                     <?php 
-                    $posicion_display = 1;
                     $fila_idx_general = 0;
                     foreach ($participantes as $participante): 
                         $fila_idx_general++;
                         $posicion_actual = (int)($participante['posicion'] ?? 0);
-                        if ($posicion_actual == 0) {
-                            $posicion_actual = $posicion_display;
-                        }
                         
                         $medalla_class = '';
                         if ($posicion_actual == 1) $medalla_class = 'bg-yellow-50';
@@ -356,8 +345,10 @@ $base_url_return = $use_standalone ? $script_actual : 'index.php?page=torneo_ges
                                     <i class="fas fa-medal text-gray-400"></i>
                                 <?php elseif ($posicion_actual == 3): ?>
                                     <i class="fas fa-medal text-orange-400"></i>
-                                <?php else: ?>
+                                <?php elseif ($posicion_actual > 0): ?>
                                     <?php echo $posicion_actual; ?>
+                                <?php else: ?>
+                                    —
                                 <?php endif; ?>
                             </td>
                             <td class="border border-gray-300 px-4 py-3 text-center">
@@ -418,7 +409,6 @@ $base_url_return = $use_standalone ? $script_actual : 'index.php?page=torneo_ges
                                 <?php echo getTarjetaTexto($participante['tarjeta'] ?? 0); ?>
                             </td>
                         </tr>
-                        <?php $posicion_display++; ?>
                     <?php endforeach; ?>
                     
                     <?php if (empty($participantes)): ?>

@@ -10,6 +10,7 @@ require_once __DIR__ . '/../config/db_config.php';
 require_once __DIR__ . '/../lib/app_helpers.php';
 require_once __DIR__ . '/../lib/LandingDataService.php';
 require_once __DIR__ . '/../lib/UrlHelper.php';
+require_once __DIR__ . '/includes/branding_init.php';
 
 $pdo = DB::pdo();
 $base_url = app_base_url();
@@ -59,7 +60,7 @@ $clases = [1 => 'Torneo', 2 => 'Campeonato'];
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Torneos Realizados - La Estación del Dominó</title>
+    <title><?= htmlspecialchars(Branding::pageTitle('Torneos Realizados')) ?></title>
     <meta name="description" content="Histórico de torneos de dominó realizados. Consulta resultados y podios.">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">

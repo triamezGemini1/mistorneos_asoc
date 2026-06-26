@@ -18,5 +18,12 @@
 Thumbs.db
 desktop.ini
 
+# Paquetes de despliegue locales (no versionar)
+*.zip
+parche_*.zip
+mistorneos_*.zip
+estructura_*.zip
+hotfix_*.zip
+
 # Dependencias Node (si aplica)
 /node_modules/

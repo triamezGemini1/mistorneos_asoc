@@ -104,13 +104,6 @@ function generarPaginadorClubs($pagina_actual, $total_paginas, $base_url, $param
 
 require_once __DIR__ . '/../../lib/ResultadosPorClubHelper.php';
 
-// Asegurar que las posiciones estén actualizadas
-if (function_exists('recalcularRankingSegunModalidad')) {
-    recalcularRankingSegunModalidad($torneo_id);
-} elseif (function_exists('recalcularPosiciones')) {
-    recalcularPosiciones($torneo_id);
-}
-
 // Obtener información del torneo
 $pareclub = (int)($torneo['pareclub'] ?? 0);
 

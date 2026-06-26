@@ -50,7 +50,7 @@ return [
     'MAIL_PASSWORD' => 'TU_PASSWORD_CORREO',
     'MAIL_ENCRYPTION' => 'tls',
     'MAIL_FROM_ADDRESS' => 'noreply@laestaciondeldominohoy.com',
-    'MAIL_FROM_NAME' => 'La Estación del Dominó',
+    'MAIL_FROM_NAME' => 'MisTorneos ASOC',
     
     // ============================================
     // SEGURIDAD

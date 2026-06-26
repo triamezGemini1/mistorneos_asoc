@@ -114,7 +114,7 @@ final class PublicTorneoPortalHelper
      */
     public static function fetchResumenParticipacion(\PDO $pdo, int $torneoId, int $idUsuario): array
     {
-        require_once __DIR__ . '/InscritosPartiresulHelper.php';
+        require_once __DIR__ . '/ResumenParticipacionHelper.php';
 
         $st = $pdo->prepare(
             'SELECT u.id AS id_usuario, u.nombre, u.cedula, i.codigo_equipo
@@ -126,30 +126,29 @@ final class PublicTorneoPortalHelper
         $st->execute([$torneoId, $idUsuario]);
         $jugador = $st->fetch(\PDO::FETCH_ASSOC) ?: ['id_usuario' => $idUsuario, 'nombre' => '', 'cedula' => '', 'codigo_equipo' => ''];
 
-        $stats = InscritosPartiresulHelper::obtenerEstadisticas($idUsuario, $torneoId);
-        $puntos = (int) ($stats['puntos'] ?? 0);
-        $efectividad = (int) ($stats['efectividad'] ?? 0);
-
-        $st = $pdo->prepare(
-            'SELECT pr.id_usuario,
-                    COALESCE(SUM(pr.resultado1), 0) AS pts,
-                    COALESCE(SUM(pr.efectividad), 0) AS ef
-             FROM partiresul pr
-             INNER JOIN inscritos i ON i.id_usuario = pr.id_usuario AND i.torneo_id = pr.id_torneo
-             WHERE pr.id_torneo = ? AND pr.registrado = 1
-             AND (i.estatus IS NULL OR i.estatus = 1 OR i.estatus = 2 OR i.estatus = \'1\' OR i.estatus = \'confirmado\' OR i.estatus = \'solvente\')
-             GROUP BY pr.id_usuario'
+        $stIns = $pdo->prepare(
+            'SELECT i.*, COALESCE(u.nombre, u.username) AS nombre_jugador
+             FROM inscritos i
+             LEFT JOIN usuarios u ON u.id = i.id_usuario
+             WHERE i.torneo_id = ? AND i.id_usuario = ?
+             LIMIT 1'
         );
-        $st->execute([$torneoId]);
-        $todos = $st->fetchAll(\PDO::FETCH_ASSOC);
-        $posicion = 1;
-        foreach ($todos as $row) {
-            $pt = (int) ($row['pts'] ?? 0);
-            $ef = (int) ($row['ef'] ?? 0);
-            if ($pt > $puntos || ($pt === $puntos && $ef > $efectividad)) {
-                $posicion++;
-            }
+        $stIns->execute([$torneoId, $idUsuario]);
+        $inscritoRow = $stIns->fetch(\PDO::FETCH_ASSOC) ?: [];
+
+        $stMod = $pdo->prepare('SELECT COALESCE(modalidad, 1) AS modalidad FROM tournaments WHERE id = ?');
+        $stMod->execute([$torneoId]);
+        $esModalidadEquipos = (int) (($stMod->fetch(\PDO::FETCH_ASSOC)['modalidad'] ?? 1)) === 3;
+
+        $equipoRow = null;
+        if ($esModalidadEquipos && !empty($inscritoRow['codigo_equipo'])) {
+            $stEq = $pdo->prepare(
+                'SELECT posicion FROM equipos WHERE id_torneo = ? AND codigo_equipo = ? AND estatus = 0 LIMIT 1'
+            );
+            $stEq->execute([$torneoId, $inscritoRow['codigo_equipo']]);
+            $equipoRow = $stEq->fetch(\PDO::FETCH_ASSOC) ?: null;
         }
+        $posicion = ResumenParticipacionHelper::resolverPosicionMostrada($inscritoRow, $esModalidadEquipos, $equipoRow);
 
         $st = $pdo->prepare(
             'SELECT partida, mesa, secuencia, resultado1, resultado2, efectividad, ff, registrado
@@ -170,30 +169,35 @@ final class PublicTorneoPortalHelper
             $contrario2 = '';
             $ganada = 0;
             if ($mesa > 0) {
+                $joinU = ResumenParticipacionHelper::sqlJoinUsuariosDesdePartiresul('pr', 'u', 'LEFT');
+                $exprNom = ResumenParticipacionHelper::sqlExprNombreUsuarioPartiresul('u', 'pr');
                 $stmt_mesa = $pdo->prepare(
-                    'SELECT pr.id_usuario, pr.secuencia, COALESCE(u.nombre, u.username) AS nombre
+                    "SELECT pr.id_usuario, pr.secuencia, {$exprNom} AS nombre
                      FROM partiresul pr
-                     INNER JOIN usuarios u ON u.id = pr.id_usuario
-                     WHERE pr.id_torneo = ? AND pr.partida = ? AND pr.mesa = ?
-                     ORDER BY pr.secuencia ASC'
+                     {$joinU}
+                     WHERE pr.id_torneo = ? AND pr.partida = ? AND CAST(pr.mesa AS SIGNED) = ?
+                     ORDER BY pr.secuencia ASC"
                 );
                 $stmt_mesa->execute([$torneoId, $p['partida'], $p['mesa']]);
                 $en_mesa = $stmt_mesa->fetchAll(\PDO::FETCH_ASSOC);
-                $mi_equipo = in_array($sec, [1, 2], true) ? [1, 2] : [3, 4];
-                $otro_equipo = in_array($sec, [1, 2], true) ? [3, 4] : [1, 2];
-                foreach ($en_mesa as $row) {
-                    $s = (int) $row['secuencia'];
-                    if ((int) $row['id_usuario'] !== $idUsuario) {
-                        if (in_array($s, $mi_equipo, true)) {
-                            $compañero = $row['nombre'] ?? '—';
-                        } else {
-                            if ($contrario1 === '') {
-                                $contrario1 = $row['nombre'] ?? '—';
-                            } else {
-                                $contrario2 = $row['nombre'] ?? '—';
-                            }
-                        }
+                $idsProp = ResumenParticipacionHelper::normalizarIdsPartiresulJugador($idUsuario, $idUsuario, 0);
+                $resMesa = ResumenParticipacionHelper::resolverCompaneroYContrarios($en_mesa, $idsProp, $sec);
+                if ($resMesa['companero'] !== null) {
+                    $compañero = $resMesa['companero']['nombre'];
+                } else {
+                    $hist = ResumenParticipacionHelper::buscarCompaneroEnHistorialParejas($pdo, $torneoId, (int) $p['partida'], $idsProp);
+                    if ($hist !== null) {
+                        $compañero = $hist['nombre'];
                     }
+                }
+                $idxC = 0;
+                foreach ($resMesa['contrarios'] as $cont) {
+                    if ($idxC === 0) {
+                        $contrario1 = $cont['nombre'];
+                    } else {
+                        $contrario2 = $cont['nombre'];
+                    }
+                    $idxC++;
                 }
                 $ganada = (in_array($sec, [1, 2], true) && $r1 > $r2) || (in_array($sec, [3, 4], true) && $r2 > $r1) ? 1 : 0;
             }
@@ -206,10 +210,11 @@ final class PublicTorneoPortalHelper
         }
 
         $resumen = [
-            'puntos' => $puntos,
-            'efectividad' => $efectividad,
-            'ganados' => (int) ($stats['ganados'] ?? 0),
-            'perdidos' => (int) ($stats['perdidos'] ?? 0),
+            'puntos' => (int) ($inscritoRow['puntos'] ?? 0),
+            'efectividad' => (int) ($inscritoRow['efectividad'] ?? 0),
+            'ganados' => (int) ($inscritoRow['ganados'] ?? 0),
+            'perdidos' => (int) ($inscritoRow['perdidos'] ?? 0),
+            'ptosrnk' => (int) ($inscritoRow['ptosrnk'] ?? 0),
             'posicion' => $posicion,
         ];
 

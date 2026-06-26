@@ -13,6 +13,7 @@ require_once __DIR__ . '/db.php';
 require_once __DIR__ . '/../lib/InscritosHelper.php';
 require_once __DIR__ . '/../lib/PartiresulEstatusSql.php';
 require_once __DIR__ . '/../lib/ParejasFijasHelper.php';
+require_once __DIR__ . '/../lib/Core/MesaRepository.php';
 
 class MesaAsignacionParejasFijasService
 {
@@ -136,7 +137,8 @@ class MesaAsignacionParejasFijasService
         $historialEnfrentamientos = $this->obtenerHistorialEnfrentamientosParejas($torneoId, $numRonda - 1);
 
         $evitarRepeticion = ($tipoEmparejamiento === self::TIPO_INTERCLUBES || $tipoEmparejamiento === self::TIPO_SUIZO_SIN_REPETIR);
-        $preferirOtroClub = ($tipoEmparejamiento === self::TIPO_INTERCLUBES);
+        $preferirOtroClub = ($tipoEmparejamiento === self::TIPO_INTERCLUBES)
+            && ! $this->omiteLimiteClubPorMesa($torneoId);
 
         $parejasTrabajo = array_values($representantes);
         $codigosBye = [];
@@ -203,6 +205,19 @@ class MesaAsignacionParejasFijasService
      * Define el tipo de emparejamiento para rondas 2+.
      * Prioridad: parámetro de estrategia -> tournaments.tipo_torneo -> default suizo sin repetir.
      */
+    /**
+     * Org. particular o un solo club inscrito: no priorizar rival de otro club; sí evitar repetir enfrentamientos.
+     */
+    private function omiteLimiteClubPorMesa(int $torneoId): bool
+    {
+        static $repo = null;
+        if ($repo === null) {
+            $repo = new MesaRepository($this->pdo);
+        }
+
+        return $repo->torneoOmiteLimiteClubPorMesa($torneoId);
+    }
+
     private function resolverTipoEmparejamiento(int $torneoId, string $estrategia): int
     {
         $estrategia = strtolower(trim($estrategia));
@@ -375,7 +390,7 @@ class MesaAsignacionParejasFijasService
                 LEFT JOIN equipos e ON e.id_torneo = i.torneo_id AND e.codigo_equipo = i.codigo_equipo
                 WHERE i.torneo_id = ?
                   AND i.codigo_equipo IS NOT NULL AND i.codigo_equipo != ''
-                  AND " . self::SQL_ESTATUS_ACTIVO_ALIAS_I . "
+                  AND " . InscritosHelper::sqlWhereElegibleParaMesaConAlias('i') . "
                 GROUP BY i.codigo_equipo
                 HAVING jugadores_activos = 2
             ) t
@@ -886,15 +901,7 @@ class MesaAsignacionParejasFijasService
 
     public function contarMesasIncompletas(int $torneoId, int $ronda): int
     {
-        $noReg = PartiresulEstatusSql::whereRegistradoNoCompleto();
-        $stmt = $this->pdo->prepare("
-            SELECT COUNT(DISTINCT mesa) AS mesas_incompletas
-            FROM partiresul
-            WHERE id_torneo = ? AND partida = ? AND mesa > 0 AND {$noReg}
-        ");
-        $stmt->execute([$torneoId, $ronda]);
-        $row = $stmt->fetch(PDO::FETCH_ASSOC);
-        return (int) ($row['mesas_incompletas'] ?? 0);
+        return PartiresulEstatusSql::contarMesasIncompletas($this->pdo, $torneoId, $ronda);
     }
 
     /**

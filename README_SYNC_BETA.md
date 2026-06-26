@@ -12,6 +12,7 @@ La app en **https://laestaciondeldominohoy.com/mistorneos_beta/** se actualizaba
 | SFTP mal configurado | `.vscode/sftp.json` apuntaba a `/public_html/mistorneos` (producción), no a `mistorneos_beta`. |
 | Sin push a GitHub | Cambios solo en WAMP local, sin `git push`, no activan Actions. |
 | Secretos GitHub | Si caducaron FTP o se borraron `FTP_SERVER`, `FTP_USERNAME`, `FTP_PASSWORD` en el repo, el workflow falla (ver pestaña Actions). |
+| FTP 550 `_LEGACY_RAW` / `PROD_MISTORNEOS` | El estado viejo de FTP intentaba sincronizar carpetas que ya no existen. Corregido con `state-name` nuevo y exclusiones (runs #609–#610 fallaron). |
 
 ---
 

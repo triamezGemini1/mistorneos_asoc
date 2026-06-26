@@ -2,7 +2,7 @@
 /**
  * API Landing - Datos para la SPA de la landing page
  * GET: Retorna todos los datos necesarios para renderizar la landing
- * Usa exclusivamente LandingDataService como fuente de datos.
+ * Usa LandingAfiliadosService y datos estáticos del sitio.
  */
 
 require_once __DIR__ . '/../../config/bootstrap.php';
@@ -11,7 +11,8 @@ require_once __DIR__ . '/../../config/auth.php';
 require_once __DIR__ . '/../../config/csrf.php';
 require_once __DIR__ . '/../../lib/app_helpers.php';
 require_once __DIR__ . '/../../lib/UrlHelper.php';
-require_once __DIR__ . '/../../lib/LandingDataService.php';
+require_once __DIR__ . '/../../lib/LandingAfiliadosService.php';
+require_once __DIR__ . '/../../lib/LandingAfiliadosAccess.php';
 
 header('Content-Type: application/json; charset=utf-8');
 header('Access-Control-Allow-Origin: *');
@@ -47,7 +48,7 @@ function landingDataCacheKey(int $entidadParam): string
     } catch (Throwable $e) {
     }
 
-    return 'landing_data_v1_' . hash('sha256', json_encode([$entidadParam, $uid, $role]));
+    return 'landing_data_v3_' . hash('sha256', json_encode([$entidadParam, $uid, $role]));
 }
 
 function landingDataCacheGet(string $key): ?array
@@ -92,38 +93,41 @@ function landingDataCacheSet(string $key, array $payload): void
     @file_put_contents($file, json_encode($wrapped), LOCK_EX);
 }
 
-function getAficheUrlApi($torneo, $baseUrl) {
-    if (!empty($torneo['afiche'])) {
-        $file = basename($torneo['afiche']);
-        return $baseUrl . 'view_tournament_file.php?file=' . urlencode($file);
+function landingDocumentDisplayTitle(string $baseName): string
+{
+    $slug = strtolower($baseName);
+    $slug = str_replace(['__', ' '], '_', $slug);
+    $slug = preg_replace('/[^a-z0-9_]/', '', $slug) ?? $slug;
+
+    if (str_contains($slug, 'circuito') && str_contains($slug, '2026')) {
+        return 'Circuito 2026';
     }
-    return null;
-}
-
-function getLogoOrganizacionUrlApi($evento, $baseUrl) {
-    if (!empty($evento['organizacion_logo'])) {
-        if (class_exists('AppHelpers')) {
-            return AppHelpers::imageUrl($evento['organizacion_logo']);
-        }
-        return $baseUrl . 'view_image.php?path=' . rawurlencode($evento['organizacion_logo']);
+    if (str_contains($slug, 'reglamento') && str_contains($slug, '2024')) {
+        return 'Reglamento 2024';
     }
-    return null;
+    if (str_contains($slug, 'invitaci') && (str_contains($slug, 'mundial') || str_contains($slug, 'esp'))) {
+        return 'Mundial España 2026';
+    }
+    if (str_contains($slug, 'clasificacion') && str_contains($slug, 'final')) {
+        return 'Clasificación final';
+    }
+
+    $human = trim(str_replace(['_', '-'], ' ', $baseName));
+    $human = preg_replace('/\s+/', ' ', $human) ?? $human;
+
+    return $human !== '' ? ucwords($human) : $baseName;
 }
 
-function limpiarNombreTorneo($nombre) {
-    if (empty($nombre)) return $nombre;
-    $nombre = preg_replace('/\bmasivos?\b/i', '', $nombre);
-    $nombre = preg_replace('/\s+Masivos\s*/i', ' ', $nombre);
-    $nombre = preg_replace('/^Masivos\s+/i', '', $nombre);
-    $nombre = preg_replace('/\s+Masivos$/i', '', $nombre);
-    $nombre = preg_replace('/\s+/', ' ', $nombre);
-    return trim($nombre);
-}
+function landingDocumentEntry(string $pathRel, string $filename, string $tipo = 'oficial'): array
+{
+    $baseName = pathinfo($filename, PATHINFO_FILENAME);
 
-function enriquecerEvento(&$ev, $baseUrl) {
-    $ev['logo_url'] = getLogoOrganizacionUrlApi($ev, $baseUrl);
-    $ev['afiche_url'] = getAficheUrlApi($ev, $baseUrl);
-    $ev['nombre_limpio'] = limpiarNombreTorneo($ev['nombre'] ?? '');
+    return [
+        'titulo' => landingDocumentDisplayTitle($baseName),
+        'path' => $pathRel,
+        'archivo' => $filename,
+        'tipo' => $tipo,
+    ];
 }
 
 try {
@@ -145,94 +149,6 @@ try {
             echo json_encode($cachedPayload, JSON_UNESCAPED_UNICODE);
             exit;
         }
-    }
-
-    $service = new LandingDataService($pdo);
-
-    // Eventos realizados (LandingDataService)
-    $eventos_realizados = $service->getEventosRealizados(50);
-    foreach ($eventos_realizados as &$ev) {
-        enriquecerEvento($ev, $baseUrl);
-    }
-    unset($ev);
-
-    // Eventos futuros (LandingDataService)
-    $eventos_todos_futuros = $service->getProximosEventos(500);
-    $eventos_futuros = array_values(array_filter($eventos_todos_futuros, fn($e) => ($e['es_evento_masivo'] ?? null) === null || $e['es_evento_masivo'] === '' || in_array((int)($e['es_evento_masivo'] ?? 0), [0, 4])));
-    $eventos_inscripcion_linea = array_values(array_filter($eventos_todos_futuros, fn($e) => in_array((int)($e['es_evento_masivo'] ?? 0), [1, 2, 3])));
-    $eventos_masivos = $eventos_inscripcion_linea;
-    $eventos_privados = array_values(array_filter($eventos_todos_futuros, fn($e) => (int)($e['es_evento_masivo'] ?? 0) === 4));
-
-    foreach (array_merge($eventos_futuros, $eventos_masivos, $eventos_privados) as &$ev) {
-        enriquecerEvento($ev, $baseUrl);
-    }
-    unset($ev);
-
-    // Entidades con eventos (LandingDataService)
-    $entidades_con_eventos = $service->getEntidadesConEventos();
-
-    // Eventos por entidad/club (filtro de usuario o parámetro)
-    $eventos_mi_entidad = [];
-    $filtro_aplicado_entidad = '';
-    $entidad_nombre_usuario = '';
-    $entidad_filtro = $entidadParam;
-
-    if ($user && $entidadParam === 0) {
-        $user_entidad = (int)($user['entidad'] ?? 0);
-        $user_club_id = (int)($user['club_id'] ?? 0);
-        $user_role = $user['role'] ?? 'usuario';
-        if ($user_role === 'admin_club' || $user_role === 'admin_torneo') {
-            $entidad_filtro = $user_entidad;
-        } elseif ($user_club_id > 0) {
-            $org_id = $service->getOrgIdPorClub($user_club_id);
-            if ($org_id) {
-                $eventos_mi_entidad = $service->getProximosEventosPorOrganizaciones([$org_id], 12);
-                try {
-                    $stmt = $pdo->prepare("SELECT nombre FROM clubes WHERE id = ? LIMIT 1");
-                    $stmt->execute([$user_club_id]);
-                    $club_data = $stmt->fetch(PDO::FETCH_ASSOC);
-                    if ($club_data) {
-                        $entidad_nombre_usuario = $club_data['nombre'];
-                        $filtro_aplicado_entidad = "de su club: " . $club_data['nombre'];
-                    }
-                } catch (Exception $e) {}
-            }
-            $entidad_filtro = 0;
-        } elseif ($user_entidad > 0) {
-            $entidad_filtro = $user_entidad;
-        }
-    } elseif ($entidadParam > 0) {
-        $entidad_filtro = $entidadParam;
-    }
-
-    if ($entidad_filtro > 0 && empty($eventos_mi_entidad)) {
-        try {
-            $stmt = $pdo->prepare("SELECT nombre FROM entidad WHERE id = ? LIMIT 1");
-            $stmt->execute([$entidad_filtro]);
-            $ent_data = $stmt->fetch(PDO::FETCH_ASSOC);
-            if ($ent_data) {
-                $entidad_nombre_usuario = $ent_data['nombre'];
-                $filtro_aplicado_entidad = "de la entidad: " . $entidad_nombre_usuario;
-            }
-        } catch (Exception $e) {}
-        $eventos_mi_entidad = $service->getProximosEventosPorEntidad($entidad_filtro, 12);
-    }
-
-    foreach ($eventos_mi_entidad as &$ev) {
-        enriquecerEvento($ev, $baseUrl);
-    }
-    unset($ev);
-
-    // Calendario (LandingDataService)
-    $eventos_calendario = $service->getEventosCalendario();
-    $eventos_por_fecha = [];
-    foreach ($eventos_calendario as $ev) {
-        $fecha_key = date('Y-m-d', strtotime($ev['fechator'] ?? ''));
-        if (!isset($eventos_por_fecha[$fecha_key])) {
-            $eventos_por_fecha[$fecha_key] = [];
-        }
-        enriquecerEvento($ev, $baseUrl);
-        $eventos_por_fecha[$fecha_key][] = $ev;
     }
 
     // Comentarios aprobados
@@ -299,9 +215,8 @@ try {
             if ($f->isDot() || !$f->isFile()) continue;
             $ext = strtolower($f->getExtension());
             if (in_array($ext, $doc_extensions, true)) {
-                $nombre = pathinfo($f->getFilename(), PATHINFO_FILENAME);
                 $path_rel = 'upload/documentos_oficiales/' . $f->getFilename();
-                $documentos_oficiales[] = ['titulo' => $nombre, 'path' => $path_rel, 'archivo' => $f->getFilename()];
+                $documentos_oficiales[] = landingDocumentEntry($path_rel, $f->getFilename(), 'oficial');
             }
         }
     }
@@ -314,37 +229,48 @@ try {
             if ($f->isDot() || !$f->isFile()) continue;
             $ext = strtolower($f->getExtension());
             if (in_array($ext, $inv_extensions, true)) {
-                $invitaciones_fvd[] = ['titulo' => pathinfo($f->getFilename(), PATHINFO_FILENAME), 'path' => 'upload/invitaciones_fvd/' . $f->getFilename()];
+                $path_rel = 'upload/invitaciones_fvd/' . $f->getFilename();
+                $invitaciones_fvd[] = landingDocumentEntry($path_rel, $f->getFilename(), 'invitacion');
             }
         }
     }
 
+    $documentos_descarga = array_values(array_merge($documentos_oficiales, $invitaciones_fvd));
+
     $csrf_token = CSRF::token();
+
+    $landingAccess = LandingAfiliadosAccess::context();
+    $afiliados = [];
+    if (class_exists('SegmentConfig', false) && SegmentConfig::feature('landing_afiliados_hub')) {
+        try {
+            $afiliadosService = new LandingAfiliadosService($pdo);
+            // Tarjetas del landing: resumen público (logo, entidad, contadores) sin datos de contacto.
+            $afiliados = $afiliadosService->listAfiliadosActivos(false);
+        } catch (Throwable $e) {
+            error_log('landing_data afiliados: ' . $e->getMessage());
+        }
+    }
 
     $response = [
         'success' => true,
         'base_url' => $baseUrl,
+        'show_afiliados_hub' => class_exists('SegmentConfig', false) && SegmentConfig::feature('landing_afiliados_hub'),
+        'landing_access' => [
+            'tipo' => $landingAccess['tipo'] ?? 'invitado',
+            'es_admin' => ! empty($landingAccess['es_admin']),
+        ],
         'user' => $user ? [
             'id' => Auth::id() ?: null,
             'nombre' => $user['nombre'] ?? $user['username'] ?? '',
             'username' => $user['username'] ?? '',
         ] : null,
         'csrf_token' => $csrf_token,
-        'eventos_realizados' => $eventos_realizados,
-        'eventos_futuros' => $eventos_futuros,
-        'eventos_masivos' => $eventos_masivos,
-        'eventos_inscripcion_linea' => $eventos_inscripcion_linea,
-        'eventos_privados' => $eventos_privados,
-        'entidades_con_eventos' => $entidades_con_eventos,
-        'eventos_mi_entidad' => $eventos_mi_entidad,
-        'eventos_por_fecha' => $eventos_por_fecha,
         'comentarios' => $comentarios,
-        'entidad_seleccionada' => $entidadParam,
-        'filtro_aplicado_entidad' => $filtro_aplicado_entidad,
-        'entidad_nombre_usuario' => $entidad_nombre_usuario,
         'logos_clientes' => $logos_clientes,
         'documentos_oficiales' => $documentos_oficiales,
         'invitaciones_fvd' => $invitaciones_fvd,
+        'documentos_descarga' => $documentos_descarga,
+        'afiliados' => $afiliados,
     ];
 
     if (!$skipCache) {

@@ -4,8 +4,6 @@ declare(strict_types=1);
 require_once __DIR__ . '/PartiresulEstatusSql.php';
 require_once __DIR__ . '/ResultadosReporteData.php';
 require_once __DIR__ . '/InscritosHelper.php';
-require_once __DIR__ . '/RankingTorneoRecalc.php';
-
 /**
  * ResultadosPublicHelper - Datos para reportes públicos de torneos
  * Usado por evento_resultados.php para mostrar resultados sin autenticación
@@ -56,7 +54,7 @@ class ResultadosPublicHelper
     }
 
     /**
-     * Posiciones generales (clasificación). Filtra por género para no mezclar M/F (genero: M|F vía GET).
+     * Posiciones generales (clasificación). Si GET genero es M o F, filtra; si no, todos los inscritos activos.
      *
      * @return list<array<string, mixed>>
      */
@@ -80,7 +78,6 @@ class ResultadosPublicHelper
      */
     private static function obtenerFilasPosicionesPublicoSinLimite(PDO $pdo, int $torneo_id): array
     {
-        RankingTorneoRecalc::actualizarEstadisticasYRanking($torneo_id);
         try {
             $tienePartiresul = false;
             $st = $pdo->query("SHOW TABLES LIKE 'partiresul'");
@@ -99,7 +96,8 @@ class ResultadosPublicHelper
             }
             $sql .= " FROM inscritos i LEFT JOIN usuarios u ON i.id_usuario = u.id LEFT JOIN clubes c ON i.id_club = c.id
                 WHERE i.torneo_id = ? AND (i.estatus IS NULL OR (i.estatus != 4 AND i.estatus != 'retirado'))
-                ORDER BY i.ptosrnk DESC, i.efectividad DESC, i.ganados DESC, i.puntos DESC";
+                ORDER BY CASE WHEN i.posicion = 0 OR i.posicion IS NULL THEN 9999 ELSE i.posicion END ASC,
+                         i.ganados DESC, i.efectividad DESC, i.puntos DESC";
             $stmt = $pdo->prepare($sql);
             $stmt->execute($tienePartiresul ? [$torneo_id, $torneo_id] : [$torneo_id]);
 
@@ -123,24 +121,13 @@ class ResultadosPublicHelper
         $stmtT = $pdo->prepare('SELECT * FROM tournaments WHERE id = ? LIMIT 1');
         $stmtT->execute([$torneo_id]);
         $torneoRow = $stmtT->fetch(PDO::FETCH_ASSOC) ?: [];
-        $gen = ResultadosReporteData::generoFiltroDesdeParametro($generoGet);
         $modalidad = (int) ($torneoRow['modalidad'] ?? 0);
-        $filas = ResultadosReporteData::filtrarFilasClasificacionPorGenero($filas, $gen, $modalidad);
-        usort($filas, static function (array $a, array $b): int {
-            $x = (int) ($b['ptosrnk'] ?? 0) <=> (int) ($a['ptosrnk'] ?? 0);
-            if ($x !== 0) {
-                return $x;
-            }
-            $x2 = (int) ($b['efectividad'] ?? 0) <=> (int) ($a['efectividad'] ?? 0);
-            if ($x2 !== 0) {
-                return $x2;
-            }
+        $genNorm = ResultadosReporteData::normalizarGeneroQuery($generoGet);
+        if ($genNorm !== null) {
+            $filas = ResultadosReporteData::filtrarFilasClasificacionPorGenero($filas, $genNorm, $modalidad);
+        }
 
-            return (int) ($b['ganados'] ?? 0) <=> (int) ($a['ganados'] ?? 0);
-        });
-        $filas = ResultadosReporteData::reenumerarPosicionMostrada($filas);
-
-        return $filas;
+        return ResultadosReporteData::ordenarFilasComoPosicionesTorneo($filas);
     }
 
     /**
@@ -149,7 +136,6 @@ class ResultadosPublicHelper
      */
     public static function getResultadosPorClub(PDO $pdo, int $torneo_id, int $topN = 8): array
     {
-        RankingTorneoRecalc::actualizarEstadisticasYRanking($torneo_id);
         try {
             $tienePartiresul = false;
             $stmt = $pdo->query("SHOW TABLES LIKE 'partiresul'");
@@ -234,7 +220,6 @@ class ResultadosPublicHelper
      */
     public static function getResultadosEquiposResumido(PDO $pdo, int $torneo_id, int $limit = 50, int $offset = 0): array
     {
-        RankingTorneoRecalc::actualizarEstadisticasYRanking($torneo_id);
         try {
             $ordG = InscritosHelper::sqlExprColumnaNumerica('e.ganados');
             $ordE = InscritosHelper::sqlExprColumnaNumerica('e.efectividad');
@@ -245,7 +230,8 @@ class ResultadosPublicHelper
                 FROM equipos e
                 LEFT JOIN clubes c ON e.id_club = c.id
                 WHERE e.id_torneo = ? AND e.estatus = 0 AND e.codigo_equipo IS NOT NULL AND e.codigo_equipo != ''
-                ORDER BY $ordG DESC, $ordE DESC, $ordP DESC, e.codigo_equipo ASC
+                ORDER BY CASE WHEN e.posicion = 0 OR e.posicion IS NULL THEN 9999 ELSE e.posicion END ASC,
+                         $ordG DESC, $ordE DESC, $ordP DESC, e.codigo_equipo ASC
                 LIMIT " . (int)$limit . " OFFSET " . (int)$offset
             );
             $stmt->execute([$torneo_id]);

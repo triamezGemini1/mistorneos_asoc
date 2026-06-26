@@ -48,9 +48,10 @@ if (! defined('TORNEO_GESTION_SKIP_AUTH') || ! TORNEO_GESTION_SKIP_AUTH) {
     $is_admin_general = Auth::isAdminGeneral();
     $is_admin_torneo = Auth::isAdminTorneo();
     $is_admin_club = Auth::isAdminClub();
+    require_once __DIR__ . '/../lib/AsociacionAdminHelper.php';
+    $puede_crear_torneo = AsociacionAdminHelper::puedeCrearYAdministrarTorneos(DB::pdo(), $user_id, $user_role);
 
     if (Auth::isOperativoSoloAsociacion() && !defined('TORNEO_GESTION_OPERATIVO_VALIDATED')) {
-        require_once __DIR__ . '/../lib/AsociacionAdminHelper.php';
         require_once __DIR__ . '/../lib/app_helpers.php';
         $accionOper = trim((string) ($_GET['action'] ?? 'index'));
         if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
@@ -96,6 +97,7 @@ if (! defined('TORNEO_GESTION_SKIP_AUTH') || ! TORNEO_GESTION_SKIP_AUTH) {
     $is_admin_general = false;
     $is_admin_torneo = false;
     $is_admin_club = false;
+    $puede_crear_torneo = false;
 }
 
 // FunciÃ³n auxiliar para determinar la URL base segÃºn el contexto
@@ -740,16 +742,9 @@ function obtenerEstadoRondaTorneo(int $torneoId): array {
     $stmtTot->execute([$torneoId, $rondaActual]);
     $mesasTotales = (int)$stmtTot->fetchColumn();
 
-    $stmtPend = $pdo->prepare("
-        SELECT COUNT(DISTINCT mesa)
-        FROM partiresul
-        WHERE id_torneo = ?
-          AND partida = ?
-          AND mesa > 0
-          AND (registrado = 0 OR registrado IS NULL)
-    ");
-    $stmtPend->execute([$torneoId, $rondaActual]);
-    $mesasPendientes = (int)$stmtPend->fetchColumn();
+    $mesasPendientes = $rondaActual > 0
+        ? \Tournament\Handlers\RoundManagerHandler::contarMesasIncompletas($torneoId, $rondaActual)
+        : 0;
 
     return [
         'ronda_actual' => $rondaActual,
@@ -2059,8 +2054,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     }
                 }
 
-                actualizarEstadisticasInscritos($tid);
-                recalcularRankingSegunModalidad($tid);
+                if (!empty($grupos) && is_array($grupos)) {
+                    $rondasExcelCerradas = [];
+                    foreach ($grupos as $grupo) {
+                        $p = (int) ($grupo['partida'] ?? 0);
+                        if ($p > 0) {
+                            $rondasExcelCerradas[$p] = $p;
+                        }
+                    }
+                    foreach ($rondasExcelCerradas as $pRonda) {
+                        recalcularClasificacionSiRondaCompleta($tid, $pRonda);
+                    }
+                }
                 $pdo->commit();
 
                 $msg = "Carga aplicada en tabla {$tabla}. Registros procesados: {$ok}.";
@@ -2339,7 +2344,12 @@ try {
             }
             $use_standalone = (basename($_SERVER['PHP_SELF'] ?? '') === 'admin_torneo.php');
             $view_file = $use_standalone ? __DIR__ . '/gestion_torneos/index-moderno.php' : __DIR__ . '/gestion_torneos/index.php';
-            $view_data = ['torneos' => $torneos, 'filtro_torneos' => $filtro_torneos, 'is_admin_general' => $is_admin_general];
+            $view_data = [
+                'torneos' => $torneos,
+                'filtro_torneos' => $filtro_torneos,
+                'is_admin_general' => $is_admin_general,
+                'puede_crear_torneo' => $puede_crear_torneo ?? false,
+            ];
             break;
             
         case 'dashboard':
@@ -2998,7 +3008,7 @@ try {
         ob_start();
         $error_message = $e->getMessage();
         $view_file = __DIR__ . '/gestion_torneos/index.php';
-        $view_data = ['torneos' => [], 'error_message' => $error_message];
+        $view_data = ['torneos' => [], 'error_message' => $error_message, 'puede_crear_torneo' => $puede_crear_torneo ?? false];
         extract($view_data);
         include $view_file;
         $content = ob_get_clean();
@@ -3009,7 +3019,7 @@ try {
         // Mostrar error en layout normal
         $error_message = $e->getMessage();
         $view_file = __DIR__ . '/gestion_torneos/index.php';
-        $view_data = ['torneos' => [], 'error_message' => $error_message];
+        $view_data = ['torneos' => [], 'error_message' => $error_message, 'puede_crear_torneo' => $puede_crear_torneo ?? false];
         extract($view_data);
         include $view_file;
     }
@@ -3223,14 +3233,15 @@ function obtenerDatosMesas($torneo_id, $ronda, $user_id = 0, $user_role = '') {
     $stmt->execute([$torneo_id]);
     $torneo = $stmt->fetch(PDO::FETCH_ASSOC);
     
-    // Obtener todas las mesas de la ronda
-    $sql = "SELECT DISTINCT pr.mesa as numero,
-                MAX(pr.registrado) as registrado,
-                COUNT(DISTINCT pr.id_usuario) as total_jugadores
+    // Obtener todas las mesas de la ronda (completa = todos los jugadores con registrado=1)
+    $exprMesaOk = PartiresulEstatusSql::exprMesaTodosJugadoresRegistrados('pr');
+    $sql = "SELECT CAST(pr.mesa AS UNSIGNED) AS numero,
+                {$exprMesaOk} AS registrado,
+                COUNT(DISTINCT pr.id_usuario) AS total_jugadores
             FROM partiresul pr
-            WHERE pr.id_torneo = ? AND pr.partida = ? AND pr.mesa > 0
+            WHERE pr.id_torneo = ? AND pr.partida = ? AND CAST(pr.mesa AS SIGNED) > 0
             GROUP BY pr.mesa
-            ORDER BY pr.mesa ASC";
+            ORDER BY CAST(pr.mesa AS UNSIGNED) ASC";
     $stmt = $pdo->prepare($sql);
     $stmt->execute([$torneo_id, $ronda]);
     $todasLasMesas = $stmt->fetchAll(PDO::FETCH_ASSOC);
@@ -3437,11 +3448,13 @@ function obtenerDatosPosiciones($torneo_id, $genero_get = null) {
     $stmt->execute([$torneo_id, $torneo_id, $torneo_id]);
     $posiciones = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-    $genero_ranking = \ResultadosReporteData::generoFiltroDesdeParametro(is_string($genero_get) ? $genero_get : null);
+    $genNorm = \ResultadosReporteData::normalizarGeneroQuery(is_string($genero_get) ? $genero_get : null);
     $modalidadTorneo = (int) ($torneo['modalidad'] ?? 0);
-    $posiciones = \ResultadosReporteData::filtrarFilasClasificacionPorGenero($posiciones, $genero_ranking, $modalidadTorneo);
+    if ($genNorm !== null) {
+        $posiciones = \ResultadosReporteData::filtrarFilasClasificacionPorGenero($posiciones, $genNorm, $modalidadTorneo);
+    }
+    $genero_ranking = $genNorm ?? 'todos';
     $posiciones = \ResultadosReporteData::ordenarFilasComoPosicionesTorneo($posiciones);
-    $posiciones = \ResultadosReporteData::reenumerarPosicionMostrada($posiciones);
     
     // Asegurar que todos los jugadores tengan el nombre del equipo si tienen codigo_equipo
     foreach ($posiciones as &$pos) {
@@ -4803,12 +4816,13 @@ function obtenerDatosRegistroResultados($torneo_id, $ronda, $mesa, $user_id = 0,
     $stmt->execute([$torneo_id]);
     $todasLasRondas = $stmt->fetchAll(PDO::FETCH_ASSOC);
     
-    // Obtener todas las mesas de la ronda
-    $sql = "SELECT DISTINCT 
-                pr.mesa as numero,
-                MAX(pr.registrado) as registrado
+    // Obtener todas las mesas de la ronda (completa = todos los jugadores con registrado=1)
+    $exprMesaOk = PartiresulEstatusSql::exprMesaTodosJugadoresRegistrados('pr');
+    $sql = "SELECT 
+                CAST(pr.mesa AS UNSIGNED) AS numero,
+                {$exprMesaOk} AS mesa_completa
             FROM partiresul pr
-            WHERE pr.id_torneo = ? AND pr.partida = ? AND pr.mesa > 0
+            WHERE pr.id_torneo = ? AND pr.partida = ? AND CAST(pr.mesa AS SIGNED) > 0
             GROUP BY pr.mesa
             ORDER BY CAST(pr.mesa AS UNSIGNED) ASC, pr.mesa ASC";
     $stmt = $pdo->prepare($sql);
@@ -4820,10 +4834,11 @@ function obtenerDatosRegistroResultados($torneo_id, $ronda, $mesa, $user_id = 0,
     foreach ($todasLasMesas as $m) {
         $numeroMesa = (int)$m['numero'];
         if ($numeroMesa > 0) {
+            $completa = (int)($m['mesa_completa'] ?? 0) === 1;
             $mesas_filtradas[] = [
                 'numero' => $numeroMesa,
-                'registrado' => (int)($m['registrado'] ?? 0),
-                'tiene_resultados' => ($m['registrado'] ?? 0) > 0
+                'registrado' => $completa ? 1 : 0,
+                'tiene_resultados' => $completa,
             ];
         }
     }
@@ -5333,30 +5348,41 @@ function guardarAsignacionMesasOperador($torneo_id, $ronda, $user_id, $is_admin_
  */
 function obtenerDatosResumenIndividual($torneo_id, $inscrito_id) {
     $pdo = DB::pdo();
+    require_once __DIR__ . '/../lib/ResumenParticipacionHelper.php';
     
     $stmt = $pdo->prepare("SELECT * FROM tournaments WHERE id = ?");
     $stmt->execute([$torneo_id]);
     $torneo = $stmt->fetch(PDO::FETCH_ASSOC);
     
-    // Obtener inscrito
-    $sql = "SELECT i.*, u.nombre as nombre_completo, c.nombre as nombre_club
+    // Obtener inscrito (id_usuario o numfvd en URL)
+    $sql = "SELECT i.*, u.nombre as nombre_completo, u.username, COALESCE(u.numfvd, 0) AS usuario_numfvd, c.nombre as nombre_club
             FROM inscritos i
             INNER JOIN usuarios u ON i.id_usuario = u.id
             LEFT JOIN clubes c ON i.id_club = c.id
-            WHERE i.torneo_id = ? AND i.id_usuario = ?";
+            WHERE i.torneo_id = ? AND (i.id_usuario = ? OR u.numfvd = ? OR i.id = ?)";
     $stmt = $pdo->prepare($sql);
-    $stmt->execute([$torneo_id, $inscrito_id]);
+    $stmt->execute([$torneo_id, $inscrito_id, $inscrito_id, $inscrito_id]);
     $inscrito = $stmt->fetch(PDO::FETCH_ASSOC);
     
     if (!$inscrito) {
         throw new Exception('Jugador no encontrado en este torneo');
     }
     
+    $idUsuario = (int) ($inscrito['id_usuario'] ?? 0);
+    $numfvdJugador = (int) ($inscrito['usuario_numfvd'] ?? 0);
+    if ($numfvdJugador <= 0 && inscritosColumnExists($pdo, 'numfvd')) {
+        $numfvdJugador = (int) ($inscrito['numfvd'] ?? 0);
+    }
+    $idsPartiresul = ResumenParticipacionHelper::normalizarIdsPartiresulJugador($idUsuario, (int) $inscrito_id, $numfvdJugador);
+    if ($idsPartiresul === []) {
+        $idsPartiresul = [(int) $inscrito_id];
+    }
+    
     $esModalidadEquipos = (int)($torneo['modalidad'] ?? 0) === 3;
     $equipo = null;
     if ($esModalidadEquipos && !empty($inscrito['codigo_equipo'])) {
         $stmtEq = $pdo->prepare("
-            SELECT codigo_equipo, nombre_equipo, puntos, ganados, perdidos, efectividad, sancion
+            SELECT codigo_equipo, nombre_equipo, puntos, ganados, perdidos, efectividad, sancion, posicion
             FROM equipos
             WHERE id_torneo = ? AND codigo_equipo = ? AND estatus = 0
             LIMIT 1
@@ -5365,13 +5391,7 @@ function obtenerDatosResumenIndividual($torneo_id, $inscrito_id) {
         $equipo = $stmtEq->fetch(PDO::FETCH_ASSOC) ?: null;
     }
     
-    // Obtener la Ãºltima ronda asignada
-    $stmtUltimaRonda = $pdo->prepare("SELECT MAX(partida) as ultima_ronda FROM partiresul WHERE id_torneo = ? AND mesa > 0");
-    $stmtUltimaRonda->execute([$torneo_id]);
-    $ultimaRonda = (int)$stmtUltimaRonda->fetchColumn() ?? 0;
-    
-    // Obtener resumen de participaciÃ³n con informaciÃ³n de pareja y contrarios
-    // Incluir solo registrados, pero tambiÃ©n incluir la Ãºltima ronda aunque no estÃ© registrada
+    $phIds = implode(',', array_fill(0, count($idsPartiresul), '?'));
     $sql = "SELECT 
                 pr.partida,
                 pr.mesa,
@@ -5385,12 +5405,11 @@ function obtenerDatosResumenIndividual($torneo_id, $inscrito_id) {
                 pr.registrado,
                 CASE WHEN pr.resultado1 > pr.resultado2 THEN 1 ELSE 0 END as gano
             FROM partiresul pr
-            WHERE pr.id_torneo = ? AND pr.id_usuario = ? AND pr.mesa > 0 
-            AND (pr.registrado = 1 OR (pr.registrado = 0 AND pr.partida = ?))
+            WHERE pr.id_torneo = ? AND pr.id_usuario IN ({$phIds}) AND CAST(pr.mesa AS SIGNED) > 0
             ORDER BY pr.partida ASC, pr.mesa ASC";
     
     $stmt = $pdo->prepare($sql);
-    $stmt->execute([$torneo_id, $inscrito_id, $ultimaRonda]);
+    $stmt->execute(array_merge([$torneo_id], $idsPartiresul));
     $partidasJugador = $stmt->fetchAll(PDO::FETCH_ASSOC);
     
     // Para cada partida, obtener informaciÃ³n de pareja y contrarios
@@ -5401,86 +5420,33 @@ function obtenerDatosResumenIndividual($torneo_id, $inscrito_id) {
         $mesa = (int)$partidaJugador['mesa'];
         $secuencia = (int)$partidaJugador['secuencia'];
         
-        // Obtener todos los jugadores de esta mesa
+        $joinU = ResumenParticipacionHelper::sqlJoinUsuariosDesdePartiresul('pr', 'u', 'LEFT');
+        $exprNom = ResumenParticipacionHelper::sqlExprNombreUsuarioPartiresul('u', 'pr');
         $sqlMesa = "SELECT 
                         pr.secuencia,
                         pr.id_usuario,
-                        u.nombre as nombre_completo,
-                        COALESCE(c.nombre, 'Sin Club') as club_nombre
+                        {$exprNom} AS nombre_completo,
+                        COALESCE(NULLIF(TRIM(c.nombre), ''), 'Sin Club') AS club_nombre
                     FROM partiresul pr
-                    INNER JOIN usuarios u ON (
-                        u.id = pr.id_usuario
-                        OR (
-                            u.numfvd = pr.id_usuario
-                            AND NOT EXISTS (SELECT 1 FROM usuarios u_pr_id WHERE u_pr_id.id = pr.id_usuario)
-                            AND EXISTS (
-                                SELECT 1 FROM tournaments tx
-                                WHERE tx.id = pr.id_torneo AND tx.club_responsable = 7
-                            )
-                        )
-                    )
-                    LEFT JOIN inscritos i ON i.id_usuario = pr.id_usuario AND i.torneo_id = pr.id_torneo
-                    LEFT JOIN clubes c ON i.id_club = c.id
-                    WHERE pr.id_torneo = ? AND pr.partida = ? AND pr.mesa = ?
+                    {$joinU}
+                    LEFT JOIN inscritos i ON i.torneo_id = pr.id_torneo AND i.id_usuario = u.id
+                    LEFT JOIN clubes c ON c.id = COALESCE(NULLIF(i.id_club, 0), NULLIF(u.club_id, 0))
+                    WHERE pr.id_torneo = ? AND pr.partida = ? AND CAST(pr.mesa AS SIGNED) = ?
                     ORDER BY pr.secuencia ASC";
         
         $stmtMesa = $pdo->prepare($sqlMesa);
         $stmtMesa->execute([$torneo_id, $partida, $mesa]);
         $jugadoresMesa = $stmtMesa->fetchAll(PDO::FETCH_ASSOC);
         
-        // Identificar compaÃ±ero y contrarios
-        // Pareja A: secuencias 1-2, Pareja B: secuencias 3-4
-        $compaÃ±ero = null;
-        $contrarios = [];
-        
-        $esParejaA = ($secuencia == 1 || $secuencia == 2);
-        
-        foreach ($jugadoresMesa as $jugador) {
-            $seq = (int)$jugador['secuencia'];
-            
-            if ($seq == $secuencia) {
-                // Es el jugador actual, saltar
-                continue;
-            }
-            
-            if ($esParejaA) {
-                // Jugador estÃ¡ en Pareja A (secuencias 1-2)
-                if ($seq == 1 || $seq == 2) {
-                    // Es compaÃ±ero
-                    $compaÃ±ero = [
-                        'nombre' => $jugador['nombre_completo'],
-                        'club' => $jugador['club_nombre'] ?? 'Sin Club',
-                        'id_usuario' => (int)$jugador['id_usuario']
-                    ];
-                } elseif ($seq == 3 || $seq == 4) {
-                    // Es contrario (Pareja B)
-                    $contrarios[] = [
-                        'nombre' => $jugador['nombre_completo'],
-                        'club' => $jugador['club_nombre'] ?? 'Sin Club',
-                        'id_usuario' => (int)$jugador['id_usuario']
-                    ];
-                }
-            } else {
-                // Jugador estÃ¡ en Pareja B (secuencias 3-4)
-                if ($seq == 3 || $seq == 4) {
-                    // Es compaÃ±ero
-                    $compaÃ±ero = [
-                        'nombre' => $jugador['nombre_completo'],
-                        'club' => $jugador['club_nombre'] ?? 'Sin Club',
-                        'id_usuario' => (int)$jugador['id_usuario']
-                    ];
-                } elseif ($seq == 1 || $seq == 2) {
-                    // Es contrario (Pareja A)
-                    $contrarios[] = [
-                        'nombre' => $jugador['nombre_completo'],
-                        'club' => $jugador['club_nombre'] ?? 'Sin Club',
-                        'id_usuario' => (int)$jugador['id_usuario']
-                    ];
-                }
-            }
+        $resMesa = ResumenParticipacionHelper::resolverCompaneroYContrarios($jugadoresMesa, $idsPartiresul, $secuencia);
+        $companero = $resMesa['companero'];
+        $contrarios = $resMesa['contrarios'];
+        if ($companero === null) {
+            $companero = ResumenParticipacionHelper::buscarCompaneroEnHistorialParejas($pdo, (int) $torneo_id, $partida, $idsPartiresul);
         }
         
-        $estaRegistrado = ((int)($partidaJugador['registrado'] ?? 0) == 1);
+        $estaRegistrado = (trim((string) ($partidaJugador['registrado'] ?? '')) === '1')
+            || ((int) ($partidaJugador['registrado'] ?? 0) === 1);
         
         // Solo calcular resultados si estÃ¡ registrado
         $hayForfait = false;
@@ -5509,10 +5475,11 @@ function obtenerDatosResumenIndividual($torneo_id, $inscrito_id) {
                 
                 // Obtener resultado del oponente (pareja contraria) - buscar en los jugadores de la mesa
                 $resultadoOponente = 0;
+                $esParejaA = in_array($secuencia, [1, 2], true);
                 $sqlOponente = "SELECT resultado1 FROM partiresul 
                                WHERE id_torneo = ? AND partida = ? AND mesa = ?
-                               AND secuencia IN (" . ($esParejaA ? "3,4" : "1,2") . ")
-                               LIMIT 1";
+                               AND secuencia IN (" . ($esParejaA ? '3,4' : '1,2') . ')
+                               LIMIT 1';
                 $stmtOponente = $pdo->prepare($sqlOponente);
                 $stmtOponente->execute([$torneo_id, $partida, $mesa]);
                 $oponenteData = $stmtOponente->fetch(PDO::FETCH_ASSOC);
@@ -5531,7 +5498,8 @@ function obtenerDatosResumenIndividual($torneo_id, $inscrito_id) {
         $resumenParticipacion[] = [
             'partida' => $partida,
             'mesa' => $mesa,
-            'compaÃ±ero' => $compaÃ±ero,
+            'companero' => $companero,
+            'compañero' => $companero,
             'contrarios' => $contrarios,
             'resultado1' => $estaRegistrado ? (int)($partidaJugador['resultado1'] ?? 0) : null,
             'resultado2' => $estaRegistrado ? (int)($partidaJugador['resultado2'] ?? 0) : null,
@@ -5826,12 +5794,16 @@ function verificarActaAprobar($user_id, $is_admin_general) {
             $efectividad = $calcularEf($resultado1_ajust, $resultado2, $puntosTorneo, 0, $tarjeta);
             $setEstatus = PartiresulEstatusSql::setEstatusConfirmadoFragment($pdo);
             $pdo->prepare("
-                UPDATE partiresul SET resultado1 = ?, resultado2 = ?, efectividad = ?, tarjeta = ?, sancion = ?, {$setEstatus}
+                UPDATE partiresul SET resultado1 = ?, resultado2 = ?, efectividad = ?, tarjeta = ?, sancion = ?, registrado = 1, {$setEstatus}
                 WHERE id = ?
             ")->execute([$resultado1, $resultado2, $efectividad, $tarjeta, $sancion_guardar, $partiresul_id]);
         }
+        $pdo->prepare('UPDATE partiresul SET registrado = 1 WHERE id_torneo = ? AND partida = ? AND mesa = ?')
+            ->execute([$torneo_id, $ronda, $mesa]);
         $pdo->commit();
-        actualizarEstadisticasInscritos($torneo_id);
+        if (recalcularClasificacionSiRondaCompleta($torneo_id, $ronda)) {
+            $_SESSION['info'] = 'Ronda ' . $ronda . ' completada: clasificación y posiciones actualizadas desde partiresul.';
+        }
         try {
             enviarNotificacionesResultadosAprobados($pdo, $torneo_id, $ronda, $mesa);
         } catch (Exception $e) {
@@ -6133,8 +6105,8 @@ function actualizarEstadisticasManual($torneo_id, $user_id, $is_admin_general) {
     try {
         verificarPermisosTorneo($torneo_id, $user_id, $is_admin_general);
         
-        actualizarEstadisticasInscritos($torneo_id);
-        $_SESSION['success'] = 'EstadÃ­sticas y puntos de ranking actualizados exitosamente';
+        actualizarClasificacionDesdePartiresul($torneo_id);
+        $_SESSION['success'] = 'EstadÃ­sticas y puntos de ranking actualizados exitosamente desde partiresul';
         
     } catch (Exception $e) {
         $_SESSION['error'] = 'Error al actualizar estadÃ­sticas: ' . $e->getMessage();
@@ -6234,8 +6206,12 @@ function marcarNoPresentesRetiradosAntesRonda3($torneo_id) {
  * Norma: una fila por jugador por partida en partiresul; se eliminan duplicados
  * (mismo id_usuario, id_torneo, partida) y se agrega por (id_usuario, id_torneo).
  * Solo se consideran filas con registrado = 1 (mesas y BYE).
+ *
+ * @param bool $recalcularClasificacion Si false, solo agrega stats en inscritos sin posiciones (uso interno).
+ *                                      En ingreso de resultados usar {@see actualizarClasificacionDesdePartiresul()}
+ *                                      vía {@see recalcularClasificacionSiRondaCompleta()} al cerrar la ronda.
  */
-function actualizarEstadisticasInscritos($torneo_id) {
+function actualizarEstadisticasInscritos($torneo_id, $recalcularClasificacion = true) {
     $pdo = DB::pdo();
     
     $stmt = $pdo->prepare("SELECT id FROM tournaments WHERE id = ?");
@@ -6337,7 +6313,45 @@ function actualizarEstadisticasInscritos($torneo_id) {
         WHERE i.torneo_id = ? AND has_data.id_usuario IS NULL
     ")->execute([$torneo_id, $torneo_id]);
     
-    recalcularClasificacionEquiposYJugadores($torneo_id);
+    if ($recalcularClasificacion) {
+        recalcularClasificacionEquiposYJugadores($torneo_id);
+    }
+}
+
+/**
+ * Proceso completo de clasificación: agrega partiresul (registrado=1) → inscritos y asigna posiciones/ptosrnk.
+ * Usar tras cerrar una ronda o desde el panel (actualización manual).
+ */
+function actualizarClasificacionDesdePartiresul($torneo_id) {
+    $torneo_id = (int) $torneo_id;
+    if ($torneo_id <= 0) {
+        return;
+    }
+    actualizarEstadisticasInscritos($torneo_id, true);
+}
+
+/**
+ * Si la ronda ya no tiene mesas pendientes (mesas pendientes = 0), dispara {@see actualizarClasificacionDesdePartiresul()}.
+ * El formulario de ingreso solo debe escribir en partiresul; este es el único disparador automático por ronda.
+ *
+ * @return bool true si se ejecutó la actualización completa
+ */
+function recalcularClasificacionSiRondaCompleta($torneo_id, $ronda) {
+    $torneo_id = (int) $torneo_id;
+    $ronda = (int) $ronda;
+    if ($torneo_id <= 0 || $ronda <= 0) {
+        return false;
+    }
+    $pendientes = \Tournament\Handlers\RoundManagerHandler::contarMesasIncompletas($torneo_id, $ronda);
+    if ($pendientes > 0) {
+        error_log("recalcularClasificacionSiRondaCompleta: torneo={$torneo_id} ronda={$ronda} aún con {$pendientes} mesa(s) pendiente(s)");
+
+        return false;
+    }
+    actualizarClasificacionDesdePartiresul($torneo_id);
+    error_log("recalcularClasificacionSiRondaCompleta: torneo={$torneo_id} ronda={$ronda} clasificación actualizada desde partiresul");
+
+    return true;
 }
 
 /**
@@ -6644,7 +6658,7 @@ function recalcularPosiciones($torneo_id) {
                                $re as efectividad, 
                                $rp as puntos
                                FROM inscritos 
-                               WHERE torneo_id = ? AND " . InscritosHelper::SQL_WHERE_SOLO_CONFIRMADO . "
+                               WHERE torneo_id = ? AND " . InscritosHelper::sqlWhereActivoConAlias() . "
                                ORDER BY $rg DESC, 
                                         $re DESC, 
                                         $rp DESC");
@@ -6846,17 +6860,15 @@ function obtenerDatosReasignarMesa($torneo_id, $ronda, $mesa) {
     $stmt->execute([$torneo_id, $ronda, $mesa]);
     $jugadores = $stmt->fetchAll(PDO::FETCH_ASSOC);
     
-    // Obtener todas las mesas de la ronda
-    $stmt = $pdo->prepare("SELECT DISTINCT 
+    $exprMesaOkHoja = PartiresulEstatusSql::exprMesaTodosJugadoresRegistrados('pr');
+    $stmt = $pdo->prepare("SELECT 
                 CAST(pr.mesa AS UNSIGNED) as numero,
-                MAX(pr.registrado) as registrado,
+                {$exprMesaOkHoja} as registrado,
                 COUNT(DISTINCT pr.id_usuario) as total_jugadores
             FROM partiresul pr
             WHERE pr.id_torneo = ? 
               AND pr.partida = ? 
-              AND pr.mesa IS NOT NULL 
-              AND pr.mesa > 0 
-              AND CAST(pr.mesa AS UNSIGNED) > 0
+              AND CAST(pr.mesa AS SIGNED) > 0
             GROUP BY CAST(pr.mesa AS UNSIGNED)
             ORDER BY CAST(pr.mesa AS UNSIGNED) ASC");
     $stmt->execute([$torneo_id, $ronda]);

@@ -12,6 +12,8 @@ require_once __DIR__ . '/../config/bootstrap.php';
 require_once __DIR__ . '/../config/db_config.php';
 require_once __DIR__ . '/../lib/app_helpers.php';
 require_once __DIR__ . '/../lib/ResultadosReporteData.php';
+require_once __DIR__ . '/../lib/ResultadosAsociacionContext.php';
+require_once __DIR__ . '/includes/branding_init.php';
 
 $torneo_id = isset($_GET['torneo_id']) ? (int)$_GET['torneo_id'] : 0;
 $highlight_user = isset($_GET['highlight_user']) ? (int)$_GET['highlight_user'] : 0;
@@ -22,8 +24,10 @@ if ($torneo_id <= 0) {
 }
 
 $pdo = DB::pdo();
+$orgCtx = ResultadosAsociacionContext::fromGet($pdo);
 $torneo = null;
 $clasificacion = [];
+$genNorm = null;
 
 try {
     $stmt = $pdo->prepare('SELECT * FROM tournaments WHERE id = ? AND estatus = 1');
@@ -31,6 +35,11 @@ try {
     $torneo = $stmt->fetch(PDO::FETCH_ASSOC);
     if (!$torneo) {
         header('Location: ' . (rtrim(AppHelpers::getPublicUrl(), '/') . '/landing-spa.php'));
+        exit;
+    }
+
+    if ($orgCtx->isScoped() && ! $orgCtx->torneoPertenece($pdo, $torneo_id)) {
+        header('Location: ' . $orgCtx->urlEventos());
         exit;
     }
 
@@ -52,33 +61,26 @@ try {
         LEFT JOIN clubes c ON i.id_club = c.id
         WHERE i.torneo_id = ?
         AND (i.estatus IN (1, 2, '1', '2', 'confirmado', 'solvente'))
-        ORDER BY i.ptosrnk DESC, i.efectividad DESC, i.ganados DESC, i.puntos DESC, i.id_usuario ASC
+        ORDER BY CASE WHEN i.posicion = 0 OR i.posicion IS NULL THEN 9999 ELSE i.posicion END ASC,
+                 i.ganados DESC, i.efectividad DESC, i.puntos DESC, i.id_usuario ASC
     ");
     $stmt->execute([$torneo_id]);
     $clasificacion = $stmt->fetchAll(PDO::FETCH_ASSOC);
-    $genero_ranking = ResultadosReporteData::generoFiltroDesdeParametro($genero_get);
+    $genNorm = ResultadosReporteData::normalizarGeneroQuery($genero_get);
     $modalidadTor = (int) ($torneo['modalidad'] ?? 0);
-    $clasificacion = ResultadosReporteData::filtrarFilasClasificacionPorGenero($clasificacion, $genero_ranking, $modalidadTor);
-    usort($clasificacion, static function (array $a, array $b): int {
-        $x = (int) ($b['ptosrnk'] ?? 0) <=> (int) ($a['ptosrnk'] ?? 0);
-        if ($x !== 0) {
-            return $x;
-        }
-        $x2 = (int) ($b['efectividad'] ?? 0) <=> (int) ($a['efectividad'] ?? 0);
-        if ($x2 !== 0) {
-            return $x2;
-        }
-
-        return (int) ($b['ganados'] ?? 0) <=> (int) ($a['ganados'] ?? 0);
-    });
-    $clasificacion = ResultadosReporteData::reenumerarPosicionMostrada($clasificacion);
+    if ($genNorm !== null) {
+        $clasificacion = ResultadosReporteData::filtrarFilasClasificacionPorGenero($clasificacion, $genNorm, $modalidadTor);
+    }
+    $clasificacion = ResultadosReporteData::ordenarFilasComoPosicionesTorneo($clasificacion);
 } catch (Throwable $e) {
     error_log('clasificacion.php: ' . $e->getMessage());
 }
-$genero_ranking = $genero_ranking ?? 'M';
+$genero_ranking = $genNorm ?? 'todos';
 
 $base_public = rtrim(AppHelpers::getPublicUrl(), '/');
-$url_retorno = $base_public . '/perfil_jugador.php?torneo_id=' . $torneo_id;
+$url_retorno = $orgCtx->isScoped()
+    ? $orgCtx->urlEventoResultados($torneo_id)
+    : $base_public . '/perfil_jugador.php?torneo_id=' . $torneo_id;
 $logo_url = AppHelpers::getAppLogo();
 $torneo_nombre = $torneo['nombre'] ?? 'Torneo';
 ?>
@@ -88,7 +90,7 @@ $torneo_nombre = $torneo['nombre'] ?? 'Torneo';
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes">
     <meta name="theme-color" content="#0f172a">
-    <title>Clasificación — <?= htmlspecialchars($torneo_nombre) ?></title>
+    <title>Resultados — <?= htmlspecialchars($torneo_nombre) ?></title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
     <style>
         * { box-sizing: border-box; }
@@ -151,13 +153,13 @@ $torneo_nombre = $torneo['nombre'] ?? 'Torneo';
     <div class="wrap">
         <header class="header">
             <a href="<?= htmlspecialchars($url_retorno) ?>" class="btn-retorno"><i class="fas fa-arrow-left"></i> Retorno</a>
-            <img src="<?= htmlspecialchars($logo_url) ?>" alt="La Estación del Dominó">
+            <img src="<?= htmlspecialchars($logo_url) ?>" alt="<?= htmlspecialchars($brand_name) ?>">
         </header>
 
-        <h1><i class="fas fa-trophy" style="color: #38bdf8;"></i> Clasificación</h1>
-        <p class="sub"><?= htmlspecialchars($torneo_nombre) ?></p>
+        <h1><i class="fas fa-trophy" style="color: #38bdf8;"></i> Resultados</h1>
+        <p class="sub"><?= htmlspecialchars($torneo_nombre) ?> · orden de clasificación oficial</p>
         <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;">
-            <a href="clasificacion.php?torneo_id=<?= (int) $torneo_id ?>&amp;genero=M" style="padding:8px 14px;border-radius:10px;text-decoration:none;font-size:0.9rem;<?= $genero_ranking === 'M' ? 'background:#2563eb;color:#fff;' : 'background:#1e293b;color:#94a3b8;border:1px solid rgba(255,255,255,0.12);' ?>">Masculino</a>
+            <a href="clasificacion.php?torneo_id=<?= (int) $torneo_id ?>" style="padding:8px 14px;border-radius:10px;text-decoration:none;font-size:0.9rem;<?= $genero_ranking !== 'F' ? 'background:#2563eb;color:#fff;' : 'background:#1e293b;color:#94a3b8;border:1px solid rgba(255,255,255,0.12);' ?>">Todos</a>
             <a href="clasificacion.php?torneo_id=<?= (int) $torneo_id ?>&amp;genero=F" style="padding:8px 14px;border-radius:10px;text-decoration:none;font-size:0.9rem;<?= $genero_ranking === 'F' ? 'background:#2563eb;color:#fff;' : 'background:#1e293b;color:#94a3b8;border:1px solid rgba(255,255,255,0.12);' ?>">Femenino</a>
         </div>
 
@@ -178,15 +180,15 @@ $torneo_nombre = $torneo['nombre'] ?? 'Torneo';
                     </thead>
                     <tbody>
                         <?php
-                        $pos = 0;
                         foreach ($clasificacion as $row):
-                            $pos++;
-                            $posClass = $pos <= 3 ? 'pos-' . $pos : '';
+                            $pos_oficial = (int)($row['posicion'] ?? 0);
+                            $pos = $pos_oficial > 0 ? $pos_oficial : 0;
+                            $posClass = ($pos > 0 && $pos <= 3) ? 'pos-' . $pos : '';
                             $uidRow = (int)($row['id_usuario'] ?? 0);
                             $hi = ($highlight_user > 0 && $uidRow === $highlight_user);
                         ?>
                         <tr<?= $hi ? ' class="row-highlight" id="jugador-highlight"' : '' ?>>
-                            <td class="pos <?= $posClass ?>"><?= $pos ?></td>
+                            <td class="pos <?= $posClass ?>"><?= $pos > 0 ? $pos : '—' ?></td>
                             <td class="nombre"><a href="resumen_jugador.php?torneo_id=<?= (int)$torneo_id ?>&id_usuario=<?= (int)($row['id_usuario'] ?? 0) ?>" class="nombre-link" title="<?= htmlspecialchars($row['nombre_jugador'] ?? '') ?>"><?= htmlspecialchars($row['nombre_jugador'] ?? '—') ?></a></td>
                             <td class="num"><?= (int)($row['ganados'] ?? 0) ?></td>
                             <td class="num"><?= (int)($row['perdidos'] ?? 0) ?></td>

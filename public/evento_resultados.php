@@ -13,11 +13,15 @@ require_once __DIR__ . '/../lib/TournamentScopeHelper.php';
 require_once __DIR__ . '/../lib/ResultadosPublicHelper.php';
 require_once __DIR__ . '/../lib/ResultadosReporteData.php';
 require_once __DIR__ . '/../lib/LandingDataService.php';
+require_once __DIR__ . '/../lib/ResultadosAsociacionContext.php';
+require_once __DIR__ . '/includes/branding_init.php';
 
 $pdo = DB::pdo();
 $base_url = app_base_url();
 $user = Auth::user();
 $is_logged_in = !empty($user);
+$orgCtx = ResultadosAsociacionContext::fromGet($pdo);
+$organizacion_id_get = isset($_GET['organizacion_id']) ? max(0, (int) $_GET['organizacion_id']) : 0;
 $has_cod_org = false;
 try {
     $has_cod_org = (bool)$pdo->query("SHOW COLUMNS FROM organizaciones LIKE 'cod_org'")->fetch(PDO::FETCH_ASSOC);
@@ -35,14 +39,14 @@ $genero_get = isset($_GET['genero']) ? (string) $_GET['genero'] : null;
 $per_page = 50;
 
 if ($torneo_id <= 0) {
-    header('Location: resultados.php');
+    header('Location: ' . ($orgCtx->organizacionId > 0 ? $orgCtx->urlEventosRelative() : 'resultados.php'));
     exit;
 }
 
 $torneo_data = null;
 try {
     $stmt = $pdo->prepare("
-        SELECT t.*, o.nombre as organizacion_nombre,
+        SELECT t.*, o.id AS organizacion_id_resuelta, o.nombre as organizacion_nombre,
             (SELECT COUNT(*) FROM inscritos WHERE torneo_id = t.id AND (estatus IS NULL OR (estatus != 4 AND estatus != 'retirado'))) as total_inscritos,
             (SELECT COUNT(*) FROM club_photos WHERE torneo_id = t.id) as total_fotos
         FROM tournaments t
@@ -56,15 +60,25 @@ try {
 }
 
 if (!$torneo_data || !TournamentScopeHelper::canAccessResultsPublicly($torneo_data)) {
-    header('Location: resultados.php');
+    header('Location: ' . ($orgCtx->organizacionId > 0 ? $orgCtx->urlEventosRelative() : 'resultados.php'));
+    exit;
+}
+
+$orgCtx = ResultadosAsociacionContext::fromGetOrTorneo($pdo, $torneo_data);
+$organizacion_id = $orgCtx->organizacionId;
+$volver_eventos_url = $orgCtx->urlEventosRelative();
+$listado_eventos_label = $orgCtx->labelListadoEventos();
+
+if ($organizacion_id_get > 0 && ! $orgCtx->torneoPertenece($pdo, $torneo_id)) {
+    header('Location: ' . $volver_eventos_url);
     exit;
 }
 
 $modalidad = (int)($torneo_data['modalidad'] ?? 1);
 $es_equipos = ($modalidad === 3);
 $modalidades = [1 => 'Individual', 2 => 'Parejas', 3 => 'Equipos', 4 => 'Parejas fijas'];
-$genero_evt = ResultadosReporteData::generoFiltroDesdeParametro($genero_get);
-$gen_q = 'genero=' . urlencode($genero_evt);
+$genero_norm = ResultadosReporteData::normalizarGeneroQuery($genero_get);
+$gen_q = $genero_norm === 'F' ? 'genero=F' : '';
 
 $rounds_info = ResultadosPublicHelper::getRoundsInfo($pdo, $torneo_id);
 $landingService = new LandingDataService($pdo);
@@ -97,7 +111,7 @@ if ($es_equipos) {
 }
 
 $total_pages = $vista === 'general' ? max(1, ceil($total_posiciones / $per_page)) : 1;
-$url_base = 'evento_resultados.php?torneo_id=' . $torneo_id;
+$url_base = 'evento_resultados.php' . $orgCtx->buildQs(['torneo_id' => $torneo_id]);
 ?>
 <!DOCTYPE html>
 <html lang="es">
@@ -105,7 +119,7 @@ $url_base = 'evento_resultados.php?torneo_id=' . $torneo_id;
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="theme-color" content="#0f172a">
-    <title>Resultados <?= htmlspecialchars($torneo_data['nombre']) ?> - La Estación del Dominó</title>
+    <title><?= htmlspecialchars(Branding::pageTitle('Resultados ' . ($torneo_data['nombre'] ?? ''))) ?></title>
     <meta name="description" content="Consulta resultados del torneo <?= htmlspecialchars($torneo_data['nombre']) ?>. Clasificación, resultados por club y equipos. <?= $rounds_info['ejecutadas'] ?> de <?= $rounds_info['total'] ?> rondas.">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
@@ -212,13 +226,13 @@ $url_base = 'evento_resultados.php?torneo_id=' . $torneo_id;
         <div class="header-evento">
             <div class="d-flex flex-wrap justify-content-between align-items-start gap-3">
                 <div>
-                    <?= AppHelpers::appLogo('', 'La Estación del Dominó', 36) ?>
+                    <?= AppHelpers::appLogo('', null, 36) ?>
                     <h4 class="mt-2 mb-1"><i class="fas fa-trophy me-2"></i>Resultados del evento</h4>
                     <h5 class="mb-0 opacity-90"><?= htmlspecialchars($torneo_data['nombre']) ?></h5>
                 </div>
                 <div>
-                    <a href="resultados.php" class="btn btn-sm btn-volver">
-                        <i class="fas fa-arrow-left me-1"></i>Volver a eventos
+                    <a href="<?= htmlspecialchars($volver_eventos_url) ?>" class="btn btn-sm btn-volver">
+                        <i class="fas fa-arrow-left me-1"></i><?= htmlspecialchars($listado_eventos_label) ?>
                     </a>
                 </div>
             </div>
@@ -270,8 +284,8 @@ $url_base = 'evento_resultados.php?torneo_id=' . $torneo_id;
             <ul class="nav nav-pills nav-vistas flex-wrap gap-2">
                 <li class="nav-item">
                     <a class="nav-link <?= $vista === 'general' ? 'active' : '' ?>"
-                       href="<?= $url_base ?>&vista=general&<?= $gen_q ?>">
-                        <i class="fas fa-list-ol me-1"></i>Clasificación general
+                       href="<?= $url_base ?>&vista=general<?= $gen_q !== '' ? '&' . htmlspecialchars($gen_q) : '' ?>">
+                        <i class="fas fa-list-ol me-1"></i>Resultados
                     </a>
                 </li>
                 <li class="nav-item">
@@ -306,11 +320,12 @@ $url_base = 'evento_resultados.php?torneo_id=' . $torneo_id;
         <!-- Contenido -->
         <div class="p-4">
             <?php if ($vista === 'general'): ?>
-                <!-- Clasificación general -->
-                <h5 class="mb-2"><i class="fas fa-trophy text-warning me-2"></i>Clasificación individual</h5>
-                <div class="btn-group btn-group-sm mb-4" role="group" aria-label="Género">
-                    <a href="<?= $url_base ?>&vista=general&genero=M" class="btn <?= $genero_evt === 'M' ? 'btn-primary' : 'btn-outline-primary' ?>">Masculino</a>
-                    <a href="<?= $url_base ?>&vista=general&genero=F" class="btn <?= $genero_evt === 'F' ? 'btn-primary' : 'btn-outline-primary' ?>">Femenino</a>
+                <!-- Clasificación / resultados (orden oficial del torneo) -->
+                <h5 class="mb-2"><i class="fas fa-trophy text-warning me-2"></i>Resultados</h5>
+                <p class="text-muted small mb-3">Listado en el orden de clasificación del torneo (posición oficial).</p>
+                <div class="btn-group btn-group-sm mb-3" role="group" aria-label="Filtro de resultados">
+                    <a href="<?= htmlspecialchars($url_base . '&vista=general') ?>" class="btn <?= $genero_norm === 'F' ? 'btn-outline-primary' : 'btn-primary' ?>">Todos</a>
+                    <a href="<?= htmlspecialchars($url_base . '&vista=general&genero=F') ?>" class="btn <?= $genero_norm === 'F' ? 'btn-primary' : 'btn-outline-primary' ?>">Femenino</a>
                 </div>
                 <?php if (empty($posiciones)): ?>
                     <p class="text-muted">Aún no hay resultados disponibles.</p>
@@ -333,17 +348,25 @@ $url_base = 'evento_resultados.php?torneo_id=' . $torneo_id;
                             </thead>
                             <tbody>
                                 <?php
-                                $pos_display = ($pagina - 1) * $per_page + 1;
                                 foreach ($posiciones as $p):
+                                    $pos_oficial = (int)($p['posicion'] ?? 0);
+                                    $pos_display = $pos_oficial > 0 ? $pos_oficial : 0;
                                     $row_class = '';
-                                    if ($pos_display == 1) $row_class = 'pos-1';
-                                    elseif ($pos_display == 2) $row_class = 'pos-2';
-                                    elseif ($pos_display == 3) $row_class = 'pos-3';
-                                    $resumen_url = 'resumen_jugador.php?torneo_id=' . $torneo_id . '&id_usuario=' . (int)($p['id_usuario'] ?? 0);
+                                    if ($pos_display === 1) {
+                                        $row_class = 'pos-1';
+                                    } elseif ($pos_display === 2) {
+                                        $row_class = 'pos-2';
+                                    } elseif ($pos_display === 3) {
+                                        $row_class = 'pos-3';
+                                    }
+                                    $resumen_url = 'resumen_jugador.php' . $orgCtx->buildQs([
+                                        'torneo_id' => $torneo_id,
+                                        'id_usuario' => (int) ($p['id_usuario'] ?? 0),
+                                    ]);
                                 ?>
                                 <tr class="<?= $row_class ?>">
-                                    <td><strong><?= $pos_display ?></strong>
-                                        <?php if ($pos_display <= 3): ?>
+                                    <td><strong><?= $pos_display > 0 ? $pos_display : '—' ?></strong>
+                                        <?php if ($pos_display > 0 && $pos_display <= 3): ?>
                                             <span><?= ['🥇','🥈','🥉'][$pos_display - 1] ?? '' ?></span>
                                         <?php endif; ?>
                                     </td>
@@ -361,7 +384,7 @@ $url_base = 'evento_resultados.php?torneo_id=' . $torneo_id;
                                     <td class="text-center"><?= (int)($p['puntos'] ?? 0) ?></td>
                                     <td class="text-center"><strong><?= (int)($p['ptosrnk'] ?? 0) ?></strong></td>
                                 </tr>
-                                <?php $pos_display++; endforeach; ?>
+                                <?php endforeach; ?>
                             </tbody>
                         </table>
                     </div>
@@ -370,7 +393,7 @@ $url_base = 'evento_resultados.php?torneo_id=' . $torneo_id;
                         <ul class="pagination pagination-sm justify-content-center">
                             <?php for ($i = 1; $i <= min($total_pages, 10); $i++): ?>
                                 <li class="page-item <?= $i === $pagina ? 'active' : '' ?>">
-                                    <a class="page-link" href="<?= $url_base ?>&vista=general&p=<?= $i ?>&<?= $gen_q ?>"><?= $i ?></a>
+                                    <a class="page-link" href="<?= $url_base ?>&vista=general&p=<?= $i ?><?= $gen_q !== '' ? '&' . htmlspecialchars($gen_q) : '' ?>"><?= $i ?></a>
                                 </li>
                             <?php endfor; ?>
                         </ul>
@@ -455,7 +478,7 @@ $url_base = 'evento_resultados.php?torneo_id=' . $torneo_id;
                                     <tr>
                                         <td><?= (int)($j['posicion'] ?? 0) ?: '—' ?></td>
                                         <td>
-                                            <a href="resumen_jugador.php?torneo_id=<?= $torneo_id ?>&id_usuario=<?= (int)($j['id_usuario'] ?? 0) ?>" class="link-jugador">
+                                            <a href="<?= htmlspecialchars('resumen_jugador.php' . $orgCtx->buildQs(['torneo_id' => $torneo_id, 'id_usuario' => (int) ($j['id_usuario'] ?? 0)])) ?>" class="link-jugador">
                                                 <?= htmlspecialchars($j['nombre_completo'] ?? $j['username'] ?? 'N/A') ?>
                                             </a>
                                         </td>
@@ -538,7 +561,7 @@ $url_base = 'evento_resultados.php?torneo_id=' . $torneo_id;
                                     <tr>
                                         <td><?= (int)($j['posicion'] ?? 0) ?: '—' ?></td>
                                         <td>
-                                            <a href="resumen_jugador.php?torneo_id=<?= $torneo_id ?>&id_usuario=<?= (int)($j['id_usuario'] ?? 0) ?>" class="link-jugador">
+                                            <a href="<?= htmlspecialchars('resumen_jugador.php' . $orgCtx->buildQs(['torneo_id' => $torneo_id, 'id_usuario' => (int) ($j['id_usuario'] ?? 0)])) ?>" class="link-jugador">
                                                 <?= htmlspecialchars($j['nombre_completo'] ?? 'N/A') ?>
                                             </a>
                                         </td>
@@ -571,19 +594,19 @@ $url_base = 'evento_resultados.php?torneo_id=' . $torneo_id;
         <?php endif; ?>
 
         <div class="p-4 border-top bg-light d-flex flex-wrap gap-2 justify-content-center">
-            <a href="resultados.php" class="btn btn-outline-primary btn-sm">
-                <i class="fas fa-list me-1"></i>Ver todos los eventos
+            <a href="<?= htmlspecialchars($volver_eventos_url) ?>" class="btn btn-outline-primary btn-sm">
+                <i class="fas fa-list me-1"></i><?= htmlspecialchars($listado_eventos_label) ?>
             </a>
-            <a href="clasificacion.php?torneo_id=<?= $torneo_id ?>" class="btn btn-outline-secondary btn-sm">
+            <a href="<?= htmlspecialchars('clasificacion.php' . $orgCtx->buildQs(['torneo_id' => $torneo_id])) ?>" class="btn btn-outline-secondary btn-sm">
                 <i class="fas fa-chart-bar me-1"></i>Clasificación móvil
             </a>
             <?php if (($torneo_data['total_fotos'] ?? 0) > 0): ?>
-            <a href="galeria_fotos.php?torneo_id=<?= $torneo_id ?>" class="btn btn-outline-info btn-sm">
+            <a href="<?= htmlspecialchars('galeria_fotos.php' . $orgCtx->buildQs(['torneo_id' => $torneo_id])) ?>" class="btn btn-outline-info btn-sm">
                 <i class="fas fa-images me-1"></i>Galería
             </a>
             <?php endif; ?>
-            <a href="<?= htmlspecialchars($base_url) ?>/public/landing-spa.php" class="btn btn-outline-dark btn-sm">
-                <i class="fas fa-home me-1"></i>Inicio
+            <a href="<?= htmlspecialchars($organizacion_id > 0 ? $orgCtx->urlHubAfiliadoRelative() : $base_url . '/public/landing-spa.php') ?>" class="btn btn-outline-dark btn-sm">
+                <i class="fas fa-home me-1"></i><?= $organizacion_id > 0 ? 'Asociación' : 'Inicio' ?>
             </a>
         </div>
     </div>

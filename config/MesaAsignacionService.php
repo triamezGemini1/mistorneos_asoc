@@ -458,7 +458,7 @@ class MesaAsignacionService
                     )
                 )
                 LEFT JOIN clubes c ON i.id_club = c.id
-                WHERE i.torneo_id = ? AND " . InscritosHelper::sqlWhereSoloConfirmadoConAlias('i') . "
+                WHERE i.torneo_id = ? AND " . InscritosHelper::sqlWhereElegibleParaMesaConAlias('i') . "
                 ORDER BY i.posicion ASC, {$og} DESC, {$oe} DESC, {$op} DESC, i.id_usuario ASC";
         
         $stmt = $this->pdo->prepare($sql);
@@ -593,7 +593,7 @@ class MesaAsignacionService
                 )
                 LEFT JOIN clubes c ON i.id_club = c.id
                 LEFT JOIN partiresul pr1 ON pr1.id_torneo = i.torneo_id AND pr1.id_usuario = i.id_usuario AND pr1.partida = 1
-                WHERE i.torneo_id = ? AND " . InscritosHelper::sqlWhereSoloConfirmadoConAlias('i') . "
+                WHERE i.torneo_id = ? AND " . InscritosHelper::sqlWhereElegibleParaMesaConAlias('i') . "
                 ORDER BY
                     {$ganadorR1Expr} DESC,
                     {$byeR1Expr} ASC,

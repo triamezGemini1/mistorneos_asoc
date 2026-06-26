@@ -5,7 +5,10 @@
  */
 $current_user = Auth::user();
 $page_title = $page_title ?? 'Administrador de Torneos';
-$header_title = $page_title . ' - La Estación del Dominó';
+if (! class_exists('Branding', false)) {
+    require_once __DIR__ . '/../../lib/Branding.php';
+}
+$header_title = Branding::pageTitle($page_title);
 ?>
 <!DOCTYPE html>
 <html lang="es">
@@ -510,7 +513,7 @@ $header_title = $page_title . ' - La Estación del Dominó';
                 require_once __DIR__ . '/../../lib/app_helpers.php';
                 $logo_url = AppHelpers::getAppLogo();
                 ?>
-                <img src="<?= htmlspecialchars($logo_url) ?>" alt="La Estación del Dominó" style="height: 30px; margin-right: 10px;" fetchpriority="high">
+                <img src="<?= htmlspecialchars($logo_url) ?>" alt="<?= htmlspecialchars(Branding::siteName()) ?>" style="height: 30px; margin-right: 10px;" fetchpriority="high">
                 <span>Admin Torneos</span>
             </div>
         </div>

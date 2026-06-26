@@ -21,6 +21,23 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
     $pdo = DB::pdo();
 
     try {
+        if ($postAction === 'homologar_asociaciones_entidades') {
+            require_once __DIR__ . '/../lib/HomologacionEntidadesService.php';
+            $sync = HomologacionEntidadesService::syncNombresYCodigos($pdo, false);
+            $reorg = HomologacionEntidadesService::reorganizarIdsOrganizaciones($pdo, false);
+            $syncTc = HomologacionEntidadesService::syncTorneosYClubes($pdo, false);
+            $msg = sprintf(
+                'Homologación completada. Nombres org: %d, clubes: %d, ids realineados: %d, torneos: %d, clubes cod_org: %d.',
+                $sync['nombres_org'],
+                $sync['nombres_club'],
+                $reorg['moved'],
+                $syncTc['torneos'],
+                $syncTc['clubes']
+            );
+            header('Location: index.php?page=entidades&success=' . urlencode($msg));
+            exit;
+        }
+
         if ($postAction === 'crear_estructura_asociaciones') {
             $colsEntidad = $pdo->query("SHOW COLUMNS FROM entidad")->fetchAll(PDO::FETCH_ASSOC);
             $codeCol = null;

@@ -40,6 +40,19 @@ final class ResultadosReporteData
         return $n ?? 'M';
     }
 
+    /**
+     * Texto para metadatos de impresión/PDF: M/F solo si el parámetro es explícito; si no, listado único.
+     */
+    public static function etiquetaFiltroClasificacionReporte(?string $generoGet): string
+    {
+        $n = self::normalizarGeneroQuery($generoGet);
+        if ($n === null) {
+            return 'Todos los participantes';
+        }
+
+        return $n === 'F' ? 'Femenino' : 'Masculino';
+    }
+
     /** @deprecated Usar {@see generoFiltroDesdeParametro}; el parámetro torneo ya no se usa */
     public static function generoFiltroEfectivo(array $torneo, ?string $generoGet): string
     {
@@ -149,7 +162,7 @@ final class ResultadosReporteData
     }
 
     /**
-     * Mismo criterio que la vista de posiciones en torneo_gestion (activos primero, luego posición global).
+     * Orden oficial de clasificación: posición ascendente (1,2,3...); no prioriza estatus.
      *
      * @param list<array<string, mixed>> $filas
      * @return list<array<string, mixed>>
@@ -157,11 +170,6 @@ final class ResultadosReporteData
     public static function ordenarFilasComoPosicionesTorneo(array $filas): array
     {
         usort($filas, static function (array $a, array $b): int {
-            $ea = (isset($a['estatus']) && ((int) $a['estatus'] === 1 || $a['estatus'] === 'confirmado')) ? 0 : 1;
-            $eb = (isset($b['estatus']) && ((int) $b['estatus'] === 1 || $b['estatus'] === 'confirmado')) ? 0 : 1;
-            if ($ea !== $eb) {
-                return $ea <=> $eb;
-            }
             $pa = (int) ($a['posicion'] ?? 0);
             $pb = (int) ($b['posicion'] ?? 0);
             if ($pa === 0) {
@@ -196,20 +204,14 @@ final class ResultadosReporteData
     }
 
     /**
-     * Posiciones 1…N dentro del subconjunto filtrado por género.
+     * No modifica posiciones: la clasificación del torneo ya guardó inscritos.posicion (y clasiequi).
+     * Los reportes solo muestran ese valor; filtrar por género no renumera 1…N.
      *
      * @param list<array<string, mixed>> $filas
      * @return list<array<string, mixed>>
      */
     public static function reenumerarPosicionMostrada(array $filas): array
     {
-        $n = 0;
-        foreach ($filas as &$f) {
-            $n++;
-            $f['posicion'] = $n;
-        }
-        unset($f);
-
         return $filas;
     }
 
@@ -276,16 +278,11 @@ final class ResultadosReporteData
     }
 
     /**
+     * @param string|null $generoPreferencia Si M o F (normalizado), filtra la clasificación; si null o vacío, todos los inscritos activos.
      * @return array{torneo: array, participantes: array, resumen_clubes: array, equipos: array, rondas: array}
      */
     public static function cargar(PDO $pdo, int $torneoId, array $torneo, ?string $generoPreferencia = null): array
     {
-        if (function_exists('recalcularRankingSegunModalidad')) {
-            recalcularRankingSegunModalidad($torneoId);
-        } elseif (function_exists('recalcularPosiciones')) {
-            recalcularPosiciones($torneoId);
-        }
-
         $gffSql = self::sqlGffSubquery();
         $wRegPr = PartiresulEstatusSql::whereRegistradoUno('pr');
         $sqlParticipantes = "
@@ -335,10 +332,11 @@ final class ResultadosReporteData
         unset($p);
 
         $modalidad = (int) ($torneo['modalidad'] ?? 0);
-        $gen = self::generoFiltroDesdeParametro($generoPreferencia);
-        $participantes = self::filtrarFilasClasificacionPorGenero($participantes, $gen, $modalidad);
+        $genNorm = self::normalizarGeneroQuery($generoPreferencia);
+        if ($genNorm !== null) {
+            $participantes = self::filtrarFilasClasificacionPorGenero($participantes, $genNorm, $modalidad);
+        }
         $participantes = self::ordenarFilasComoPosicionesTorneo($participantes);
-        $participantes = self::reenumerarPosicionMostrada($participantes);
         if (in_array($modalidad, [2, 4], true)) {
             $participantes = self::colapsarFilasPorPareja($participantes, $pdo, $torneoId);
         }

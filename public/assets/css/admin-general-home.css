@@ -1,0 +1,101 @@
+/**
+ * Dashboard Inicio — administrador general (MisTorneos ASOC).
+ */
+
+body.admin-general-home-page.bg-light {
+  background-color: #00D0FA !important;
+}
+
+body.admin-general-home-page #page-content-wrapper {
+  background-color: #00D0FA !important;
+}
+
+body.admin-general-home-page main.container-fluid {
+  background-color: transparent;
+}
+
+.admin-general-home {
+  width: 80%;
+  max-width: 80%;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+@media (max-width: 991.98px) {
+  .admin-general-home {
+    width: 94%;
+    max-width: 94%;
+  }
+}
+
+.admin-general-home-intro {
+  background: #fff;
+  border: 1px solid rgba(14, 134, 169, 0.2);
+  border-left: 4px solid #0e86a9;
+  border-radius: 0.75rem;
+  padding: 1.25rem 1.5rem;
+  box-shadow: 0 2px 8px rgba(14, 134, 169, 0.08);
+}
+
+.admin-general-home-intro__title {
+  font-size: 1.35rem;
+  font-weight: 700;
+  color: #0e86a9;
+  margin-bottom: 0.35rem;
+}
+
+.admin-general-home-intro__scope {
+  font-size: 1rem;
+  font-weight: 600;
+  color: #1f2937;
+  margin-bottom: 0.5rem;
+}
+
+.admin-general-home-intro__text {
+  font-size: 0.9rem;
+  color: #4b5563;
+  margin-bottom: 0;
+  line-height: 1.5;
+}
+
+.admin-general-home-toolbar {
+  font-size: 0.9rem;
+}
+
+.admin-general-stats-block__title {
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: #6b7280;
+  margin-bottom: 0.75rem;
+}
+
+/* Tarjetas ~40% más compactas que el dashboard estándar */
+.admin-general-home .stat-card {
+  padding: 1.05rem;
+}
+
+.admin-general-home .stat-card::after {
+  width: 72px;
+  height: 72px;
+  top: -12px;
+  right: -12px;
+}
+
+.admin-general-home .stat-card h3 {
+  font-size: 1.35rem;
+  margin-bottom: 0.3rem;
+}
+
+.admin-general-home .stat-card p {
+  font-size: 0.75rem;
+  letter-spacing: 0.35px;
+}
+
+.admin-general-home .stat-card:hover {
+  transform: translateY(-3px);
+}
+
+.admin-general-home .row.g-3 {
+  --bs-gutter-y: 0.75rem;
+  --bs-gutter-x: 0.75rem;
+}

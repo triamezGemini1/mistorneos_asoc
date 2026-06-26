@@ -13,6 +13,13 @@ $pdo = DB::pdo();
 $base_public = rtrim(class_exists('AppHelpers') ? AppHelpers::getPublicUrl() : (rtrim(app_base_url(), '/') . '/public'), '/') . '/';
 
 require_once __DIR__ . '/includes/ranking_atletas_context.php';
+require_once __DIR__ . '/includes/branding_init.php';
+
+if ($organizacion_id <= 0 && $role !== 'admin_general') {
+    $landingUrl = rtrim(class_exists('AppHelpers') ? AppHelpers::getPublicUrl() : (rtrim(app_base_url(), '/') . '/public'), '/') . '/landing-spa.php#asociaciones-afiliadas';
+    header('Location: ' . $landingUrl, true, 302);
+    exit;
+}
 
 $ranking_atletas_qs = static function (array $overrides = []) use ($genero, $organizacion_id, $vista): string {
     $p = ['genero' => $genero];
@@ -43,7 +50,8 @@ $ranking_pdf_qs = static function () use ($genero, $organizacion_id): string {
 };
 
 $titulo_genero = $genero === 'F' ? 'Femenino' : 'Masculino';
-$page_title = 'Ranking de atletas — ' . $titulo_genero . ' — La Estación del Dominó';
+$page_title = ($organizacion_id > 0 ? 'Ranking del estado — ' : 'Ranking de atletas — ')
+    . $titulo_genero . ' — ' . $brand_name;
 
 $modalidades = [1 => 'Individual', 2 => 'Parejas', 3 => 'Equipos', 4 => 'Parejas fijas'];
 
@@ -247,20 +255,21 @@ function fmtfecha(?string $f): string
         <div class="header-rank">
             <div class="d-flex flex-wrap justify-content-between align-items-start gap-3">
                 <div>
-                    <?= AppHelpers::appLogo('mb-2', 'La Estación del Dominó', 40) ?>
-                    <h1 class="h3 mb-1"><i class="fas fa-medal text-warning me-2"></i>Ranking de atletas</h1>
+                    <?= AppHelpers::appLogo('mb-2', null, 40) ?>
+                    <h1 class="h3 mb-1"><i class="fas fa-medal text-warning me-2"></i><?= $organizacion_id > 0 ? 'Ranking del estado' : 'Ranking de atletas' ?></h1>
                     <p class="mb-0 opacity-90 small"><?= htmlspecialchars($titulo_genero) ?> · Solo torneos con ranking activado</p>
                     <?php if ($organizacion_id > 0): ?>
+                        <?php if ($entidad_nombre_encabezado !== ''): ?>
+                            <p class="mb-0 mt-2 fw-semibold fs-5 text-white"><i class="fas fa-map-marker-alt me-2 opacity-75"></i><?= htmlspecialchars($entidad_nombre_encabezado) ?></p>
+                        <?php endif; ?>
                         <?php if ($org_nombre_encabezado !== ''): ?>
-                            <p class="mb-0 mt-2 fw-semibold fs-5 text-white"><i class="fas fa-building me-2 opacity-75"></i><?= htmlspecialchars($org_nombre_encabezado) ?></p>
-                        <?php else: ?>
-                            <p class="mb-0 mt-2 small opacity-75">Organización #<?= (int) $organizacion_id ?></p>
+                            <p class="mb-0 mt-1 small opacity-90"><i class="fas fa-building me-2 opacity-75"></i><?= htmlspecialchars($org_nombre_encabezado) ?></p>
                         <?php endif; ?>
                     <?php endif; ?>
                 </div>
                 <div class="no-print">
-                    <a href="landing-spa.php" class="btn btn-sm btn-volver me-1"><i class="fas fa-home me-1"></i>Inicio</a>
-                    <a href="resultados.php" class="btn btn-sm btn-volver"><i class="fas fa-trophy me-1"></i>Resultados por evento</a>
+                    <a href="<?= htmlspecialchars($landing_volver_url) ?>" class="btn btn-sm btn-volver me-1"><i class="fas fa-home me-1"></i>Inicio</a>
+                    <a href="<?= htmlspecialchars($resultados_volver_url) ?>" class="btn btn-sm btn-volver"><i class="fas fa-trophy me-1"></i><?= $organizacion_id > 0 ? 'Torneos realizados' : 'Resultados por evento' ?></a>
                 </div>
             </div>
             <ul class="nav nav-pills nav-genero gap-2 mt-3 no-print">
@@ -280,7 +289,7 @@ function fmtfecha(?string $f): string
                     <?= $organizacion_id > 0 ? htmlspecialchars($org_nombre_encabezado !== '' ? $org_nombre_encabezado : ('ID ' . $organizacion_id)) : '—' ?>
                     <span class="text-muted small ms-1">(solo el ranking de su organización)</span>
                 </div>
-            <?php elseif ($role === 'admin_general'): ?>
+            <?php elseif ($role === 'admin_general' && ! $ranking_del_estado): ?>
             <form method="get" class="row g-2 align-items-end mb-3">
                 <input type="hidden" name="genero" value="<?= htmlspecialchars($genero) ?>">
                 <input type="hidden" name="vista" value="<?= htmlspecialchars($vista) ?>">
@@ -306,7 +315,7 @@ function fmtfecha(?string $f): string
                     <?php endif; ?>
                 </div>
             </form>
-            <?php else: ?>
+            <?php elseif (! $ranking_del_estado): ?>
             <form method="get" class="row g-2 align-items-end mb-3">
                 <input type="hidden" name="genero" value="<?= htmlspecialchars($genero) ?>">
                 <input type="hidden" name="vista" value="<?= htmlspecialchars($vista) ?>">
@@ -392,7 +401,7 @@ function fmtfecha(?string $f): string
                                     <?php foreach ($a['detalle_torneos'] as $t): ?>
                                         <tr>
                                             <td>
-                                                <a href="evento_resultados.php?torneo_id=<?= (int) $t['torneo_id'] ?>"><?= htmlspecialchars($t['nombre']) ?></a>
+                                                <a href="<?= htmlspecialchars($rankingOrgCtx->urlEventoResultadosRelative((int) $t['torneo_id'])) ?>"><?= htmlspecialchars($t['nombre']) ?></a>
                                             </td>
                                             <td><?= fmtfecha($t['fechator'] ?? '') ?></td>
                                             <td><?= htmlspecialchars($modalidades[(int) ($t['modalidad'] ?? 0)] ?? '—') ?></td>
@@ -540,7 +549,7 @@ function fmtfecha(?string $f): string
                                                             <?php foreach ($a['detalle_torneos'] as $t): ?>
                                                                 <tr>
                                                                     <td>
-                                                                        <a href="evento_resultados.php?torneo_id=<?= (int) $t['torneo_id'] ?>">
+                                                                        <a href="<?= htmlspecialchars($rankingOrgCtx->urlEventoResultadosRelative((int) $t['torneo_id'])) ?>">
                                                                             <?= htmlspecialchars($t['nombre']) ?>
                                                                         </a>
                                                                     </td>

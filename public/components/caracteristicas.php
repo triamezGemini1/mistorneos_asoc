@@ -26,8 +26,8 @@
                     <p class="text-gray-600 mb-4">
                         Sistema completo para organizar, administrar y seguir torneos de dominó con clasificaciones en tiempo real
                     </p>
-                    <a href="#eventos" class="text-primary-600 font-semibold hover:text-primary-800 inline-flex items-center transition-colors">
-                        Ver Torneos <i class="fas fa-arrow-right ml-2"></i>
+                    <a href="landing-afiliados.php" class="text-primary-600 font-semibold hover:text-primary-800 inline-flex items-center transition-colors">
+                        Ver asociaciones <i class="fas fa-arrow-right ml-2"></i>
                     </a>
                 </div>
                 
@@ -68,8 +68,8 @@
                     <p class="text-gray-600 mb-4">
                         Consulta resultados de torneos realizados, estadísticas de jugadores y rankings actualizados
                     </p>
-                    <a href="resultados.php" class="text-yellow-600 font-semibold hover:text-yellow-800 inline-flex items-center transition-colors">
-                        Ver Resultados <i class="fas fa-arrow-right ml-2"></i>
+                    <a href="landing-afiliados.php" class="text-yellow-600 font-semibold hover:text-yellow-800 inline-flex items-center transition-colors">
+                        Ver asociaciones <i class="fas fa-arrow-right ml-2"></i>
                     </a>
                 </div>
                 

@@ -10,9 +10,15 @@ require_once __DIR__ . '/../../config/db.php';
 require_once __DIR__ . '/../../config/csrf.php';
 require_once __DIR__ . '/../../config/auth.php';
 require_once __DIR__ . '/../../lib/file_upload.php';
+require_once __DIR__ . '/../../lib/OrganizacionDashboardStats.php';
+require_once __DIR__ . '/../../lib/AsociacionAdminHelper.php';
 
 Auth::requireRole(['admin_general','admin_torneo','admin_club']);
 CSRF::validate();
+
+if (!AsociacionAdminHelper::puedeCrearYAdministrarTorneos(DB::pdo(), Auth::id(), (string) (Auth::user()['role'] ?? ''))) {
+    throw new Exception('No tiene permiso para crear torneos.');
+}
 
 // Obtener usuario actual y permisos
 $current_user = Auth::user();
@@ -138,16 +144,19 @@ try {
     if (!$is_admin_general) {
         // admin_club trabaja a nivel de organización
         if ($user_role === 'admin_club') {
-            // Siempre resolver por PK (getUserOrganizacionId). getUserOrganizacionRef() devuelve cod_org
-            // (= entidad en afiliados particulares) y colisiona con otras organizaciones de la misma entidad.
-            $org_pk = (int)(Auth::getUserOrganizacionId() ?? 0);
-            if (!$org_pk) {
+            $org_pk = (int) (Auth::getUserOrganizacionId() ?? 0);
+            if ($org_pk <= 0) {
                 throw new Exception('No tiene una organización asignada. Contacte al administrador.');
             }
-            $orgRefData = $resolveOrgRef(DB::pdo(), $org_pk);
-            $organizacion_id = (int)$orgRefData['ref'];
-            $club_responsable = (int)$orgRefData['ref'];
-            
+            $stOrg = DB::pdo()->prepare('SELECT * FROM organizaciones WHERE id = ? AND estatus = 1 LIMIT 1');
+            $stOrg->execute([$org_pk]);
+            $orgRow = $stOrg->fetch(PDO::FETCH_ASSOC);
+            if (!is_array($orgRow) || $orgRow === []) {
+                throw new Exception('Organización no encontrada o inactiva.');
+            }
+            $vinculos = OrganizacionDashboardStats::torneoVinculosParaOrganizacion($orgRow);
+            $organizacion_id = (int) $vinculos['cod_org'];
+            $club_responsable = (int) $vinculos['club_responsable'];
         } else {
             // admin_torneo requiere club_id asignado
             if (!$user_club_id) {
@@ -171,10 +180,21 @@ try {
         $club_responsable = FvdConfig::clubResponsableTorneo();
     }
 
-    $entidad = !empty($_POST['entidad']) ? (int)$_POST['entidad'] : 0;
-    if ($entidad <= 0 && $organizacion_id > 0) {
-        $orgRefData = $resolveOrgRef(DB::pdo(), (int)$organizacion_id);
-        $entidad = (int)$orgRefData['entidad'];
+    $entidad = !empty($_POST['entidad']) ? (int) $_POST['entidad'] : 0;
+    if ($entidad <= 0 && $user_role === 'admin_club') {
+        $org_pk_ent = (int) (Auth::getUserOrganizacionId() ?? 0);
+        if ($org_pk_ent > 0) {
+            $stEnt = DB::pdo()->prepare('SELECT entidad, tipo_org FROM organizaciones WHERE id = ? LIMIT 1');
+            $stEnt->execute([$org_pk_ent]);
+            $rowEnt = $stEnt->fetch(PDO::FETCH_ASSOC);
+            if (is_array($rowEnt)) {
+                $entidad = (int) ($rowEnt['entidad'] ?? 0);
+            }
+        }
+    }
+    if ($entidad <= 0 && $organizacion_id > 0 && $user_role !== 'admin_club') {
+        $orgRefData = $resolveOrgRef(DB::pdo(), (int) $organizacion_id);
+        $entidad = (int) $orgRefData['entidad'];
     }
     if ($entidad <= 0 && $is_admin_general) {
         $entidad = 0;

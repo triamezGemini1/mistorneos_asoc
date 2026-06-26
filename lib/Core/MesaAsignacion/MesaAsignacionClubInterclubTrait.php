@@ -751,8 +751,8 @@ trait MesaAsignacionClubInterclubTrait
             }
         }
 
-        $this->ajustarMesasMaxDosMismoClub($mesas, $jugadoresBye, $matrizCompañeros);
-        if (! $this->todasLasMesasCumplenLimiteClub($mesas)) {
+        $this->ajustarMesasMaxDosMismoClubSiAplica((int) $torneoId, $mesas, $jugadoresBye, $matrizCompañeros);
+        if (! $this->mesasCumplenLimiteClubSiAplica((int) $torneoId, $mesas)) {
             return [
                 'success' => false,
                 'message' => "No se pudo generar la ronda {$numRonda} (interclub RR): máximo 2 jugadores del mismo club por mesa.",

@@ -36,12 +36,15 @@ try {
     if ($telefono && strlen($telefono) == 10 && !str_starts_with($telefono, '58')) {
         $telefono = '58' . $telefono;
     }
+
+    $brandSite = class_exists('Branding', false) ? Branding::siteName() : 'La Estación del Dominó';
+    $brandWa = '_' . $brandSite . '_';
     
     // Generar mensaje según estado
     if ($solicitud['estatus'] === 'aprobada') {
         $mensaje = "🎉 *¡FELICITACIONES!*\n\n";
         $mensaje .= "Hola *" . $solicitud['nombre'] . "*\n\n";
-        $mensaje .= "Tu solicitud de afiliación a *La Estación del Dominó* ha sido *APROBADA* ✅\n\n";
+        $mensaje .= "Tu solicitud de afiliación a *{$brandSite}* ha sido *APROBADA* ✅\n\n";
         $mensaje .= "━━━━━━━━━━━━━━━━━━\n";
         $mensaje .= "📋 *DATOS DE ACCESO*\n";
         $mensaje .= "━━━━━━━━━━━━━━━━━━\n\n";
@@ -82,7 +85,7 @@ try {
         $mensaje .= "✅ Y mucho más...\n\n";
         $mensaje .= "━━━━━━━━━━━━━━━━━━\n\n";
         $mensaje .= "¡Bienvenido al proyecto! 🎲\n\n";
-        $mensaje .= "_La Estación del Dominó_";
+        $mensaje .= $brandWa;
     } elseif ($solicitud['estatus'] === 'rechazada') {
         $mensaje = "📋 *ACTUALIZACIÓN DE SOLICITUD*\n\n";
         $mensaje .= "Hola *" . $solicitud['nombre'] . "*\n\n";
@@ -94,13 +97,13 @@ try {
             $mensaje .= "━━━━━━━━━━━━━━━━━━\n\n";
         }
         $mensaje .= "Puedes volver a enviar una solicitud cuando lo consideres conveniente.\n\n";
-        $mensaje .= "_La Estación del Dominó_";
+        $mensaje .= $brandWa;
     } else {
         $mensaje = "📋 *SOLICITUD DE AFILIACIÓN*\n\n";
         $mensaje .= "Hola *" . $solicitud['nombre'] . "*\n\n";
         $mensaje .= "Tu solicitud está siendo revisada.\n";
         $mensaje .= "Te notificaremos cuando tengamos una respuesta.\n\n";
-        $mensaje .= "_La Estación del Dominó_";
+        $mensaje .= $brandWa;
     }
     
     $mensaje_encoded = urlencode($mensaje);

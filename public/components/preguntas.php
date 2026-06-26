@@ -12,7 +12,7 @@
                     Preguntas Frecuentes
                 </h2>
                 <p class="text-lg md:text-xl text-gray-600 max-w-2xl mx-auto">
-                    Todo lo que necesitas saber sobre La Estación del Dominó
+                    Todo lo que necesitas saber sobre <?= htmlspecialchars($SITE_NAME ?? (class_exists('Branding', false) ? Branding::siteName() : 'La Estación del Dominó')) ?>
                 </p>
             </div>
             
@@ -65,7 +65,7 @@
                         <i class="fas fa-chevron-down text-primary-500 group-open:rotate-180 transition-transform"></i>
                     </summary>
                     <p class="mt-4 text-gray-600 pl-10 leading-relaxed">
-                        ¡Por supuesto! Todos los resultados de torneos finalizados están disponibles en la sección "Eventos Realizados". Puedes consultar clasificaciones, estadísticas, fotografías y más información de cada evento.
+                        ¡Por supuesto! Los resultados están disponibles en el portal de cada asociación afiliada, en la sección de torneos realizados.
                     </p>
                 </details>
                 

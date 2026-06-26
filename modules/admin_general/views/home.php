@@ -1,116 +1,139 @@
 <?php
 /**
  * Vista: Dashboard Home para Admin General
- * Solo tarjetas de estadísticas (sin tablas de torneos o entidades).
+ * Tarjetas en bloques de 3, layout 80% ancho, sección identidad de la app.
  */
 require_once __DIR__ . '/../../../lib/app_helpers.php';
+
 $stats = $stats ?? [];
+$productName = class_exists('Branding', false) ? Branding::siteName() : 'MisTorneos ASOC';
 ?>
-<div class="fade-in">
-    <div class="d-flex justify-content-between align-items-center mb-5 flex-wrap gap-3">
-        <div>
-            <h1 class="h2 mb-2 fw-bold">
-                <i class="fas fa-chart-line me-2 text-primary"></i>Dashboard
-            </h1>
-            <p class="text-muted mb-1 fs-5">
-                <i class="fas fa-user-circle me-2"></i>Bienvenido de vuelta, <strong><?= htmlspecialchars($current_user['username'] ?? '') ?></strong>
-            </p>
-            <p class="text-muted mb-0 small">
-                <i class="fas fa-globe me-1"></i>Estadísticas nacionales — Federación Venezolana de Dominó (FVD)
-            </p>
-        </div>
-        <div class="d-flex align-items-center gap-2 flex-wrap">
-            <a href="<?= htmlspecialchars(AppHelpers::dashboard('importacion_torneo_externo')) ?>" class="btn btn-outline-secondary">
-                <i class="fas fa-file-import me-2"></i>Carga externa transparente
-            </a>
-            <a href="<?= htmlspecialchars(AppHelpers::dashboard('notificaciones_masivas')) ?>" class="btn btn-primary">
-                <i class="fas fa-bell me-2"></i>Enviar notificaciones
-            </a>
-            <div class="d-flex align-items-center gap-3">
-                <div class="text-end">
-                    <div class="text-muted small">Hoy es</div>
-                    <div class="fw-bold text-primary"><?= date('d/m/Y') ?></div>
-                </div>
-                <div class="vr"></div>
+<div class="admin-general-home fade-in">
+    <section class="admin-general-home-intro mb-4">
+        <div class="d-flex flex-column flex-lg-row align-items-lg-center justify-content-between gap-3">
+            <div class="d-flex align-items-start gap-3">
+                <img
+                    src="<?= htmlspecialchars(AppHelpers::getAppLogo()) ?>"
+                    alt="<?= htmlspecialchars($productName) ?>"
+                    height="48"
+                    class="flex-shrink-0"
+                    style="object-fit: contain;"
+                >
                 <div>
-                    <div class="text-muted small">Rol</div>
-                    <span class="badge bg-primary fs-6 px-3 py-2">Admin General</span>
+                    <h1 class="admin-general-home-intro__title mb-0"><?= htmlspecialchars($productName) ?></h1>
+                    <p class="admin-general-home-intro__scope mb-1">Gestor de torneos para asociaciones</p>
+                    <p class="admin-general-home-intro__text">
+                        Plataforma sectorial para administrar asociaciones afiliadas, clubes, afiliados y torneos
+                        con alcance territorial y control centralizado.
+                    </p>
+                </div>
+            </div>
+            <div class="admin-general-home-toolbar d-flex align-items-center gap-2 flex-wrap">
+                <a href="<?= htmlspecialchars(AppHelpers::landingUrl()) ?>" class="btn btn-outline-primary btn-sm">
+                    <i class="fas fa-globe me-1"></i>Landing
+                </a>
+                <a href="<?= htmlspecialchars(AppHelpers::dashboard('notificaciones_masivas')) ?>" class="btn btn-primary btn-sm">
+                    <i class="fas fa-bell me-1"></i>Notificaciones
+                </a>
+                <div class="text-end small text-muted">
+                    <div><?= date('d/m/Y') ?></div>
+                    <span class="badge bg-primary">Admin General</span>
                 </div>
             </div>
         </div>
-    </div>
+        <p class="text-muted small mt-3 mb-0">
+            Bienvenido, <strong><?= htmlspecialchars($current_user['username'] ?? '') ?></strong>
+        </p>
+    </section>
 
-    <?php if (!empty($success_message)): ?>
+    <?php if (! empty($success_message)): ?>
         <div class="alert alert-success alert-dismissible fade show" role="alert">
             <i class="fas fa-check-circle me-2"></i><?= htmlspecialchars($success_message) ?>
             <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
         </div>
     <?php endif; ?>
-    <?php if (!empty($error_message)): ?>
+    <?php if (! empty($error_message)): ?>
         <div class="alert alert-danger alert-dismissible fade show" role="alert">
             <i class="fas fa-exclamation-triangle me-2"></i><?= htmlspecialchars($error_message) ?>
             <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
         </div>
     <?php endif; ?>
 
-    <!-- Stats Cards -->
-    <div class="row g-4 mb-5 fade-in">
-        <div class="col-12 mb-3">
-            <h4 class="text-muted"><i class="fas fa-chart-line me-2"></i>Estadísticas nacionales FVD</h4>
-        </div>
-        <div class="col-xl-2 col-lg-3 col-md-4 col-sm-6 col-12">
-            <div class="stat-card primary">
-                <div class="d-flex flex-column align-items-start">
-                    <div class="w-100">
-                        <h3 class="mb-1"><?= number_format($stats['total_users'] ?? 0) ?></h3>
-                        <p class="mb-0"><i class="fas fa-users me-1"></i>Total Usuarios</p>
-                    </div>
+    <section class="admin-general-stats-block mb-4">
+        <h2 class="admin-general-stats-block__title">
+            <i class="fas fa-chart-pie me-2"></i>Resumen general
+        </h2>
+        <div class="row g-3">
+            <div class="col-md-4 col-sm-6 col-12">
+                <div class="stat-card primary">
+                    <h3 class="mb-1"><?= number_format($stats['total_users'] ?? 0) ?></h3>
+                    <p class="mb-0"><i class="fas fa-users me-1"></i>Total usuarios</p>
+                </div>
+            </div>
+            <div class="col-md-4 col-sm-6 col-12">
+                <div class="stat-card info">
+                    <h3 class="mb-1"><?= number_format($stats['total_entidades'] ?? 0) ?></h3>
+                    <p class="mb-0"><i class="fas fa-map-marked-alt me-1"></i>Asociaciones</p>
+                </div>
+            </div>
+            <div class="col-md-4 col-sm-12">
+                <div class="stat-card info">
+                    <h3 class="mb-1"><?= number_format($stats['total_admin_clubs'] ?? 0) ?></h3>
+                    <p class="mb-0"><i class="fas fa-user-shield me-1"></i>Admin organización</p>
                 </div>
             </div>
         </div>
-        <div class="col-xl-2 col-lg-3 col-md-4 col-sm-6 col-12">
-            <div class="stat-card info">
-                <div class="d-flex flex-column align-items-start">
-                    <div class="w-100">
-                        <h3 class="mb-1"><?= number_format($stats['total_entidades'] ?? 0) ?></h3>
-                        <p class="mb-0"><i class="fas fa-map-marked-alt me-1"></i>Asociaciones</p>
-                    </div>
-                </div>
-            </div>
-        </div>
-        <div class="col-xl-2 col-lg-3 col-md-4 col-sm-6 col-12">
-            <div class="stat-card info">
-                <div class="d-flex flex-column align-items-start">
-                    <div class="w-100">
-                        <h3 class="mb-1"><?= number_format($stats['total_admin_clubs'] ?? 0) ?></h3>
-                        <p class="mb-0"><i class="fas fa-user-shield me-1"></i>Admin Organización</p>
-                    </div>
-                </div>
-            </div>
-        </div>
-        <?php include __DIR__ . '/../../../public/includes/views/dashboard/_atletas_stat_cards.php'; ?>
-        <div class="col-xl-2 col-lg-3 col-md-4 col-sm-6 col-12">
-            <div class="stat-card secondary">
-                <div class="d-flex flex-column align-items-start">
-                    <div class="w-100">
-                        <h3 class="mb-1"><?= number_format($stats['total_admin_torneo'] ?? 0) ?></h3>
-                        <p class="mb-0"><i class="fas fa-user-tie me-1"></i>Admin Torneo</p>
-                    </div>
-                </div>
-            </div>
-        </div>
-        <div class="col-xl-2 col-lg-3 col-md-4 col-sm-6 col-12">
-            <div class="stat-card dark">
-                <div class="d-flex flex-column align-items-start">
-                    <div class="w-100">
-                        <h3 class="mb-1"><?= number_format($stats['total_operadores'] ?? 0) ?></h3>
-                        <p class="mb-0"><i class="fas fa-user-cog me-1"></i>Operadores</p>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
+    </section>
 
-    <?php include __DIR__ . '/_panel_operativo.php'; ?>
+    <section class="admin-general-stats-block mb-4">
+        <h2 class="admin-general-stats-block__title">
+            <i class="fas fa-running me-2"></i>Atletas — estado
+        </h2>
+        <div class="row g-3">
+            <div class="col-md-4 col-sm-6 col-12">
+                <div class="stat-card success">
+                    <h3 class="mb-1"><?= number_format((int) ($stats['atletas_activos'] ?? 0)) ?></h3>
+                    <p class="mb-0"><i class="fas fa-user-check me-1"></i>Activos</p>
+                </div>
+            </div>
+            <div class="col-md-4 col-sm-6 col-12">
+                <div class="stat-card secondary">
+                    <h3 class="mb-1"><?= number_format((int) ($stats['atletas_inactivos'] ?? 0)) ?></h3>
+                    <p class="mb-0"><i class="fas fa-user-slash me-1"></i>Inactivos</p>
+                </div>
+            </div>
+            <div class="col-md-4 col-sm-12">
+                <div class="stat-card danger">
+                    <h3 class="mb-1"><?= number_format((int) ($stats['hombres_activos'] ?? 0)) ?></h3>
+                    <p class="mb-0"><i class="fas fa-mars me-1"></i>Hombres (activos)</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section class="admin-general-stats-block mb-3">
+        <h2 class="admin-general-stats-block__title">
+            <i class="fas fa-venus-mars me-2"></i>Atletas — por género
+        </h2>
+        <div class="row g-3">
+            <div class="col-md-4 col-sm-6 col-12">
+                <div class="stat-card purple">
+                    <h3 class="mb-1"><?= number_format((int) ($stats['mujeres_activos'] ?? 0)) ?></h3>
+                    <p class="mb-0"><i class="fas fa-venus me-1"></i>Mujeres (activas)</p>
+                </div>
+            </div>
+            <div class="col-md-4 col-sm-6 col-12">
+                <div class="stat-card dark">
+                    <h3 class="mb-1"><?= number_format((int) ($stats['hombres_inactivos'] ?? 0)) ?></h3>
+                    <p class="mb-0"><i class="fas fa-mars me-1"></i>Hombres (inactivos)</p>
+                </div>
+            </div>
+            <div class="col-md-4 col-sm-12">
+                <div class="stat-card warning">
+                    <h3 class="mb-1"><?= number_format((int) ($stats['mujeres_inactivos'] ?? 0)) ?></h3>
+                    <p class="mb-0"><i class="fas fa-venus me-1"></i>Mujeres (inactivas)</p>
+                </div>
+            </div>
+        </div>
+    </section>
 </div>
-

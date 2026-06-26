@@ -8,6 +8,7 @@ require_once __DIR__ . '/../../config/bootstrap.php';
 require_once __DIR__ . '/../../config/db.php';
 require_once __DIR__ . '/../../config/csrf.php';
 require_once __DIR__ . '/../../config/auth.php';
+require_once __DIR__ . '/../../lib/OrganizacionDashboardStats.php';
 require_once __DIR__ . '/../../lib/file_upload.php';
 
 Auth::requireRole(['admin_general','admin_torneo','admin_club']);
@@ -209,10 +210,15 @@ try {
         // Mantener la organización original del torneo
         $club_responsable = $torneo_actual['club_responsable'];
         if ($user_role === 'admin_club') {
-            $org_pk = (int)(Auth::getUserOrganizacionId() ?? 0);
+            $org_pk = (int) (Auth::getUserOrganizacionId() ?? 0);
             if ($org_pk > 0) {
-                $orgResolved = $resolveOrgRef(DB::pdo(), $org_pk);
-                $club_responsable = (int)($orgResolved['ref'] ?? 0);
+                $stOrg = DB::pdo()->prepare('SELECT * FROM organizaciones WHERE id = ? LIMIT 1');
+                $stOrg->execute([$org_pk]);
+                $orgRow = $stOrg->fetch(PDO::FETCH_ASSOC);
+                if (is_array($orgRow) && $orgRow !== []) {
+                    $vinculos = OrganizacionDashboardStats::torneoVinculosParaOrganizacion($orgRow);
+                    $club_responsable = (int) $vinculos['club_responsable'];
+                }
             }
         }
     } else {

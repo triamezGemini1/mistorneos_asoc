@@ -45,17 +45,17 @@ $sql_obligatorios = [
 function debeExcluirRuta(string $ruta_relativa, string $nombre_archivo, array $excluir): bool
 {
     $norm = str_replace('\\', '/', $ruta_relativa);
-    if ($norm === '.env' || str_ends_with($norm, '/.env')) {
+    if ($norm === '.env' || substr($norm, -5) === '/.env') {
         return true;
     }
     foreach ($excluir as $patron) {
-        if ($patron === '' || str_starts_with($patron, '#')) {
+        if ($patron === '' || (isset($patron[0]) && $patron[0] === '#')) {
             continue;
         }
         if ($norm === $patron || $nombre_archivo === $patron) {
             return true;
         }
-        if (str_contains($norm, $patron)) {
+        if (strpos($norm, $patron) !== false) {
             return true;
         }
         if (function_exists('fnmatch') && (fnmatch($patron, $norm) || fnmatch($patron, $nombre_archivo))) {

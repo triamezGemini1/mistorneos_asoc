@@ -8,8 +8,13 @@ require_once __DIR__ . '/../config/bootstrap.php';
 require_once __DIR__ . '/../config/db_config.php';
 require_once __DIR__ . '/../lib/app_helpers.php';
 require_once __DIR__ . '/../lib/UrlHelper.php';
+require_once __DIR__ . '/../lib/ResultadosAsociacionContext.php';
+require_once __DIR__ . '/includes/branding_init.php';
 
 $pdo = DB::pdo();
+$orgCtx = ResultadosAsociacionContext::fromGet($pdo);
+$listado_url = $orgCtx->urlEventosRelative();
+$hub_url = $orgCtx->urlHubAfiliadoRelative();
 $base_url = app_base_url();
 $has_cod_org = false;
 try {
@@ -33,7 +38,7 @@ if ($torneo_id <= 0 && isset($_SERVER['REQUEST_URI'])) {
 }
 
 if ($torneo_id <= 0) {
-    header('Location: resultados.php');
+    header('Location: ' . $listado_url);
     exit;
 }
 
@@ -43,6 +48,7 @@ try {
     $stmt = $pdo->prepare("
         SELECT 
             t.*,
+            o.id AS organizacion_id_resuelta,
             COALESCE(o.nombre, c.nombre) as organizacion_nombre,
             COALESCE(o.responsable, c.delegado) as organizacion_responsable,
             COALESCE(o.telefono, c.telefono) as organizacion_telefono,
@@ -59,14 +65,19 @@ try {
     $torneo_data = $stmt->fetch(PDO::FETCH_ASSOC);
     
     if (!$torneo_data) {
-        header('Location: resultados.php');
+        header('Location: ' . $listado_url);
         exit;
     }
 } catch (Exception $e) {
     error_log("Error obteniendo datos del torneo: " . $e->getMessage());
-    header('Location: resultados.php');
+    header('Location: ' . $listado_url);
     exit;
 }
+
+$orgCtx = ResultadosAsociacionContext::fromGetOrTorneo($pdo, $torneo_data);
+$listado_url = $orgCtx->urlEventosRelative();
+$hub_url = $orgCtx->urlHubAfiliadoRelative();
+$listado_label = $orgCtx->labelListadoEventos();
 
 $modalidades = [1 => 'Individual', 2 => 'Parejas', 3 => 'Equipos'];
 $clases = [1 => 'Torneo', 2 => 'Campeonato'];
@@ -97,8 +108,8 @@ $landing_url = rtrim($public_url, '/') . '/landing.php';
     <meta name="theme-color" content="#1a365d">
     
     <!-- SEO Meta Tags -->
-    <title><?= htmlspecialchars($torneo_data['nombre']) ?> - Torneo de Dominó - La Estación del Dominó</title>
-    <meta name="description" content="Información del torneo <?= htmlspecialchars($torneo_data['nombre']) ?>. Fecha: <?= date('d/m/Y', strtotime($torneo_data['fechator'])) ?>. Modalidad: <?= $modalidades[$torneo_data['modalidad']] ?? 'N/A' ?>. Organizado por <?= htmlspecialchars($torneo_data['organizacion_nombre'] ?? 'La Estación del Dominó') ?>">
+    <title><?= htmlspecialchars(Branding::pageTitle(($torneo_data['nombre'] ?? 'Torneo') . ' - Torneo de Dominó')) ?></title>
+    <meta name="description" content="Información del torneo <?= htmlspecialchars($torneo_data['nombre']) ?>. Fecha: <?= date('d/m/Y', strtotime($torneo_data['fechator'])) ?>. Modalidad: <?= $modalidades[$torneo_data['modalidad']] ?? 'N/A' ?>. Organizado por <?= htmlspecialchars(Branding::orgNameOrSite($torneo_data['organizacion_nombre'] ?? '')) ?>">
     <meta name="keywords" content="<?= htmlspecialchars($torneo_data['nombre']) ?>, torneo dominó, dominó venezuela, <?= htmlspecialchars($torneo_data['organizacion_nombre'] ?? '') ?>">
     <meta name="robots" content="index, follow">
     
@@ -130,7 +141,7 @@ $landing_url = rtrim($public_url, '/') . '/landing.php';
         },
         "organizer": {
             "@type": "Organization",
-            "name": "<?= htmlspecialchars($torneo_data['organizacion_nombre'] ?? 'La Estación del Dominó') ?>"
+            "name": "<?= htmlspecialchars(Branding::orgNameOrSite($torneo_data['organizacion_nombre'] ?? '')) ?>"
         },
         "sport": "Dominó"
     }
@@ -327,17 +338,21 @@ $landing_url = rtrim($public_url, '/') . '/landing.php';
                 
                 <!-- Botones de Navegación -->
                 <div class="mt-4 text-center">
-                    <?php 
-                    $resultados_url = UrlHelper::resultadosUrl($torneo_id, $torneo_data['nombre']);
+                    <?php
+                    $resultados_url = $orgCtx->tieneAsociacionActiva()
+                        ? $orgCtx->urlEventoResultadosRelative($torneo_id)
+                        : UrlHelper::resultadosUrl($torneo_id, $torneo_data['nombre']);
+                    $inicio_url = $orgCtx->tieneAsociacionActiva() ? $hub_url : $landing_url;
+                    $inicio_label = $orgCtx->tieneAsociacionActiva() ? 'Volver a la asociación' : 'Volver al inicio';
                     ?>
                     <a href="<?= htmlspecialchars($resultados_url) ?>" class="btn btn-primary">
                         <i class="fas fa-chart-bar me-2"></i>Ver Resultados
                     </a>
-                    <a href="resultados.php" class="btn btn-secondary">
-                        <i class="fas fa-arrow-left me-2"></i>Volver a Listado
+                    <a href="<?= htmlspecialchars($listado_url) ?>" class="btn btn-secondary">
+                        <i class="fas fa-arrow-left me-2"></i><?= htmlspecialchars($listado_label) ?>
                     </a>
-                    <a href="<?= htmlspecialchars($landing_url) ?>" class="btn btn-outline-primary">
-                        <i class="fas fa-home me-2"></i>Volver al inicio
+                    <a href="<?= htmlspecialchars($inicio_url) ?>" class="btn btn-outline-primary">
+                        <i class="fas fa-home me-2"></i><?= htmlspecialchars($inicio_label) ?>
                     </a>
                 </div>
             </div>

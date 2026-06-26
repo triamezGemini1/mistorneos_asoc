@@ -15,6 +15,61 @@ class ClubHelper {
     /** @var string|null|false null = sin resolver; string = columna FK; false = ninguna */
     private static $clubOrganizacionFkColumn = null;
 
+    private static ?bool $usuariosHasClubId = null;
+
+    private static function usuariosHasClubIdColumn(PDO $pdo): bool
+    {
+        if (self::$usuariosHasClubId !== null) {
+            return self::$usuariosHasClubId;
+        }
+        try {
+            self::$usuariosHasClubId = (bool) $pdo->query("SHOW COLUMNS FROM usuarios LIKE 'club_id'")->fetch(PDO::FETCH_ASSOC);
+        } catch (Throwable $e) {
+            self::$usuariosHasClubId = false;
+        }
+
+        return self::$usuariosHasClubId;
+    }
+
+    /**
+     * Fragmento WHERE (alias u) + parámetros: afiliados de un club.
+     * Regla canónica: usuarios.entidad = PK clubes.id; opcionalmente club_id.
+     *
+     * @param array<string, mixed> $club Fila de clubes
+     * @return array{0: string, 1: list<int>}
+     */
+    public static function afiliadosMatchSqlAndParams(PDO $pdo, array $club, int $clubPk = 0): array
+    {
+        if ($clubPk <= 0) {
+            $clubPk = (int) ($club['id'] ?? 0);
+        }
+        if ($clubPk <= 0) {
+            return ['1=0', []];
+        }
+
+        if (self::usuariosHasClubIdColumn($pdo)) {
+            return ['(u.entidad = ? OR u.club_id = ?)', [$clubPk, $clubPk]];
+        }
+
+        return ['u.entidad = ?', [$clubPk]];
+    }
+
+    /**
+     * Condición ON para JOIN usuarios ↔ clubes.
+     */
+    public static function sqlJoinUsuariosAfiliadosOnClub(PDO $pdo, string $clubAlias = 'c'): string
+    {
+        if (! preg_match('/^[a-zA-Z_][a-zA-Z0-9_]*$/', $clubAlias)) {
+            $clubAlias = 'c';
+        }
+
+        if (self::usuariosHasClubIdColumn($pdo)) {
+            return "(u.entidad = {$clubAlias}.id OR u.club_id = {$clubAlias}.id)";
+        }
+
+        return "u.entidad = {$clubAlias}.id";
+    }
+
     /**
      * Columna FK hacia organización en `clubes` (`cod_org` o `organizacion_id`), o null si no existe.
      */

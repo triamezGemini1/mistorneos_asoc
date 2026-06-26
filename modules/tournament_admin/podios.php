@@ -14,13 +14,6 @@ $wFfOppPod = \PartiresulEstatusSql::whereFfUno('pr_oponente');
 $wFfCompPod = \PartiresulEstatusSql::whereFfUno('pr_companero');
 $wRegPrTarPod = \PartiresulEstatusSql::whereRegistradoUno('pr');
 
-// Asegurar que las posiciones estén actualizadas
-if (function_exists('recalcularRankingSegunModalidad')) {
-    recalcularRankingSegunModalidad($torneo_id);
-} elseif (function_exists('recalcularPosiciones')) {
-    recalcularPosiciones($torneo_id);
-}
-
 // club_responsable en tournaments es el ID de la organización (organizaciones), no de clubes
 $club_responsable = null;
 $club_logo_url = null;
@@ -106,7 +99,6 @@ try {
     $modalidad_pod = (int) ($torneo['modalidad'] ?? 0);
     $posiciones = ResultadosReporteData::filtrarFilasClasificacionPorGenero($posiciones, $genero_podio, $modalidad_pod);
     $posiciones = ResultadosReporteData::ordenarFilasComoPosicionesTorneo($posiciones);
-    $posiciones = ResultadosReporteData::reenumerarPosicionMostrada($posiciones);
 
     // Procesar todos los resultados
     foreach ($posiciones as $pos) {

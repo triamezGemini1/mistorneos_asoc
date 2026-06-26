@@ -29,9 +29,9 @@ class InscritosHelper {
 
     /**
      * Condición SQL: solo inscritos confirmados (cuentan para participar en el torneo).
-     * Compatible con columna INT y ENUM.
+     * CAST a CHAR evita 1292 en MySQL estricto (no comparar INT con 'confirmado' en columna VARCHAR/ENUM).
      */
-    const SQL_WHERE_SOLO_CONFIRMADO = "(estatus = 1 OR estatus = 2 OR estatus = 'confirmado' OR estatus IN ('solvente'))";
+    const SQL_WHERE_SOLO_CONFIRMADO = "(CAST(estatus AS CHAR) IN ('1','2','confirmado','solvente'))";
 
     /**
      * Misma condición que SQL_WHERE_SOLO_CONFIRMADO con alias de tabla.
@@ -39,7 +39,22 @@ class InscritosHelper {
     public static function sqlWhereSoloConfirmadoConAlias($alias = '')
     {
         $e = $alias ? $alias . '.' : '';
-        return "(" . $e . "estatus = 1 OR " . $e . "estatus = 2 OR " . $e . "estatus = 'confirmado' OR " . $e . "estatus = 'solvente')";
+        return '(CAST(' . $e . 'estatus AS CHAR) IN (\'1\',\'2\',\'confirmado\',\'solvente\'))';
+    }
+
+    /**
+     * Condición SQL: elegible para mesas / ronda 1+ (todos los inscritos salvo retirados).
+     * No exige confirmado/pagado; incluye pendiente y NULL en estatus.
+     */
+    const SQL_WHERE_ELEGIBLE_MESA = "(CAST(estatus AS CHAR) NOT IN ('4', 'retirado') OR estatus IS NULL)";
+
+    /**
+     * @param string $alias Alias de tabla inscritos (ej. 'i'). Vacío = sin alias.
+     */
+    public static function sqlWhereElegibleParaMesaConAlias($alias = '')
+    {
+        $e = $alias ? $alias . '.' : '';
+        return '(CAST(' . $e . 'estatus AS CHAR) NOT IN (\'4\',\'retirado\') OR ' . $e . 'estatus IS NULL)';
     }
 
     /**

@@ -33,7 +33,6 @@ try {
         $st->execute([$torneo_id]);
         $torneo = $st->fetch(PDO::FETCH_ASSOC);
         if ($torneo) {
-            recalcularRankingSegunModalidad($torneo_id);
             $st = $pdo->prepare("
                 SELECT i.id, i.id_usuario, i.posicion, i.ganados, i.perdidos, i.efectividad, i.puntos, i.sancion, i.tarjeta,
                        u.nombre AS jugador_nombre, u.username,
@@ -42,7 +41,8 @@ try {
                 INNER JOIN usuarios u ON i.id_usuario = u.id
                 LEFT JOIN clubes c ON c.id = COALESCE(NULLIF(i.id_club, 0), NULLIF(u.club_id, 0))
                 WHERE i.torneo_id = ? AND CAST(i.estatus AS TEXT) != '4'" . $ent_i['sql'] . "
-                ORDER BY CAST(i.ganados AS INTEGER) DESC, CAST(i.efectividad AS INTEGER) DESC, CAST(i.puntos AS INTEGER) DESC, i.id_usuario ASC
+                ORDER BY CASE WHEN i.posicion = 0 OR i.posicion IS NULL THEN 9999 ELSE i.posicion END ASC,
+                         CAST(i.ganados AS INTEGER) DESC, CAST(i.efectividad AS INTEGER) DESC, CAST(i.puntos AS INTEGER) DESC, i.id_usuario ASC
             ");
             $st->execute(array_merge([$torneo_id], $ent_i['bind']));
             $posiciones = $st->fetchAll(PDO::FETCH_ASSOC);

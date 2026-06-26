@@ -25,6 +25,13 @@ $role = (string) ($user['role'] ?? '');
 $club = AsociacionAdminHelper::clubOperativo($pdo, $uid, $role);
 $esOperativoAcotado = Auth::isOperativoSoloAsociacion();
 
+// Organización particular: panel FVD (solicitudes a federación) no aplica — usar inicio / gestión de torneos.
+if (AsociacionAdminHelper::usuarioAdministraOrganizacionParticular($pdo, $uid)) {
+    $_SESSION['info'] = 'El panel de asociación FVD no aplica a organizaciones particulares. Use Inicio y Gestión de torneos.';
+    header('Location: ' . AppHelpers::dashboard('home'));
+    exit;
+}
+
 if ($club === null) {
     echo '<div class="alert alert-warning m-4"><i class="fas fa-info-circle me-2"></i>'
         . 'Esta pantalla es para el administrador de asociación: debe ser <strong>delegado</strong> del club en la ficha del club, '
@@ -38,7 +45,7 @@ $clubNombre = trim((string) ($club['nombre'] ?? 'Asociación'));
 $cid = (int) ($club['id'] ?? 0);
 $entidadId = (int) ($club['entidad'] ?? 0);
 $orgClub = (int) ($club['organizacion_id'] ?? 0);
-$orgFvd = class_exists('FvdConfig') ? (int) FvdConfig::ORGANIZACION_ID : 1;
+$orgFvd = class_exists('FvdConfig') ? (int) FvdConfig::organizacionId() : 1;
 $delegadoNombre = trim((string) ($user['nombre'] ?? $user['username'] ?? 'Usuario'));
 
 $truncLabel = static function (string $s, int $max = 42): string {

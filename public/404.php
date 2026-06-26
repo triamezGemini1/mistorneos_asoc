@@ -6,6 +6,7 @@
 
 require_once __DIR__ . '/../config/bootstrap.php';
 require_once __DIR__ . '/../lib/app_helpers.php';
+require_once __DIR__ . '/includes/branding_init.php';
 
 $base_url = app_base_url();
 ?>
@@ -14,10 +15,10 @@ $base_url = app_base_url();
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes">
-    <meta name="theme-color" content="#1a365d">
+    <meta name="theme-color" content="<?= htmlspecialchars($brand_theme_color) ?>">
     
     <!-- SEO Meta Tags -->
-    <title>Página No Encontrada - La Estación del Dominó</title>
+    <title><?= htmlspecialchars(Branding::pageTitle('Página No Encontrada')) ?></title>
     <meta name="description" content="La página que buscas no existe o ha sido movida.">
     <meta name="robots" content="noindex, nofollow">
     

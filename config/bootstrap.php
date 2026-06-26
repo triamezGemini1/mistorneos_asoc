@@ -34,13 +34,16 @@ $GLOBALS['APP_CONFIG'] = Environment::getConfig();
 
 // Load centralized app helpers
 require_once __DIR__ . '/../lib/app_helpers.php';
+require_once __DIR__ . '/../lib/SegmentConfig.php';
+SegmentConfig::boot();
+require_once __DIR__ . '/../lib/Branding.php';
 require_once __DIR__ . '/../lib/FvdConfig.php';
 
 if (!defined('ORGANIZACION_ID')) {
-    define('ORGANIZACION_ID', FvdConfig::ORGANIZACION_ID);
+    define('ORGANIZACION_ID', FvdConfig::organizacionId());
 }
 if (!defined('ORGANIZACION_NOMBRE')) {
-    define('ORGANIZACION_NOMBRE', FvdConfig::ORGANIZACION_NOMBRE);
+    define('ORGANIZACION_NOMBRE', FvdConfig::getOrganizacionNombre());
 }
 
 // Load logging helper

@@ -1,0 +1,601 @@
+/**
+ * Landing ASOC — portal por afiliado.
+ */
+.landing-afiliados {
+  --la-bg: #00d0fa;
+  --la-header: #0e86a9;
+  --la-card: #ffffff;
+  --la-text: #0f172a;
+  --la-muted: #475569;
+  --la-accent: #0e86a9;
+  --la-page-gutter: 5%;
+  --la-content-max: 1100px;
+  --la-block-pad: 1.25rem 1.5rem;
+  min-height: 100vh;
+  background: var(--la-bg);
+  color: var(--la-text);
+  font-family: Inter, system-ui, sans-serif;
+}
+
+.landing-afiliados__header {
+  background: var(--la-header);
+  color: #fff;
+  padding: 0.85rem var(--la-page-gutter);
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.12);
+}
+
+.landing-afiliados__header-inner {
+  width: min(var(--la-content-max), 100%);
+  max-width: var(--la-content-max);
+  margin: 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.landing-afiliados__brand {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  color: #fff;
+  text-decoration: none;
+}
+
+.landing-afiliados__brand img {
+  height: 40px;
+  width: auto;
+  object-fit: contain;
+}
+
+.landing-afiliados__main {
+  width: min(var(--la-content-max), calc(100% - 2 * var(--la-page-gutter)));
+  margin: 0 auto;
+  padding: 1.5rem 0 3rem;
+  box-sizing: border-box;
+}
+
+.landing-afiliados__intro {
+  background: var(--la-card);
+  border-radius: 12px;
+  padding: var(--la-block-pad);
+  margin-bottom: 1rem;
+  border-left: 4px solid var(--la-accent);
+  box-shadow: 0 4px 14px rgba(14, 134, 169, 0.12);
+}
+
+.landing-afiliados__intro--hub {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  border-left: none;
+  box-shadow: 0 4px 14px rgba(15, 23, 42, 0.08);
+}
+
+.landing-afiliados__hub-block {
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.landing-afiliados__card--info {
+  padding: var(--la-block-pad);
+  margin-bottom: 1rem;
+}
+
+.landing-afiliados__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 1rem;
+}
+
+.landing-afiliados__card {
+  background: var(--la-card);
+  border-radius: 12px;
+  padding: 1.25rem;
+  box-shadow: 0 4px 14px rgba(15, 23, 42, 0.08);
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+  height: 100%;
+}
+
+.landing-afiliados__card--clickable {
+  cursor: pointer;
+  text-decoration: none;
+  color: inherit;
+  display: block;
+}
+
+.landing-afiliados__card--clickable:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 8px 20px rgba(15, 23, 42, 0.12);
+}
+
+.landing-afiliados__card--afiliado {
+  background: #00C3FD;
+  text-align: center;
+  border: 1px solid rgba(255, 255, 255, 0.55);
+  color: #4a1942;
+  box-shadow: 0 8px 24px rgba(252, 97, 158, 0.18);
+}
+
+.landing-afiliados__card--afiliado .landing-afiliados__card-title {
+  color: #4a1942;
+}
+
+.landing-afiliados__card--afiliado .landing-afiliados__stats {
+  color: #6b3d5c;
+  justify-content: center;
+}
+
+.landing-afiliados__logo-wrap {
+  width: 88px;
+  height: 88px;
+  margin: 0 auto 0.85rem;
+  background: rgba(255, 255, 255, 0.92);
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.08);
+}
+
+.landing-afiliados__logo-wrap--hero {
+  width: 104px;
+  height: 104px;
+  margin: 0;
+  flex-shrink: 0;
+}
+
+.landing-afiliados__logo-md {
+  width: 72px;
+  height: 72px;
+  object-fit: contain;
+}
+
+.landing-afiliados__hub-head {
+  display: flex;
+  gap: 1.25rem;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.landing-afiliados__hub-head-text {
+  flex: 1;
+  min-width: 0;
+}
+
+.landing-afiliados__hub-title {
+  font-size: 1.35rem;
+  margin: 0 0 0.35rem;
+  color: var(--la-accent);
+}
+
+.landing-afiliados__hub-subtitle {
+  margin: 0;
+  color: var(--la-muted);
+}
+
+.landing-afiliados__btn-row--hub {
+  margin-top: 0;
+}
+
+.landing-afiliados__stats--center {
+  justify-content: center;
+}
+
+.landing-afiliados__card-title {
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: var(--la-accent);
+  margin-bottom: 0.5rem;
+}
+
+.landing-afiliados__hub-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 1rem;
+}
+
+.landing-afiliados__hub-actions {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1rem;
+}
+
+.landing-afiliados__card--full {
+  width: 100%;
+}
+
+.landing-afiliados__card--action {
+  display: flex;
+  flex-direction: column;
+}
+
+.landing-afiliados__card--action .landing-afiliados__btn {
+  margin-top: auto;
+}
+
+.landing-afiliados__card--club {
+  display: flex;
+  flex-direction: column;
+}
+
+.landing-afiliados__card--club .landing-afiliados__btn-row {
+  margin-top: auto;
+}
+
+.landing-afiliados__card-desc {
+  font-size: 0.9rem;
+  color: var(--la-muted);
+  margin: 0 0 0.75rem;
+  line-height: 1.45;
+}
+
+.landing-afiliados__detail-grid--wide {
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+}
+
+.landing-afiliados__afiliados-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.landing-afiliados__afiliado-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.65rem 0;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.landing-afiliados__afiliado-item:last-child {
+  border-bottom: none;
+}
+
+.landing-afiliados__afiliado-nombre {
+  font-weight: 600;
+}
+
+.landing-afiliados__badge--ok {
+  background: rgba(34, 197, 94, 0.15);
+  color: #15803d;
+}
+
+.landing-afiliados__badge--muted {
+  background: rgba(100, 116, 139, 0.15);
+  color: #475569;
+}
+
+.landing-afiliados__table-wrap {
+  overflow-x: auto;
+}
+
+.landing-afiliados__table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9rem;
+}
+
+.landing-afiliados__table th,
+.landing-afiliados__table td {
+  padding: 0.65rem 0.5rem;
+  border-bottom: 1px solid #e2e8f0;
+  text-align: left;
+  vertical-align: middle;
+}
+
+.landing-afiliados__table th {
+  font-weight: 700;
+  color: var(--la-accent);
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+
+.landing-afiliados__th-actions,
+.landing-afiliados__td-actions {
+  text-align: right;
+  white-space: nowrap;
+}
+
+.landing-afiliados__td-actions {
+  display: flex;
+  gap: 0.35rem;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+}
+
+.landing-afiliados__btn--sm {
+  padding: 0.35rem 0.55rem;
+  font-size: 0.8rem;
+  min-width: 2rem;
+  justify-content: center;
+}
+
+.landing-afiliados__btn--warn {
+  background: #d97706;
+  color: #fff;
+}
+
+.landing-afiliados__btn--ok {
+  background: #15803d;
+  color: #fff;
+}
+
+.landing-afiliados__action-msg {
+  margin: 0 0 0.75rem;
+  font-size: 0.9rem;
+  color: var(--la-accent);
+}
+
+.landing-afiliados__stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 1rem;
+  font-size: 0.85rem;
+  color: var(--la-muted);
+}
+
+.landing-afiliados__badge {
+  display: inline-block;
+  padding: 0.2rem 0.55rem;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  background: rgba(14, 134, 169, 0.12);
+  color: var(--la-accent);
+}
+
+.landing-afiliados__btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.5rem 1rem;
+  border-radius: 8px;
+  border: none;
+  background: var(--la-accent);
+  color: #fff;
+  font-weight: 600;
+  text-decoration: none;
+  cursor: pointer;
+  font-size: 0.9rem;
+}
+
+.landing-afiliados__btn--outline {
+  background: transparent;
+  border: 1px solid var(--la-accent);
+  color: var(--la-accent);
+}
+
+.landing-afiliados__btn-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+}
+
+.landing-afiliados__back {
+  color: #fff;
+  text-decoration: none;
+  font-size: 0.9rem;
+  opacity: 0.95;
+}
+
+.landing-afiliados__back:hover {
+  color: #fff;
+  text-decoration: underline;
+}
+
+.landing-afiliados__torneo-list {
+  display: grid;
+  gap: 0.45rem;
+}
+
+.landing-afiliados__card--torneo-compact {
+  padding: 0.55rem 0.7rem;
+  margin-bottom: 0;
+}
+
+.landing-afiliados__torneo-compact {
+  display: grid;
+  grid-template-columns: 2rem minmax(0, 1fr) auto;
+  grid-template-rows: auto auto;
+  gap: 0.12rem 0.55rem;
+  align-items: center;
+}
+
+.landing-afiliados__torneo-compact__logo {
+  grid-row: 1 / 3;
+  grid-column: 1;
+}
+
+.landing-afiliados__torneo-compact__logo--icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  font-size: 0.95rem;
+  color: var(--la-accent);
+  background: #f1f5f9;
+  border-radius: 6px;
+}
+
+.landing-afiliados__torneo-compact__title {
+  grid-column: 2;
+  grid-row: 1;
+  margin: 0;
+  font-size: 0.92rem;
+  font-weight: 700;
+  line-height: 1.25;
+  color: var(--la-accent);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.landing-afiliados__torneo-compact__meta {
+  grid-column: 2;
+  grid-row: 2;
+  margin: 0;
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 0.45rem 0.65rem;
+  font-size: 0.74rem;
+  line-height: 1.2;
+  color: var(--la-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.landing-afiliados__torneo-compact__meta span {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.2rem;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.landing-afiliados__torneo-compact__meta i {
+  font-size: 0.68rem;
+  opacity: 0.85;
+  flex-shrink: 0;
+}
+
+.landing-afiliados__torneo-compact__action {
+  grid-column: 3;
+  grid-row: 1 / 3;
+  align-self: center;
+}
+
+.landing-afiliados__torneo-compact__chevron {
+  grid-column: 3;
+  grid-row: 1 / 3;
+  align-self: center;
+  font-size: 0.75rem;
+  color: var(--la-muted);
+  opacity: 0.65;
+}
+
+.landing-afiliados__btn--xs {
+  padding: 0.32rem 0.55rem;
+  font-size: 0.72rem;
+  border-radius: 6px;
+  white-space: nowrap;
+}
+
+.landing-afiliados__torneo-item--compact {
+  padding: 0.55rem 0.7rem;
+  align-items: stretch;
+}
+
+.landing-afiliados__torneo-item--compact .landing-afiliados__torneo-compact {
+  width: 100%;
+  text-align: left;
+}
+
+.landing-afiliados__logo-xs {
+  width: 2rem;
+  height: 2rem;
+  object-fit: cover;
+  border-radius: 6px;
+  background: #f1f5f9;
+  flex-shrink: 0;
+}
+
+.landing-afiliados__torneo-item {
+  display: flex;
+  gap: 1rem;
+  align-items: flex-start;
+  padding: 1rem;
+  background: #f8fafc;
+  border-radius: 10px;
+  border: 1px solid #e2e8f0;
+  cursor: pointer;
+  text-align: left;
+  width: 100%;
+}
+
+.landing-afiliados__torneo-item:hover {
+  border-color: var(--la-accent);
+  background: #f0f9ff;
+}
+
+.landing-afiliados__torneo-item--link {
+  text-decoration: none;
+  color: inherit;
+  align-items: center;
+}
+
+.landing-afiliados__login-hint {
+  margin-top: 1rem;
+  border: 1px dashed rgba(14, 134, 169, 0.35);
+  background: rgba(255, 255, 255, 0.85);
+}
+
+.landing-afiliados__loading,
+.landing-afiliados__error {
+  text-align: center;
+  padding: 3rem 1rem;
+}
+
+.landing-afiliados__logo-sm {
+  width: 56px;
+  height: 56px;
+  object-fit: contain;
+  border-radius: 8px;
+  background: #f1f5f9;
+  flex-shrink: 0;
+}
+
+.landing-afiliados__section-title {
+  font-size: 1.1rem;
+  font-weight: 700;
+  margin: 1.5rem 0 0.75rem;
+  color: var(--la-accent);
+}
+
+.landing-afiliados__detail-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 0.75rem;
+  font-size: 0.9rem;
+}
+
+.landing-afiliados__detail-grid dt {
+  font-weight: 600;
+  color: var(--la-muted);
+}
+
+.landing-afiliados__detail-grid dd {
+  margin: 0 0 0.5rem;
+}
+
+@media (max-width: 900px) {
+  .landing-afiliados__hub-actions {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 640px) {
+  .landing-afiliados {
+    --la-page-gutter: 4%;
+    --la-block-pad: 1rem 1.15rem;
+  }
+
+  .landing-afiliados__main {
+    padding-bottom: 2rem;
+  }
+
+  .landing-afiliados__torneo-compact__action-text {
+    display: none;
+  }
+
+  .landing-afiliados__btn--xs {
+    padding: 0.35rem 0.45rem;
+  }
+}

@@ -178,6 +178,27 @@ $csrf_token = class_exists('CSRF') ? CSRF::token() : '';
 
 
 
+    <div class="card shadow-sm mt-4 border-warning">
+        <div class="card-header bg-warning bg-opacity-25">
+            <h5 class="mb-0"><i class="fas fa-sync-alt me-2"></i>Homologación con catálogo entidad</h5>
+        </div>
+        <div class="card-body">
+            <p class="small text-muted mb-3">
+                Alinea nombres y <code>cod_org</code> con la tabla <code>entidad</code> y reasigna
+                <code>organizaciones.id</code> al código territorial (Falcón = 1, Amazonas = 14, etc.).
+                Las orgs de prueba duplicadas no se mueven. Haga respaldo antes de ejecutar.
+            </p>
+            <form method="post" action="index.php?page=entidades" class="d-inline"
+                  onsubmit="return confirm('¿Homologar asociaciones con entidades? Se actualizarán nombres, cod_org e ids.');">
+                <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($csrf_token) ?>">
+                <input type="hidden" name="crud_action" value="homologar_asociaciones_entidades">
+                <button type="submit" class="btn btn-warning">
+                    <i class="fas fa-link me-1"></i>Homologar asociaciones
+                </button>
+            </form>
+        </div>
+    </div>
+
     <div class="card shadow-sm mt-4" id="crud-entidades">
 
         <div class="card-header bg-light d-flex justify-content-between align-items-center">

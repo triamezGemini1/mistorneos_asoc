@@ -18,6 +18,28 @@ class NotificationSender {
         }
         return $_ENV[$key] ?? $default;
     }
+
+    /** Nombre remitente: MAIL_FROM_NAME en .env o marca del segmento. */
+    private static function mailFromName(): string {
+        $fromEnv = trim((string) self::env('MAIL_FROM_NAME', ''));
+        if ($fromEnv !== '') {
+            return $fromEnv;
+        }
+        if (! class_exists('Branding', false)) {
+            $brandingFile = __DIR__ . '/Branding.php';
+            if (is_file($brandingFile)) {
+                if (! class_exists('SegmentConfig', false)) {
+                    require_once __DIR__ . '/SegmentConfig.php';
+                }
+                require_once $brandingFile;
+                if (class_exists('SegmentConfig', false)) {
+                    SegmentConfig::boot();
+                }
+            }
+        }
+
+        return class_exists('Branding', false) ? Branding::mailFromName() : 'La Estación del Dominó';
+    }
     
     /**
      * Genera URL de WhatsApp wa.me con mensaje prellenado
@@ -63,7 +85,7 @@ class NotificationSender {
             $mail->SMTPSecure = PHPMailer\PHPMailer\PHPMailer::ENCRYPTION_STARTTLS;
             $mail->Port = (int)self::env('MAIL_PORT', 587);
             
-            $mail->setFrom(self::env('MAIL_FROM_ADDRESS', self::env('MAIL_FROM', 'noreply@mistorneos.com')), self::env('MAIL_FROM_NAME', 'La Estación del Dominó'));
+            $mail->setFrom(self::env('MAIL_FROM_ADDRESS', self::env('MAIL_FROM', 'noreply@mistorneos.com')), self::mailFromName());
             $mail->addAddress($email, $nombre_destinatario ?: '');
             $mail->Subject = $asunto;
             $mail->isHTML(true);
@@ -101,7 +123,7 @@ class NotificationSender {
             $mail->Password = self::env('MAIL_PASSWORD', '');
             $mail->SMTPSecure = PHPMailer\PHPMailer\PHPMailer::ENCRYPTION_STARTTLS;
             $mail->Port = (int)self::env('MAIL_PORT', 587);
-            $mail->setFrom(self::env('MAIL_FROM_ADDRESS', self::env('MAIL_FROM', 'noreply@mistorneos.com')), self::env('MAIL_FROM_NAME', 'La Estación del Dominó'));
+            $mail->setFrom(self::env('MAIL_FROM_ADDRESS', self::env('MAIL_FROM', 'noreply@mistorneos.com')), self::mailFromName());
             $mail->addAddress($email, $nombre_destinatario ?: '');
             $mail->Subject = $asunto;
             $mail->isHTML(true);

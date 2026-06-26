@@ -51,12 +51,12 @@ $stmt->execute([$torneo_id]);
 $ultima_ronda = (int) $stmt->fetchColumn() ?: 0;
 $siguiente_ronda = $ultima_ronda + 1;
 
-// Total inscritos confirmados (mismo criterio que RoundManagerHandler)
+// Total inscritos (mismo criterio que estadísticas y RoundManagerHandler)
 $stmt = $pdo->prepare(
-    'SELECT COUNT(*) as total FROM inscritos WHERE torneo_id = ? AND ' . InscritosHelper::SQL_WHERE_SOLO_CONFIRMADO
+    'SELECT COUNT(*) as total FROM inscritos WHERE torneo_id = ? AND ' . InscritosHelper::SQL_WHERE_ELEGIBLE_MESA
 );
 $stmt->execute([$torneo_id]);
-$total_inscritos_confirmados = (int) $stmt->fetchColumn();
+$total_inscritos = (int) $stmt->fetchColumn();
 
 $modalidad = (int) ($torneo['modalidad'] ?? 0);
 $etiqueta_modalidad = 'Individual / estándar';
@@ -95,7 +95,7 @@ if ($modalidad === 3) {
                     </h6>
                     <ul class="mb-0">
                         <li>Modalidad: <strong><?= htmlspecialchars($etiqueta_modalidad) ?></strong></li>
-                        <li>Inscritos confirmados (cuentan para el torneo): <strong><?= $total_inscritos_confirmados ?></strong></li>
+                        <li>Inscritos en el torneo: <strong><?= $total_inscritos ?></strong></li>
                         <li>Última ronda generada: <strong><?= $ultima_ronda > 0 ? 'Ronda #' . $ultima_ronda : 'Ninguna' ?></strong></li>
                         <li>Próxima ronda a generar: <strong>Ronda #<?= $siguiente_ronda ?></strong> (automática; debe estar completa la anterior)</li>
                     </ul>
@@ -123,7 +123,7 @@ if ($modalidad === 3) {
                    class="btn btn-outline-primary">
                     <i class="fas fa-external-link-alt me-2"></i>Panel de gestión del torneo
                 </a>
-                <button type="submit" class="btn btn-primary"<?= $total_inscritos_confirmados < 4 ? ' disabled title="Se requieren al menos 4 inscritos confirmados"' : '' ?>>
+                <button type="submit" class="btn btn-primary"<?= $total_inscritos < 4 ? ' disabled title="Se requieren al menos 4 inscritos"' : '' ?>>
                     <i class="fas fa-magic me-2"></i>Generar siguiente ronda
                 </button>
             </div>

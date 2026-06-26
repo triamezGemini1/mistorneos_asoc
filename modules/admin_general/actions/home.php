@@ -8,25 +8,16 @@ require_once __DIR__ . '/../../../config/admin_general_auth.php';
 requireAdminGeneral();
 
 require_once __DIR__ . '/../../../lib/OrganizacionesData.php';
-require_once __DIR__ . '/../../../lib/ActasPendientesHelper.php';
-require_once __DIR__ . '/../../../lib/FvdConfig.php';
 
 $current_user = Auth::user();
 $stats = OrganizacionesData::loadStatsGlobales();
-$actas_pendientes = ActasPendientesHelper::contar();
-$actas_ultimo_envio = ActasPendientesHelper::ultimoEnvio();
-$panel_badges = OrganizacionesData::loadAdminGeneralPanelBadges();
 
 extract([
     'stats' => $stats,
-    'actas_pendientes' => $actas_pendientes,
-    'actas_ultimo_envio' => $actas_ultimo_envio,
-    'panel_badges' => $panel_badges,
     'success_message' => $_GET['success'] ?? null,
     'error_message' => $_GET['error'] ?? null,
     'user_role' => 'admin_general',
     'current_user' => $current_user,
-    'fvd_org_id' => (int) FvdConfig::ORGANIZACION_ID,
 ]);
 
 include __DIR__ . '/../views/home.php';

@@ -96,7 +96,7 @@ try {
     $mensaje .= $register_url . "\n\n";
     $mensaje .= "━━━━━━━━━━━━━━━━━━\n\n";
     $mensaje .= "¡Esperamos contar contigo! 🎲\n\n";
-    $mensaje .= "_La Estación del Dominó_";
+    $mensaje .= '_' . (class_exists('Branding', false) ? Branding::siteName() : 'La Estación del Dominó') . '_';
     
     // Generar URL de WhatsApp
     $mensaje_encoded = urlencode($mensaje);

@@ -201,16 +201,52 @@ $page = $_GET['page'] ?? 'home';
 // Sanitizar nombre de página (solo letras, números, guiones y barras)
 $page = preg_replace('/[^a-zA-Z0-9_\/\-]/', '', $page);
 
-// Admin operativo de asociación: inicio = panel acotado (sin dashboard general)
+require_once __DIR__ . '/../lib/HubNavigation.php';
+
+// Hub ASOC: panel legacy → hub (conservar ?legacy=1 para diagnóstico)
+if ($page === 'asociacion_panel' && empty($_GET['legacy']) && HubNavigation::isEnabled()) {
+    require_once __DIR__ . '/../lib/app_helpers.php';
+    $hubOrgId = HubNavigation::resolveOrgIdForCurrentUser();
+    if ($hubOrgId > 0) {
+        $hubParams = ['org_id' => $hubOrgId];
+        $tabNum = (int) ($_GET['tab'] ?? 0);
+        if ($tabNum === 2 || (int) ($_GET['torneo_id'] ?? 0) > 0) {
+            $hubParams['tab'] = 'torneos';
+        } else {
+            $hubParams['tab'] = 'info';
+        }
+        if (isset($_GET['error']) && trim((string) $_GET['error']) !== '') {
+            $_SESSION['error'] = (string) $_GET['error'];
+        }
+        header('Location: ' . HubNavigation::hubUrl($hubOrgId, $hubParams));
+        exit;
+    }
+}
+
+// Organización particular: sin panel ni solicitudes FVD
+if (Auth::id() > 0) {
+    require_once __DIR__ . '/../lib/AsociacionAdminHelper.php';
+    $pdoPart = DB::pdo();
+    $uidPart = (int) Auth::id();
+    if (AsociacionAdminHelper::usuarioAdministraOrganizacionParticular($pdoPart, $uidPart)
+        && in_array($page, ['asociacion_panel', 'asociacion/solicitud'], true)) {
+        require_once __DIR__ . '/../lib/app_helpers.php';
+        $_SESSION['info'] = 'El panel de asociación FVD no aplica a organizaciones particulares. Use Inicio y Gestión de torneos.';
+        header('Location: ' . AppHelpers::dashboard('home'));
+        exit;
+    }
+}
+
+// Admin operativo de asociación: inicio = hub o panel acotado (sin dashboard general)
 if (Auth::isOperativoSoloAsociacion()) {
     require_once __DIR__ . '/../lib/app_helpers.php';
     require_once __DIR__ . '/../lib/AsociacionAdminHelper.php';
     if ($page === 'home' || $page === '') {
-        header('Location: ' . AppHelpers::dashboard('asociacion_panel'));
+        header('Location: ' . HubNavigation::panelOrHubUrl());
         exit;
     }
     if (!AsociacionAdminHelper::paginaPermitidaOperativo($page)) {
-        header('Location: ' . AppHelpers::dashboard('asociacion_panel', [
+        header('Location: ' . HubNavigation::panelOrHubUrl([
             'error' => 'No tiene permiso para acceder a esa sección. Use el panel de asociación.',
         ]));
         exit;
@@ -233,7 +269,7 @@ if (Auth::isOperativoSoloAsociacion() && in_array($page, ['torneo_gestion', 'tou
         if ($tidIdx > 0) {
             $redirParams['torneo_id'] = $tidIdx;
         }
-        header('Location: ' . AppHelpers::dashboard('asociacion_panel', $redirParams));
+        header('Location: ' . HubNavigation::panelOrHubUrl($redirParams));
         exit;
     }
     $permitida = $page === 'torneo_gestion'
@@ -245,12 +281,12 @@ if (Auth::isOperativoSoloAsociacion() && in_array($page, ['torneo_gestion', 'tou
         if ($tidDeny > 0) {
             $redirParams['torneo_id'] = $tidDeny;
         }
-        header('Location: ' . AppHelpers::dashboard('asociacion_panel', $redirParams));
+        header('Location: ' . HubNavigation::panelOrHubUrl($redirParams));
         exit;
     }
     $torneoOper = (int) ($_GET['torneo_id'] ?? $_POST['torneo_id'] ?? 0);
     if ($torneoOper > 0 && !Auth::canAccessTournament($torneoOper)) {
-        header('Location: ' . AppHelpers::dashboard('asociacion_panel', [
+        header('Location: ' . HubNavigation::panelOrHubUrl([
             'error' => 'Torneo fuera del ámbito de su asociación.',
         ]));
         exit;
@@ -358,7 +394,7 @@ if (in_array($page, $special_endpoints, true)) {
 // POST clubs: actualizar o guardar club (evita 404 cuando la URL base no es public/)
 if (Auth::isOperativoSoloAsociacion() && $page === 'clubs' && (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST')) {
     require_once __DIR__ . '/../lib/app_helpers.php';
-    header('Location: ' . AppHelpers::dashboard('asociacion_panel', ['error' => 'No puede crear ni editar clubes.']));
+    header('Location: ' . HubNavigation::panelOrHubUrl(['error' => 'No puede crear ni editar clubes.']));
     exit;
 }
 
@@ -470,12 +506,20 @@ if ($page === 'organizaciones') {
     }
 }
 
-// Unificar Torneos: solo usar la vista del menú lateral (torneo_gestion). Acceso GET a page=tournaments redirige al panel.
-// Excepción: acciones new, view, edit se manejan en tournaments (crear/ver/editar torneo)
-if (Auth::isOperativoSoloAsociacion() && $page === 'tournaments') {
-    require_once __DIR__ . '/../lib/app_helpers.php';
-    header('Location: ' . AppHelpers::dashboard('asociacion_panel', ['error' => 'No puede crear ni administrar torneos.']));
-    exit;
+// Torneos (crear/editar): responsable de organización (incl. particulares) y admin torneo; no el delegado operativo acotado.
+if ($page === 'tournaments') {
+    require_once __DIR__ . '/../lib/AsociacionAdminHelper.php';
+    $roleTor = (string) (Auth::user()['role'] ?? '');
+    if (!AsociacionAdminHelper::puedeCrearYAdministrarTorneos(DB::pdo(), (int) Auth::id(), $roleTor)) {
+        require_once __DIR__ . '/../lib/app_helpers.php';
+        if (Auth::isOperativoSoloAsociacion()) {
+            header('Location: ' . HubNavigation::panelOrHubUrl(['error' => 'No puede crear ni administrar torneos.']));
+        } else {
+            $_SESSION['error'] = 'No tiene permiso para crear ni administrar torneos.';
+            header('Location: ' . AppHelpers::dashboard('home'));
+        }
+        exit;
+    }
 }
 
 if ($page === 'tournaments' && ($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'GET') {
@@ -648,8 +692,29 @@ if ($page === '_demo_modern' && ($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'GET')
     exit;
 }
 
+// Hub de asociación: org_id obligatorio y válido antes del layout (URL canónica)
+if ($page === 'asociacion_hub') {
+    require_once __DIR__ . '/../lib/app_helpers.php';
+    require_once __DIR__ . '/../lib/OrganizacionService.php';
+    $hub_org_id = filter_input(INPUT_GET, 'org_id', FILTER_VALIDATE_INT);
+    if (! is_int($hub_org_id) || $hub_org_id <= 0) {
+        $hub_org_id = filter_input(INPUT_POST, 'org_id', FILTER_VALIDATE_INT);
+    }
+    if (! is_int($hub_org_id) || $hub_org_id <= 0) {
+        $_SESSION['error'] = 'Debe indicar una asociación válida (org_id).';
+        header('Location: ' . AppHelpers::dashboard(Auth::isAdminGeneral() ? 'listado_asociaciones' : 'home'));
+        exit;
+    }
+    if (OrganizacionService::getById($hub_org_id) === null) {
+        $_SESSION['error'] = 'Asociación no encontrada.';
+        header('Location: ' . AppHelpers::dashboard(Auth::isAdminGeneral() ? 'listado_asociaciones' : 'home'));
+        exit;
+    }
+}
+
 // Permisos por página ANTES del layout (el módulo se incluye después y headers ya estarían enviados).
 $page_roles_before_layout = [
+    'listado_asociaciones' => ['admin_general'],
     'torneos_estructura' => ['admin_general', 'admin_club'],
     'organizaciones_particulares' => ['admin_general'],
     'estadisticas_torneos' => ['admin_general', 'admin_club'],

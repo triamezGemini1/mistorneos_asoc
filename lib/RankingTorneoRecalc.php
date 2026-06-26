@@ -26,8 +26,9 @@ declare(strict_types=1);
  *    partidas ganadas y asistencia definida para "fuera de tabla" (misma referencia que la última fila dentro
  *    del límite o respaldo desde `clasiranking`).
  *
- * 5) Flujo técnico al solicitar datos: {@see actualizarEstadisticasInscritos()} agrega resultados desde
- *    `partiresul` hacia `inscritos`, luego recalcula clasificación de equipos/parejas si aplica y `ptosrnk`.
+ * 5) Ingreso de resultados: el formulario solo escribe `partiresul`. Al cerrar la ronda (mesas pendientes = 0)
+ *    se invoca {@see actualizarClasificacionDesdePartiresul()} (partiresul → inscritos + posiciones).
+ * 6) Consulta de reportes/posiciones en pantalla: puede forzar el mismo proceso al abrir clasificación.
  */
 final class RankingTorneoRecalc
 {
@@ -65,7 +66,11 @@ final class RankingTorneoRecalc
             return;
         }
         try {
-            actualizarEstadisticasInscritos($torneo_id);
+            if (function_exists('actualizarClasificacionDesdePartiresul')) {
+                actualizarClasificacionDesdePartiresul($torneo_id);
+            } else {
+                actualizarEstadisticasInscritos($torneo_id);
+            }
         } catch (Throwable $e) {
             error_log('RankingTorneoRecalc::actualizarEstadisticasYRanking: ' . $e->getMessage());
         }

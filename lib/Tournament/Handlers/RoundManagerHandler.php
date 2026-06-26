@@ -57,22 +57,12 @@ final class RoundManagerHandler
     }
 
     /**
-     * Cuenta mesas de una ronda sin resultados registrados (misma consulta que en torneo_gestion).
+     * Mesas de la ronda donde falta registrar al menos un jugador (todos deben tener registrado=1).
+     * Misma regla que el contador «Faltan» en registrar resultados.
      */
     public static function contarMesasIncompletas(int $torneoId, int $ronda): int
     {
-        $pdo = \DB::pdo();
-
-        $sql = 'SELECT COUNT(DISTINCT pr.mesa) as mesas_incompletas
-            FROM partiresul pr
-            WHERE pr.id_torneo = ? AND pr.partida = ? AND pr.mesa > 0
-            AND ' . \PartiresulEstatusSql::whereRegistradoNoCompleto('pr');
-
-        $stmt = $pdo->prepare($sql);
-        $stmt->execute([$torneoId, $ronda]);
-        $result = $stmt->fetch(\PDO::FETCH_ASSOC);
-
-        return (int) ($result['mesas_incompletas'] ?? 0);
+        return \PartiresulEstatusSql::contarMesasIncompletas(\DB::pdo(), $torneoId, $ronda);
     }
 
     /**
@@ -113,13 +103,13 @@ final class RoundManagerHandler
             require_once __DIR__ . '/../../Core/TorneoMesaAsignacionResolver.php';
             $pdo = \DB::pdo();
 
-            // Solo estatus 1 (confirmado) cuentan para participar en el torneo
+            // Todos los inscritos del torneo (misma base que estadísticas inscritos_total)
             require_once __DIR__ . '/../../InscritosHelper.php';
-            $stmt = $pdo->prepare('SELECT COUNT(*) FROM inscritos WHERE torneo_id = ? AND ' . \InscritosHelper::SQL_WHERE_SOLO_CONFIRMADO);
+            $stmt = $pdo->prepare('SELECT COUNT(*) FROM inscritos WHERE torneo_id = ? AND ' . \InscritosHelper::SQL_WHERE_ELEGIBLE_MESA);
             $stmt->execute([$torneoId]);
             $num_inscritos = (int) $stmt->fetchColumn();
             if ($num_inscritos < 4) {
-                $_SESSION['error'] = 'No se puede generar ronda: se necesitan al menos 4 participantes inscritos y activos en el torneo. Actualmente hay ' . $num_inscritos . '.';
+                $_SESSION['error'] = 'No se puede generar ronda: se necesitan al menos 4 inscritos en el torneo. Actualmente hay ' . $num_inscritos . '.';
                 header('Location: ' . self::redirectUrlPanel($torneoId, $options));
                 exit;
             }
@@ -190,11 +180,11 @@ final class RoundManagerHandler
                 if ($marcados_retirados > 0) {
                     $msg_no_presentes = $marcados_retirados . ' inscrito(s) no presente(s) marcado(s) como retirado(s).';
                 }
-                // Revalidar que sigan habiendo al menos 4 confirmados tras retirar no presentes
-                $stmt = $pdo->prepare('SELECT COUNT(*) FROM inscritos WHERE torneo_id = ? AND ' . \InscritosHelper::SQL_WHERE_SOLO_CONFIRMADO);
+                // Revalidar que sigan habiendo al menos 4 inscritos tras retirar no presentes
+                $stmt = $pdo->prepare('SELECT COUNT(*) FROM inscritos WHERE torneo_id = ? AND ' . \InscritosHelper::SQL_WHERE_ELEGIBLE_MESA);
                 $stmt->execute([$torneoId]);
                 if ((int) $stmt->fetchColumn() < 4) {
-                    $_SESSION['error'] = 'No se puede generar la ronda 3: tras marcar no presentes quedan menos de 4 participantes confirmados.';
+                    $_SESSION['error'] = 'No se puede generar la ronda 3: tras marcar no presentes quedan menos de 4 inscritos en el torneo.';
                     header('Location: ' . self::redirectUrlPanel($torneoId, $options));
                     exit;
                 }

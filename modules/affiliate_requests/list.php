@@ -18,6 +18,8 @@ function enviarNotificacionAfiliacion($email, $nombre, $username, $aprobado = tr
     if (!class_exists('NotificationSender')) {
         require_once __DIR__ . '/../../lib/NotificationSender.php';
     }
+    $brandSite = class_exists('Branding', false) ? Branding::siteName() : 'La Estación del Dominó';
+    $brandFooter = $brandSite . ' - Sistema de Gestión de Torneos';
     
     $app_url = rtrim($_ENV['APP_URL'] ?? 'http://localhost/mistorneos_fvd', '/');
     
@@ -30,7 +32,7 @@ function enviarNotificacionAfiliacion($email, $nombre, $username, $aprobado = tr
                     </div>
                     <div style='padding: 30px; background: #f7fafc;'>
                         <p>Hola <strong>{$nombre}</strong>,</p>
-                        <p>Nos complace informarte que tu solicitud de afiliación a <strong>La Estación del Dominó</strong> ha sido <span style='color: #38a169; font-weight: bold;'>APROBADA</span>.</p>
+                        <p>Nos complace informarte que tu solicitud de afiliación a <strong>{$brandSite}</strong> ha sido <span style='color: #38a169; font-weight: bold;'>APROBADA</span>.</p>
                         <p>Ya puedes acceder al sistema con las siguientes credenciales:</p>
                         <div style='background: white; padding: 20px; border-radius: 8px; margin: 20px 0;'>
                             <p><strong>Usuario:</strong> {$username}</p>
@@ -54,7 +56,7 @@ function enviarNotificacionAfiliacion($email, $nombre, $username, $aprobado = tr
                         </p>
                     </div>
                     <div style='background: #2d3748; color: white; padding: 15px; text-align: center; font-size: 12px;'>
-                        La Estación del Dominó - Sistema de Gestión de Torneos
+                        {$brandFooter}
                     </div>
                 </div>
             ";
@@ -68,13 +70,13 @@ function enviarNotificacionAfiliacion($email, $nombre, $username, $aprobado = tr
                     </div>
                     <div style='padding: 30px; background: #f7fafc;'>
                         <p>Hola <strong>{$nombre}</strong>,</p>
-                        <p>Lamentamos informarte que tu solicitud de afiliación a <strong>La Estación del Dominó</strong> no ha sido aprobada en esta ocasión.</p>
+                        <p>Lamentamos informarte que tu solicitud de afiliación a <strong>{$brandSite}</strong> no ha sido aprobada en esta ocasión.</p>
                         " . ($motivo ? "<div style='background: #fed7d7; padding: 15px; border-radius: 8px; margin: 20px 0;'><strong>Motivo:</strong> " . htmlspecialchars($motivo) . "</div>" : "") . "
                         <p>Si tienes alguna pregunta o deseas más información, no dudes en contactarnos.</p>
                         <p>Puedes volver a enviar una solicitud cuando lo consideres conveniente.</p>
                     </div>
                     <div style='background: #2d3748; color: white; padding: 15px; text-align: center; font-size: 12px;'>
-                        La Estación del Dominó - Sistema de Gestión de Torneos
+                        {$brandFooter}
                     </div>
                 </div>
             ";
@@ -88,6 +90,7 @@ function enviarNotificacionAfiliacion($email, $nombre, $username, $aprobado = tr
 }
 
 $pdo = DB::pdo();
+$brandSite = class_exists('Branding', false) ? Branding::siteName() : 'La Estación del Dominó';
 
 // Obtener mensajes de sesión
 $message = $_SESSION['success_message'] ?? $_SESSION['error_message'] ?? '';
@@ -571,7 +574,7 @@ $status_badges = [
                         
                         $mensaje = "🎉 *¡FELICITACIONES!*\n\n";
                         $mensaje .= "Hola *" . $approved_data['nombre'] . "*\n\n";
-                        $mensaje .= "Tu solicitud de afiliación a *La Estación del Dominó* ha sido *APROBADA* ✅\n\n";
+                        $mensaje .= "Tu solicitud de afiliación a *" . $brandSite . "* ha sido *APROBADA* ✅\n\n";
                         $mensaje .= "━━━━━━━━━━━━━━━━━━\n";
                         $mensaje .= "📋 *DATOS DE ACCESO*\n";
                         $mensaje .= "━━━━━━━━━━━━━━━━━━\n\n";
@@ -608,7 +611,7 @@ $status_badges = [
                         $mensaje .= "✅ Y mucho más...\n\n";
                         $mensaje .= "━━━━━━━━━━━━━━━━━━\n\n";
                         $mensaje .= "¡Bienvenido al proyecto! 🎲\n\n";
-                        $mensaje .= "_La Estación del Dominó_";
+                        $mensaje .= "_" . $brandSite . "_";
                         
                         $mensaje_encoded = urlencode($mensaje);
                         $whatsapp_url = $telefono && strlen($telefono) >= 10 

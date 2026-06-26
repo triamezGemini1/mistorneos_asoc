@@ -1007,7 +1007,7 @@ Si tienes alguna pregunta, puedes contactarnos:
 ¡Esperamos contar contigo! 🎲
 
 _<?= htmlspecialchars($torneo_selected['club_nombre']) ?>_
-_La Estación del Dominó_
+_<?= htmlspecialchars(class_exists('Branding', false) ? Branding::siteName() : 'La Estación del Dominó') ?>_
                 </div>
                 
                 <div class="action-buttons-modern">

@@ -4,7 +4,6 @@
  * Muestra toda la trayectoria de partidas con toda la información una por una.
  * Acceso: resumen_jugador.php?torneo_id=X&id_usuario=Y
  */
-declare(strict_types=1);
 
 // Evitar caché en dispositivos para que siempre se vea la versión actual
 header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
@@ -13,7 +12,9 @@ header('Pragma: no-cache');
 require_once __DIR__ . '/../config/bootstrap.php';
 require_once __DIR__ . '/../config/db_config.php';
 require_once __DIR__ . '/../lib/app_helpers.php';
-require_once __DIR__ . '/../lib/InscritosPartiresulHelper.php';
+require_once __DIR__ . '/../lib/ResumenParticipacionHelper.php';
+require_once __DIR__ . '/../lib/ResultadosAsociacionContext.php';
+require_once __DIR__ . '/includes/branding_init.php';
 
 $torneo_id = isset($_GET['torneo_id']) ? (int)$_GET['torneo_id'] : 0;
 $id_usuario = isset($_GET['id_usuario']) ? (int)$_GET['id_usuario'] : 0;
@@ -25,17 +26,23 @@ if ($torneo_id <= 0 || $id_usuario <= 0) {
 }
 
 $pdo = DB::pdo();
+$orgCtx = ResultadosAsociacionContext::fromGet($pdo);
 $torneo = null;
 $inscrito = null;
 $resumen = [];
 $partidas = [];
 
 try {
-    $stmt = $pdo->prepare("SELECT id, nombre, fechator FROM tournaments WHERE id = ? AND estatus = 1");
+    $stmt = $pdo->prepare("SELECT id, nombre, fechator, COALESCE(modalidad, 1) AS modalidad FROM tournaments WHERE id = ? AND estatus = 1");
     $stmt->execute([$torneo_id]);
     $torneo = $stmt->fetch(PDO::FETCH_ASSOC);
     if (!$torneo) {
         header('Location: ' . rtrim(AppHelpers::getPublicUrl(), '/') . '/landing-spa.php');
+        exit;
+    }
+
+    if ($orgCtx->isScoped() && ! $orgCtx->torneoPertenece($pdo, $torneo_id)) {
+        header('Location: ' . $orgCtx->urlEventos());
         exit;
     }
 
@@ -51,17 +58,20 @@ try {
     $stmt->execute([$torneo_id, $id_usuario]);
     $inscrito = $stmt->fetch(PDO::FETCH_ASSOC);
     if (!$inscrito) {
-        header('Location: ' . rtrim(AppHelpers::getPublicUrl(), '/') . '/clasificacion.php?torneo_id=' . $torneo_id);
+        header('Location: ' . rtrim(AppHelpers::getPublicUrl(), '/') . '/clasificacion.php' . $orgCtx->buildQs(['torneo_id' => $torneo_id]));
         exit;
     }
 
-    $resumen = InscritosPartiresulHelper::obtenerEstadisticas($id_usuario, $torneo_id);
-    $resumen['nombre'] = $inscrito['nombre_completo'] ?? '';
-    $resumen['cedula'] = $inscrito['cedula'] ?? '';
-    $resumen['club'] = $inscrito['club_nombre'] ?? '—';
-    $resumen['puntos'] = (int)($inscrito['puntos'] ?? 0);
-    $resumen['efectividad'] = (int)($inscrito['efectividad'] ?? 0);
-    $resumen['ptosrnk'] = (int)($inscrito['ptosrnk'] ?? 0);
+    $resumen = [
+        'nombre' => $inscrito['nombre_completo'] ?? '',
+        'cedula' => $inscrito['cedula'] ?? '',
+        'club' => $inscrito['club_nombre'] ?? '—',
+        'puntos' => (int) ($inscrito['puntos'] ?? 0),
+        'efectividad' => (int) ($inscrito['efectividad'] ?? 0),
+        'ganados' => (int) ($inscrito['ganados'] ?? 0),
+        'perdidos' => (int) ($inscrito['perdidos'] ?? 0),
+        'ptosrnk' => (int) ($inscrito['ptosrnk'] ?? 0),
+    ];
 
     $stmt = $pdo->prepare("
         SELECT partida, mesa, secuencia, resultado1, resultado2, efectividad, ff, tarjeta, sancion, chancleta, zapato, observaciones, registrado
@@ -82,26 +92,35 @@ try {
         $contrario2 = '';
         $ganada = 0;
         if ($mesa > 0) {
+            $joinU = ResumenParticipacionHelper::sqlJoinUsuariosDesdePartiresul('pr', 'u', 'LEFT');
+            $exprNom = ResumenParticipacionHelper::sqlExprNombreUsuarioPartiresul('u', 'pr');
             $stmt_mesa = $pdo->prepare("
-                SELECT pr.id_usuario, pr.secuencia, COALESCE(u.nombre, u.username) as nombre
+                SELECT pr.id_usuario, pr.secuencia, {$exprNom} AS nombre
                 FROM partiresul pr
-                INNER JOIN usuarios u ON u.id = pr.id_usuario
-                WHERE pr.id_torneo = ? AND pr.partida = ? AND pr.mesa = ?
+                {$joinU}
+                WHERE pr.id_torneo = ? AND pr.partida = ? AND CAST(pr.mesa AS SIGNED) = ?
                 ORDER BY pr.secuencia ASC
             ");
             $stmt_mesa->execute([$torneo_id, $p['partida'], $p['mesa']]);
             $en_mesa = $stmt_mesa->fetchAll(PDO::FETCH_ASSOC);
-            $mi_equipo = in_array($sec, [1, 2]) ? [1, 2] : [3, 4];
-            foreach ($en_mesa as $row) {
-                $s = (int)$row['secuencia'];
-                if ((int)$row['id_usuario'] !== (int)$id_usuario) {
-                    if (in_array($s, $mi_equipo)) {
-                        $compañero = $row['nombre'] ?? '—';
-                    } else {
-                        if ($contrario1 === '') $contrario1 = $row['nombre'] ?? '—';
-                        else $contrario2 = $row['nombre'] ?? '—';
-                    }
+            $idsProp = ResumenParticipacionHelper::normalizarIdsPartiresulJugador((int) $id_usuario, (int) $id_usuario, 0);
+            $resMesa = ResumenParticipacionHelper::resolverCompaneroYContrarios($en_mesa, $idsProp, $sec);
+            if ($resMesa['companero'] !== null) {
+                $compañero = $resMesa['companero']['nombre'];
+            } else {
+                $hist = ResumenParticipacionHelper::buscarCompaneroEnHistorialParejas($pdo, $torneo_id, (int) $p['partida'], $idsProp);
+                if ($hist !== null) {
+                    $compañero = $hist['nombre'];
                 }
+            }
+            $idxC = 0;
+            foreach ($resMesa['contrarios'] as $cont) {
+                if ($idxC === 0) {
+                    $contrario1 = $cont['nombre'];
+                } else {
+                    $contrario2 = $cont['nombre'];
+                }
+                $idxC++;
             }
             $ganada = (in_array($sec, [1, 2]) && $r1 > $r2) || (in_array($sec, [3, 4]) && $r2 > $r1) ? 1 : 0;
         }
@@ -116,11 +135,14 @@ try {
 }
 
 $base_public = rtrim(AppHelpers::getPublicUrl(), '/');
-$url_retorno = $base_public . '/clasificacion.php?torneo_id=' . $torneo_id;
+$url_retorno = $orgCtx->isScoped()
+    ? $orgCtx->urlEventoResultados($torneo_id)
+    : $base_public . '/clasificacion.php?torneo_id=' . $torneo_id;
 $logo_url = AppHelpers::getAppLogo();
 $torneo_nombre = $torneo['nombre'] ?? 'Torneo';
 $nombre_jugador = $resumen['nombre'] ?? $inscrito['nombre_completo'] ?? '—';
-$posicion = (int)($inscrito['posicion'] ?? 0) ?: (int)($resumen['ptosrnk'] ?? 0);
+$esModalidadEquipos = (int)($torneo['modalidad'] ?? 1) === 3;
+$posicion = ResumenParticipacionHelper::resolverPosicionMostrada($inscrito, $esModalidadEquipos);
 $sum_resultado1 = $sum_resultado2 = $sum_efectividad = 0;
 foreach ($partidas as $p) {
     $sum_resultado1 += (int)($p['resultado1'] ?? 0);
@@ -232,7 +254,7 @@ foreach ($partidas as $p) {
     <div class="wrap">
         <header class="header">
             <a href="<?= htmlspecialchars($url_retorno) ?>" class="btn-retorno"><i class="fas fa-arrow-left"></i> Retorno</a>
-            <img src="<?= htmlspecialchars($logo_url) ?>" alt="La Estación del Dominó">
+            <img src="<?= htmlspecialchars($logo_url) ?>" alt="<?= htmlspecialchars($brand_name) ?>">
         </header>
 
         <h1 class="page-title">Resumen Individual</h1>

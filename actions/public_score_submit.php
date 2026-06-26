@@ -260,6 +260,19 @@ try {
 
     $pdo->commit();
 
+    try {
+        if (!defined('TORNEO_GESTION_SKIP_AUTH')) {
+            define('TORNEO_GESTION_SKIP_AUTH', true);
+        }
+        if (!defined('TORNEO_GESTION_SKIP_ROUTER')) {
+            define('TORNEO_GESTION_SKIP_ROUTER', true);
+        }
+        require_once __DIR__ . '/../modules/torneo_gestion.php';
+        recalcularClasificacionSiRondaCompleta($torneo_id, $ronda);
+    } catch (Throwable $syncEx) {
+        error_log('public_score_submit clasificación: ' . $syncEx->getMessage());
+    }
+
     // Notificar a los 4 jugadores de la mesa (Web + Telegram) con enlace a la SPA de perfil
     try {
         require_once __DIR__ . '/../lib/app_helpers.php';

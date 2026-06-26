@@ -25,9 +25,9 @@ class InscritosHelper {
 
     /**
      * Condición SQL: solo inscritos confirmados (cuentan para participar en el torneo).
-     * Compatible con columna INT y ENUM.
+     * CAST a CHAR evita 1292 en MySQL estricto.
      */
-    const SQL_WHERE_SOLO_CONFIRMADO = "(estatus = 1 OR estatus = 'confirmado')";
+    const SQL_WHERE_SOLO_CONFIRMADO = "(CAST(estatus AS CHAR) IN ('1','2','confirmado','solvente'))";
 
     /**
      * Misma condición que SQL_WHERE_SOLO_CONFIRMADO con alias de tabla.
@@ -35,7 +35,7 @@ class InscritosHelper {
     public static function sqlWhereSoloConfirmadoConAlias($alias = '')
     {
         $e = $alias ? $alias . '.' : '';
-        return "(" . $e . "estatus = 1 OR " . $e . "estatus = 'confirmado')";
+        return '(CAST(' . $e . 'estatus AS CHAR) IN (\'1\',\'2\',\'confirmado\',\'solvente\'))';
     }
 
     /**

@@ -157,9 +157,20 @@ tailwind.config = {
 
 <div class="tw-panel ds-root">
     <!-- Breadcrumb: sin repetir el nombre del torneo (el nombre va en el encabezado) -->
+    <?php
+    if (! class_exists('AsociacionHubNavigation', false)) {
+        require_once __DIR__ . '/../../lib/AsociacionHubNavigation.php';
+    }
+    $hubBackUrl = AsociacionHubNavigation::returnUrlFromRequest($_GET);
+    $hubBackLabel = AsociacionHubNavigation::returnLabelFromRequest($_GET);
+    ?>
     <nav aria-label="breadcrumb" class="mb-2">
         <ol class="flex items-center text-sm text-gray-500">
+            <?php if ($hubBackUrl !== null): ?>
+            <li><a href="<?php echo htmlspecialchars($hubBackUrl, ENT_QUOTES, 'UTF-8'); ?>" class="hover:text-blue-600"><?php echo htmlspecialchars($hubBackLabel, ENT_QUOTES, 'UTF-8'); ?></a></li>
+            <?php else: ?>
             <li><a href="<?php echo $base_url . ($use_standalone ? '?' : '&'); ?>action=index" class="hover:text-blue-600">Gestión de Torneos</a></li>
+            <?php endif; ?>
         </ol>
     </nav>
 

@@ -102,10 +102,17 @@ final class TournamentActionHandler
 
             $pdo->commit();
 
+            // Solo partiresul en esta petición; inscritos/posiciones al cerrar la ronda (mesas pendientes = 0).
+            $rondaClasificacionActualizada = false;
+            $clasificacionError = null;
             try {
-                \actualizarEstadisticasInscritos($torneo_id);
-            } catch (Exception $e) {
-                error_log('Error al actualizar estadísticas después de guardar resultados: ' . $e->getMessage());
+                $rondaClasificacionActualizada = \recalcularClasificacionSiRondaCompleta($torneo_id, $ronda);
+                if (!$rondaClasificacionActualizada && \function_exists('actualizarEstadisticasInscritos')) {
+                    \actualizarEstadisticasInscritos($torneo_id, false);
+                }
+            } catch (Throwable $e) {
+                $clasificacionError = $e->getMessage();
+                error_log('Error al sincronizar clasificación tras guardar resultados: ' . $clasificacionError);
             }
 
             self::postCommitResultadosMesa($pdo, $torneo_id, $ronda, $mesa);
@@ -116,8 +123,16 @@ final class TournamentActionHandler
                 'limpiar_formulario' => true,
                 'resultados_guardados' => true,
             ];
+            if ($rondaClasificacionActualizada) {
+                $out['success'] = 'Resultados guardados. Ronda ' . $ronda . ' completada: clasificación y posiciones actualizadas.';
+            } elseif ($clasificacionError !== null) {
+                $out['session_info'] = 'Resultados guardados en partiresul, pero no se pudo actualizar la clasificación: '
+                    . $clasificacionError;
+            }
             if ($sessionInfo !== null) {
-                $out['session_info'] = $sessionInfo;
+                $out['session_info'] = isset($out['session_info'])
+                    ? $out['session_info'] . ' ' . $sessionInfo
+                    : $sessionInfo;
             }
 
             return $out;

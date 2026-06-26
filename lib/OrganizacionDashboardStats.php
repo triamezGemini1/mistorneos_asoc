@@ -48,6 +48,30 @@ final class OrganizacionDashboardStats
     }
 
     /**
+     * cod_org y club_responsable al crear torneo: particulares usan PK (id), no entidad territorial.
+     *
+     * @param array<string, mixed> $organizacion
+     * @return array{cod_org: int, club_responsable: int, entidad: int}
+     */
+    public static function torneoVinculosParaOrganizacion(array $organizacion): array
+    {
+        $org_pk = (int) ($organizacion['id'] ?? 0);
+        $entidad = (int) ($organizacion['entidad'] ?? 0);
+        if ($org_pk <= 0) {
+            return ['cod_org' => 0, 'club_responsable' => 0, 'entidad' => $entidad];
+        }
+        if (self::isOrganizacionParticular($organizacion)) {
+            return ['cod_org' => $org_pk, 'club_responsable' => $org_pk, 'entidad' => $entidad];
+        }
+        $org_ref = (int) ($organizacion['cod_org'] ?? 0);
+        if ($org_ref <= 0) {
+            $org_ref = $org_pk;
+        }
+
+        return ['cod_org' => $org_ref, 'club_responsable' => $org_ref, 'entidad' => $entidad];
+    }
+
+    /**
      * Fragmento SQL: solo filas de asociación territorial (tipo_org = 0).
      */
     public static function sqlWhereSoloAsociaciones(PDO $pdo, string $orgAlias = 'o'): string

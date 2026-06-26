@@ -130,15 +130,8 @@ final class TournamentDataHandler
 
     private static function contarMesasIncompletas(PDO $pdo, int $torneoId, int $ronda): int
     {
-        $sql = 'SELECT COUNT(DISTINCT pr.mesa) as mesas_incompletas
-            FROM partiresul pr
-            WHERE pr.id_torneo = ? AND pr.partida = ? AND pr.mesa > 0
-            AND (pr.registrado = 0 OR pr.registrado IS NULL)';
+        require_once __DIR__ . '/../../PartiresulEstatusSql.php';
 
-        $stmt = $pdo->prepare($sql);
-        $stmt->execute([$torneoId, $ronda]);
-        $result = $stmt->fetch(PDO::FETCH_ASSOC);
-
-        return (int) ($result['mesas_incompletas'] ?? 0);
+        return \PartiresulEstatusSql::contarMesasIncompletas($pdo, $torneoId, $ronda);
     }
 }

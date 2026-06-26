@@ -339,6 +339,82 @@ final class FinanzasAsociacionData
     }
 
     /**
+     * Inscripciones en torneos de una organización particular (sin movimiento_torneo FVD).
+     *
+     * @return array{recaudado: float, pendiente: float, inscripciones: int}
+     */
+    public static function totalesInscripcionesOrganizacionParticular(PDO $pdo, int $organizacionId): array
+    {
+        if ($organizacionId <= 0) {
+            return ['recaudado' => 0.0, 'pendiente' => 0.0, 'inscripciones' => 0];
+        }
+        [$wTorneo, $pTorneo] = self::torneoFvdScopeSql($pdo, $organizacionId, 't');
+        $paid = '(' . InscritosHelper::sqlWhereSoloConfirmadoConAlias('i')
+            . " OR EXISTS (SELECT 1 FROM reportes_pago_usuarios r WHERE r.inscrito_id = i.id AND r.estatus = 'confirmado'))";
+        $sql = "SELECT 
+            COALESCE(SUM(CASE WHEN ($paid) THEN CAST(t.costo AS DECIMAL(12,2)) ELSE 0 END), 0) AS recaudado,
+            COALESCE(SUM(CASE WHEN NOT ($paid) AND " . InscritosHelper::sqlWhereActivoConAlias('i') . " THEN CAST(t.costo AS DECIMAL(12,2)) ELSE 0 END), 0) AS pendiente,
+            COUNT(*) AS inscripciones
+            FROM inscritos i
+            INNER JOIN tournaments t ON t.id = i.torneo_id AND ($wTorneo)
+            WHERE " . InscritosHelper::sqlWhereActivoConAlias('i');
+        $st = $pdo->prepare($sql);
+        $st->execute($pTorneo);
+        $row = $st->fetch(PDO::FETCH_ASSOC) ?: [];
+
+        return [
+            'recaudado' => (float) ($row['recaudado'] ?? 0),
+            'pendiente' => (float) ($row['pendiente'] ?? 0),
+            'inscripciones' => (int) ($row['inscripciones'] ?? 0),
+        ];
+    }
+
+    /**
+     * Historial de inscripciones en torneos de una organización particular.
+     *
+     * @return list<array{fecha:string,atleta_club:string,concepto:string,monto:float,estatus:string}>
+     */
+    public static function historialInscripcionesOrganizacionParticular(PDO $pdo, int $organizacionId, int $limite = 400): array
+    {
+        if ($organizacionId <= 0) {
+            return [];
+        }
+        $limite = max(50, min(800, $limite));
+        [$wTorneo, $pTorneo] = self::torneoFvdScopeSql($pdo, $organizacionId, 't');
+        $paid = '(' . InscritosHelper::sqlWhereSoloConfirmadoConAlias('i')
+            . " OR EXISTS (SELECT 1 FROM reportes_pago_usuarios r WHERE r.inscrito_id = i.id AND r.estatus = 'confirmado'))";
+        $sql = "SELECT i.id, COALESCE(i.fecha_inscripcion, CAST(i.id AS CHAR)) AS fecha_raw,
+                       COALESCE(u.nombre, u.cedula, '') AS atleta,
+                       COALESCE(c.nombre, '') AS club_nombre,
+                       COALESCE(t.nombre, '') AS torneo_nombre,
+                       CAST(t.costo AS DECIMAL(12,2)) AS costo,
+                       ($paid) AS pagado
+                FROM inscritos i
+                INNER JOIN tournaments t ON t.id = i.torneo_id AND ($wTorneo)
+                LEFT JOIN usuarios u ON u.id = i.id_usuario
+                LEFT JOIN clubes c ON c.id = i.id_club
+                WHERE " . InscritosHelper::sqlWhereActivoConAlias('i') . "
+                ORDER BY fecha_raw DESC, i.id DESC
+                LIMIT " . (int) $limite;
+        $st = $pdo->prepare($sql);
+        $st->execute($pTorneo);
+        $rows = [];
+        while ($r = $st->fetch(PDO::FETCH_ASSOC)) {
+            $costo = (float) ($r['costo'] ?? 0);
+            $torNombre = trim((string) ($r['torneo_nombre'] ?? ''));
+            $rows[] = [
+                'fecha' => self::fmtFecha((string) ($r['fecha_raw'] ?? '')),
+                'atleta_club' => self::fmtAtletaClub((string) ($r['atleta'] ?? ''), (string) ($r['club_nombre'] ?? '')),
+                'concepto' => 'Inscripción · ' . ($torNombre !== '' ? $torNombre : 'Torneo'),
+                'monto' => $costo,
+                'estatus' => !empty($r['pagado']) ? 'Pagado' : 'Pendiente',
+            ];
+        }
+
+        return $rows;
+    }
+
+    /**
      * @return list<array{fecha:string,atleta_club:string,concepto:string,monto:float,estatus:string}>
      */
     public static function historialTransacciones(PDO $pdo, int $entidadId, int $organizacionFvdId, int $limite = 400): array

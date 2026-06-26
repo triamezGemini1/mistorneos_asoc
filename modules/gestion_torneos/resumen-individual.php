@@ -265,9 +265,16 @@ $base_url = $use_standalone ? $script_actual : 'index.php?page=torneo_gestion';
                                             <td><?php echo $partida['partida']; ?></td>
                                             <td><?php echo $partida['mesa']; ?></td>
                                             <td class="col-pareja" style="background-color: #e0e0e0;">
-                                                <?php 
-                                                if (!empty($partida['compañero'])) {
-                                                    echo '<span class="nombre-compacto" title="' . htmlspecialchars($partida['compañero']['nombre']) . '">' . htmlspecialchars($partida['compañero']['nombre']) . '</span>';
+                                                <?php
+                                                $parejaRonda = $partida['companero'] ?? $partida['compañero'] ?? null;
+                                                $nombrePareja = '';
+                                                if (is_array($parejaRonda)) {
+                                                    $nombrePareja = trim((string) ($parejaRonda['nombre'] ?? ''));
+                                                } elseif (is_string($parejaRonda)) {
+                                                    $nombrePareja = trim($parejaRonda);
+                                                }
+                                                if ($nombrePareja !== '') {
+                                                    echo '<span class="nombre-compacto" title="' . htmlspecialchars($nombrePareja) . '">' . htmlspecialchars($nombrePareja) . '</span>';
                                                 } else {
                                                     echo '<span class="text-muted">-</span>';
                                                 }
