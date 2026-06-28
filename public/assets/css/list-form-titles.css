@@ -1,0 +1,160 @@
+/**
+ * Títulos de listados y formularios — fondo #2288FA
+ */
+:root {
+  --list-form-title-bg: #2288FA;
+  --list-form-title-color: #ffffff;
+  --report-title-bg: #2288FA;
+  --report-title-color: #ffffff;
+}
+
+/* Encabezados de tarjeta (listados / formularios en panel) */
+main.container-fluid .card > .card-header,
+.estacion-hub-page .card-header,
+.clubes-asociados-list-header,
+.modal-content > .modal-header,
+.modal-content > form > .modal-header {
+  background-color: var(--list-form-title-bg) !important;
+  color: var(--list-form-title-color) !important;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.25) !important;
+}
+
+main.container-fluid .card > .card-header .h5,
+main.container-fluid .card > .card-header .h6,
+main.container-fluid .card > .card-header h2,
+main.container-fluid .card > .card-header h5,
+main.container-fluid .card > .card-header h6,
+.estacion-hub-page .card-header .h5,
+.estacion-hub-page .card-header h2,
+.clubes-asociados-list-header .h6,
+.clubes-asociados-list-header h6,
+.modal-content .modal-header .modal-title,
+.modal-content .modal-header .h5 {
+  color: var(--list-form-title-color) !important;
+}
+
+main.container-fluid .card > .card-header .text-muted,
+.clubes-asociados-list-header .text-muted {
+  color: rgba(255, 255, 255, 0.92) !important;
+}
+
+main.container-fluid .card > .card-header .btn-close,
+.modal-content .modal-header .btn-close {
+  filter: invert(1) grayscale(1) brightness(2);
+}
+
+/* Título principal de página (CLUBES, etc.) */
+.clubes-asociados-page-title,
+.list-form-page-title {
+  display: inline-block;
+  margin: 0;
+  padding: 0.45rem 1.25rem;
+  border-radius: 8px;
+  background-color: var(--list-form-title-bg);
+  color: var(--list-form-title-color) !important;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+}
+
+/* Hub / listados con estacion-hub-header */
+.estacion-hub-header,
+.listado-asociaciones-header {
+  background: var(--list-form-title-bg) !important;
+  color: var(--list-form-title-color) !important;
+  border-left: 5px solid rgba(255, 255, 255, 0.35) !important;
+}
+
+.estacion-hub-header h1,
+.estacion-hub-header .h3,
+.estacion-hub-header .estacion-hub-subtitle,
+.estacion-hub-header p,
+.listado-asociaciones-header h1,
+.listado-asociaciones-header .h3,
+.listado-asociaciones-header p {
+  color: var(--list-form-title-color) !important;
+}
+
+.estacion-hub-header .breadcrumb-item,
+.estacion-hub-header .breadcrumb-item a,
+.estacion-hub-header .breadcrumb-item.active {
+  color: rgba(255, 255, 255, 0.9) !important;
+}
+
+.estacion-hub-header .btn-outline-light {
+  border-color: rgba(255, 255, 255, 0.75);
+  color: var(--list-form-title-color);
+}
+
+.estacion-hub-header .btn-outline-light:hover {
+  background: rgba(255, 255, 255, 0.15);
+  color: var(--list-form-title-color);
+}
+
+/* Formularios: cabecera con colores Bootstrap → unificar */
+main.container-fluid .card-header.bg-success,
+main.container-fluid .card-header.bg-warning,
+main.container-fluid .card-header.bg-info,
+main.container-fluid .card-header.bg-primary,
+main.container-fluid .card-header.bg-secondary {
+  background-color: var(--list-form-title-bg) !important;
+  color: var(--list-form-title-color) !important;
+}
+
+/* ========== Reportes: contenedores de título #2288FA ========== */
+.report-page-title-bar {
+  background: var(--report-title-bg) !important;
+  color: var(--report-title-color) !important;
+  border-radius: 10px;
+  padding: 1rem 1.35rem;
+  margin-bottom: 1.25rem;
+  box-shadow: 0 4px 14px rgba(34, 136, 250, 0.22);
+}
+
+.report-page-title-bar h1,
+.report-page-title-bar .h3,
+.report-page-title-bar h5,
+.report-page-title-bar p,
+.report-page-title-bar .text-muted,
+.report-page-title-bar .breadcrumb-item,
+.report-page-title-bar .breadcrumb-item a,
+.report-page-title-bar .breadcrumb-item.active {
+  color: var(--report-title-color) !important;
+}
+
+.report-page-title-bar .breadcrumb-item a:hover {
+  color: #fff !important;
+  opacity: 0.9;
+}
+
+.report-page-title-bar .badge.bg-primary {
+  background-color: rgba(255, 255, 255, 0.2) !important;
+  color: #fff !important;
+  border: 1px solid rgba(255, 255, 255, 0.35);
+}
+
+.reportes-inscritos-card-head,
+.inscripciones-listado-header {
+  background: #00C6FB !important;
+  background-image: none !important;
+  color: #ffffff !important;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.25) !important;
+}
+
+.reportes-inscritos-card-head h1,
+.inscripciones-listado-header h5 {
+  color: #ffffff !important;
+}
+
+main.container-fluid .ds-estadisticas-torneos-13 .card > .card-header,
+main.container-fluid .statistics-page .card > .card-header,
+main.container-fluid .report-page .card > .card-header {
+  background-color: var(--report-title-bg) !important;
+  color: var(--report-title-color) !important;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.25) !important;
+}
+
+main.container-fluid .ds-estadisticas-torneos-13 .card > .card-header h5,
+main.container-fluid .statistics-page .card > .card-header h5,
+main.container-fluid .report-page .card > .card-header h5 {
+  color: var(--report-title-color) !important;
+}

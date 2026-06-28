@@ -92,7 +92,7 @@ $page_title = 'Reportes de inscritos — ' . (string) ($torneo['nombre'] ?? 'Tor
     </nav>
 
     <div class="bg-white rounded-xl shadow-md border border-gray-200 overflow-hidden mb-6">
-        <div class="bg-gradient-to-r from-slate-600 to-slate-800 px-4 py-3 text-white reportes-inscritos-card-head">
+        <div class="reportes-inscritos-card-head px-4 py-3 text-white">
             <h1 class="text-lg font-bold mb-0 flex items-center">
                 <i class="fas fa-file-invoice mr-2"></i> Reportes de inscritos
             </h1>

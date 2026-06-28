@@ -210,7 +210,7 @@ unset($ent);
 ?>
 
 <div class="container-fluid ds-estadisticas-torneos-13">
-    <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-4">
+    <div class="report-page-title-bar d-flex justify-content-between align-items-center flex-wrap gap-2">
         <div>
             <h1 class="h3 mb-1"><i class="fas fa-chart-line me-2"></i>Estadísticas de Torneos</h1>
             <p class="text-muted mb-0">Reporte jerárquico: Entidad → Organización → Torneos (nombre, fecha, rondas, participantes)</p>

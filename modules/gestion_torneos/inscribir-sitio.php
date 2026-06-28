@@ -3,7 +3,7 @@
  * Vista: Inscribir Jugador en Sitio
  * Formulario de búsqueda compacto (1 línea: nacionalidad, cédula, nombre, sexo).
  * Búsqueda: 1) inscritos 2) usuarios 3) BD externa 4) registro no registrado.
- * Listado Disponibles: solo club_id = 13.
+ * Listado inscritos: solo clubes de la organización del torneo.
  */
 $script_actual = basename($_SERVER['PHP_SELF'] ?? '');
 $use_standalone = in_array($script_actual, ['admin_torneo.php', 'panel_torneo.php']);
@@ -16,6 +16,8 @@ $usuarios_inscritos = $usuarios_inscritos ?? [];
 $inscripcion_operativo_asoc = !empty($inscripcion_operativo_asoc);
 $club_forzado_id = (int) ($club_forzado_id ?? 0);
 $club_forzado_nombre = (string) ($club_forzado_nombre ?? '');
+$club_default_id = (int) ($club_default_id ?? $club_forzado_id);
+$club_default_nombre = (string) ($club_default_nombre ?? $club_forzado_nombre);
 
 if (empty($torneo) || !is_array($torneo) || !isset($torneo['id'])) {
     echo '<div class="alert alert-danger">Error: No se encontró el torneo o no se pudieron cargar los datos. <a href="' . htmlspecialchars($base_url) . '">Volver a Gestión de Torneos</a>.</div>';
@@ -79,7 +81,7 @@ if ($base_public_abs === '' && !empty($_SERVER['HTTP_HOST'])) {
             <h5 class="mb-0"><i class="fas fa-user-plus me-2"></i>Inscribir Jugador en Sitio</h5>
         </div>
         <div class="card-body px-2 px-md-3">
-            <p class="small text-muted mb-2">Búsqueda: inscritos → usuarios → BD externa. Puede usar <strong>cédula</strong>, <strong>ID de usuario</strong> (p. ej. 6 dígitos) o <strong>fragmento de nombre</strong> (mín. 3 letras). Al salir del campo o Enter se ejecuta.</p>
+            <p class="small text-muted mb-2">Por defecto se inscribe bajo la <strong>asociación activa</strong><?= $club_default_nombre !== '' ? ' (' . htmlspecialchars($club_default_nombre) . ')' : '' ?>. Puede cambiar el club antes de inscribir. Jugadores externos también quedan bajo un club de esta asociación.</p>
 
             <!-- Una sola línea: Nacionalidad, Cédula, Club, y (al tener resultado) Nombre, Sexo, Inscribir, Otra búsqueda. Estatus siempre confirmado. -->
             <div class="insc-sitio-fila insc-sitio-una-linea mb-2" id="insc_sitio_linea_principal">
@@ -92,15 +94,14 @@ if ($base_public_abs === '' && !empty($_SERVER['HTTP_HOST'])) {
                     <input type="text" id="input_cedula" class="form-control form-control-sm" placeholder="Números, ID o nombre" maxlength="80" autocomplete="off" spellcheck="false">
                 </div>
                 <div class="insc-sitio-campo insc-sitio-club">
-                    <label class="form-label small mb-0">Asociación</label>
+                    <label class="form-label small mb-0">Club (asociación)</label>
                     <?php if ($inscripcion_operativo_asoc && $club_forzado_id > 0): ?>
                         <input type="hidden" id="select_club_cedula" value="<?= $club_forzado_id ?>">
                         <div class="form-control form-control-sm bg-light" readonly><?= htmlspecialchars($club_forzado_nombre) ?></div>
                     <?php else: ?>
                     <select id="select_club_cedula" class="form-select form-select-sm">
-                        <option value="">-- Usar club del usuario --</option>
                         <?php foreach ($clubes_disponibles ?? [] as $club): ?>
-                            <option value="<?= $club['id'] ?>"><?= htmlspecialchars($club['nombre']) ?></option>
+                            <option value="<?= $club['id'] ?>"<?= (int)$club['id'] === $club_default_id ? ' selected' : '' ?>><?= htmlspecialchars($club['nombre']) ?></option>
                         <?php endforeach; ?>
                     </select>
                     <?php endif; ?>
@@ -138,12 +139,12 @@ if ($base_public_abs === '' && !empty($_SERVER['HTTP_HOST'])) {
                         <div class="insc-sitio-campo"><label class="form-label small mb-0">Tel.</label><input type="text" id="form_telefono" class="form-control form-control-sm"></div>
                         <div class="insc-sitio-campo"><label class="form-label small mb-0">Email</label><input type="email" id="form_email" class="form-control form-control-sm"></div>
                         <div class="insc-sitio-campo">
-                            <label class="form-label small mb-0">Asociación <?php if (!$inscripcion_operativo_asoc): ?><span class="text-danger">*</span><?php endif; ?></label>
+                            <label class="form-label small mb-0">Club (asociación)</label>
                             <?php if ($inscripcion_operativo_asoc && $club_forzado_id > 0): ?>
                                 <input type="hidden" id="form_club" value="<?= $club_forzado_id ?>">
                                 <div class="form-control form-control-sm bg-light" readonly><?= htmlspecialchars($club_forzado_nombre) ?></div>
                             <?php else: ?>
-                            <select id="form_club" class="form-select form-select-sm"><option value="">-- Seleccione --</option><?php foreach ($clubes_disponibles ?? [] as $c): ?><option value="<?= $c['id'] ?>"><?= htmlspecialchars($c['nombre']) ?></option><?php endforeach; ?></select>
+                            <select id="form_club" class="form-select form-select-sm"><?php foreach ($clubes_disponibles ?? [] as $c): ?><option value="<?= $c['id'] ?>"<?= (int)$c['id'] === $club_default_id ? ' selected' : '' ?>><?= htmlspecialchars($c['nombre']) ?></option><?php endforeach; ?></select>
                             <?php endif; ?>
                         </div>
                         <div class="insc-sitio-campo d-flex align-items-end">
@@ -164,7 +165,7 @@ if ($base_public_abs === '' && !empty($_SERVER['HTTP_HOST'])) {
                         </div>
                         <div class="card-body p-2" style="max-height: 320px; overflow-y: auto;">
                             <table class="table table-sm table-hover mb-0">
-                                <thead class="table-light"><tr><th>Nombre</th><th>ID</th><th>Club</th></tr></thead>
+                                <thead class="table-light"><tr><th>Nombre</th><th>ID</th><th>Club inscripción</th></tr></thead>
                                 <tbody id="tbody_disponibles">
                                     <?php foreach ($usuarios_disponibles as $u):
                                         $nom = !empty($u['nombre']) ? $u['nombre'] : $u['username'];
@@ -188,7 +189,7 @@ if ($base_public_abs === '' && !empty($_SERVER['HTTP_HOST'])) {
                         </div>
                         <div class="card-body p-2" style="max-height: 320px; overflow-y: auto;">
                             <table class="table table-sm table-hover mb-0">
-                                <thead class="table-light"><tr><th>Nombre</th><th>ID</th><th>Club</th></tr></thead>
+                                <thead class="table-light"><tr><th>Nombre</th><th>ID</th><th>Club inscripción</th></tr></thead>
                                 <tbody id="tbody_inscritos">
                                     <?php foreach ($usuarios_inscritos as $i):
                                         $nom = !empty($i['nombre']) ? $i['nombre'] : $i['username'];
@@ -232,7 +233,9 @@ if ($base_public_abs === '' && !empty($_SERVER['HTTP_HOST'])) {
     var BASE_PUBLIC = <?= json_encode($base_public_abs ? $base_public_abs . '/' : '') ?>;
     var TORNEOS_ID = <?= (int)$torneo['id'] ?>;
     var CLUB_FORZADO_ID = <?= $club_forzado_id > 0 ? (int)$club_forzado_id : 'null' ?>;
+    var CLUB_DEFAULT_ID = <?= $club_default_id > 0 ? (int)$club_default_id : 'null' ?>;
     var CSRF_TOKEN = '<?= htmlspecialchars(CSRF::token(), ENT_QUOTES) ?>';
+    var CLUBES_ASOC = <?= json_encode(array_column($clubes_disponibles ?? [], 'nombre', 'id'), JSON_UNESCAPED_UNICODE) ?>;
     var API_URL = BASE_PUBLIC + 'tournament_admin_toggle_inscripcion.php';
     var BUSCAR_API = BASE_PUBLIC + 'api/search_persona.php';
     var isSearching = false;
@@ -243,7 +246,16 @@ if ($base_public_abs === '' && !empty($_SERVER['HTTP_HOST'])) {
         if (CLUB_FORZADO_ID) return String(CLUB_FORZADO_ID);
         var el = $('select_club_cedula') || $('form_club');
         if (el && el.value) return el.value;
-        return fallback || '';
+        if (fallback && (CLUBES_ASOC[String(fallback)] || CLUBES_ASOC[fallback])) return String(fallback);
+        return CLUB_DEFAULT_ID ? String(CLUB_DEFAULT_ID) : '';
+    }
+    function clubNombreInscripcion(clubId) {
+        if (!clubId) return '—';
+        var nom = CLUBES_ASOC[String(clubId)] || CLUBES_ASOC[clubId];
+        return nom || '—';
+    }
+    function validarClubInscripcion() {
+        return !!clubIdInscripcion('');
     }
     function msg(html, type) {
         var el = $('mensaje_formulario_cedula');
@@ -423,16 +435,17 @@ if ($base_public_abs === '' && !empty($_SERVER['HTTP_HOST'])) {
         tr.dataset.nombre = nombre;
         tr.dataset.cedula = cedula || '';
         tr.dataset.clubId = clubId || '';
-        tr.innerHTML = '<td><strong>' + (nombre || '') + '</strong></td><td><code>' + id + '</code></td><td>—</td>';
+        tr.innerHTML = '<td><strong>' + (nombre || '') + '</strong></td><td><code>' + id + '</code></td><td>' + clubNombreInscripcion(clubId) + '</td>';
         tbodyInsc.appendChild(tr);
     }
 
     function inscribirJugador(idUsuario, nombre, cedula, clubId, rowEl) {
+        if (!validarClubInscripcion()) return;
+        var cid = clubId || clubIdInscripcion('');
         var fd = new FormData();
         fd.append('action', 'inscribir');
         fd.append('torneo_id', TORNEOS_ID);
         fd.append('id_usuario', idUsuario);
-        var cid = clubId || clubIdInscripcion();
         if (cid) fd.append('id_club', cid);
         fd.append('estatus', '0');
         fd.append('csrf_token', CSRF_TOKEN);
@@ -554,11 +567,8 @@ if ($base_public_abs === '' && !empty($_SERVER['HTTP_HOST'])) {
                     showMessage('Cédula (mín. 4 dígitos) y nombre obligatorios.', 'warning');
                     return;
                 }
+                if (!validarClubInscripcion()) return;
                 var clubId = clubIdInscripcion();
-                if (!clubId) {
-                    showMessage('Seleccione una asociación.', 'warning');
-                    return;
-                }
                 var fd = new FormData();
                 fd.append('action', 'registrar_inscribir');
                 fd.append('torneo_id', TORNEOS_ID);

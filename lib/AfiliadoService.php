@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/OrganizacionDashboardStats.php';
 require_once __DIR__ . '/OrganizacionService.php';
+require_once __DIR__ . '/ClubHelper.php';
 
 /**
  * Consultas de afiliados (atletas) vinculados a una organización.
@@ -142,13 +143,7 @@ final class AfiliadoService
      */
     private static function mapRow(array $row): array
     {
-        $clubId = (int) ($row['club_id_resuelto'] ?? 0);
-        if ($clubId <= 0) {
-            $clubId = (int) ($row['club_id'] ?? 0);
-        }
-        if ($clubId <= 0) {
-            $clubId = (int) ($row['entidad'] ?? 0);
-        }
+        $clubId = ClubHelper::resolveAfiliadoClubId($row);
 
         $ultima = $row['ultima_actividad'] ?? null;
         $ultimaFmt = '—';
@@ -201,11 +196,11 @@ final class AfiliadoService
         try {
             $sql = "SELECT u.id, u.nombre, u.cedula, u.email, u.status, u.is_active,
                            u.club_id, u.entidad,
-                           COALESCE(NULLIF(u.club_id, 0), u.entidad) AS club_id_resuelto,
+                           IF(COALESCE(u.club_id, 0) > 0, u.club_id, u.entidad) AS club_id_resuelto,
                            COALESCE(c.nombre, '') AS club_nombre,
                            {$ultimaExpr} AS ultima_actividad
                     FROM usuarios u
-                    LEFT JOIN clubes c ON c.id = COALESCE(NULLIF(u.club_id, 0), u.entidad)
+                    LEFT JOIN clubes c ON c.id = IF(COALESCE(u.club_id, 0) > 0, u.club_id, u.entidad)
                     WHERE u.role = 'usuario'
                       AND ({$orgFilterSql})
                     ORDER BY u.nombre ASC
@@ -256,11 +251,11 @@ final class AfiliadoService
         try {
             $sql = "SELECT u.id, u.nombre, u.cedula, u.email, u.status, u.is_active,
                            u.club_id, u.entidad,
-                           COALESCE(NULLIF(u.club_id, 0), u.entidad) AS club_id_resuelto,
+                           IF(COALESCE(u.club_id, 0) > 0, u.club_id, u.entidad) AS club_id_resuelto,
                            COALESCE(c.nombre, '') AS club_nombre,
                            {$ultimaExpr} AS ultima_actividad
                     FROM usuarios u
-                    LEFT JOIN clubes c ON c.id = COALESCE(NULLIF(u.club_id, 0), u.entidad)
+                    LEFT JOIN clubes c ON c.id = IF(COALESCE(u.club_id, 0) > 0, u.club_id, u.entidad)
                     WHERE u.id = ?
                       AND u.role = 'usuario'
                       AND ({$orgFilterSql})

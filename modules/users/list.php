@@ -930,6 +930,22 @@ $is_admin_club = $current_user['role'] === 'admin_club';
             <form method="POST" action="">
                 <input type="hidden" name="action" value="update">
                 <input type="hidden" name="user_id" id="edit_user_id">
+                <?php
+                $return_to_edit = trim((string)($_GET['return_to'] ?? ''));
+                if ($return_to_edit !== ''): ?>
+                    <input type="hidden" name="return_to" value="<?= htmlspecialchars($return_to_edit, ENT_QUOTES, 'UTF-8') ?>">
+                <?php endif;
+                foreach (['return_club_id', 'return_from', 'from', 'admin_id', 'hub_org_id', 'hub_tab', 'hub_estado', 'return_genero'] as $retKey):
+                    if (!isset($_GET[$retKey]) || (string)$_GET[$retKey] === '') {
+                        continue;
+                    }
+                    $retName = $retKey === 'from' && $return_to_edit === 'clubs' ? 'return_from' : $retKey;
+                    if ($retKey === 'from' && $return_to_edit !== 'clubs') {
+                        continue;
+                    }
+                ?>
+                    <input type="hidden" name="<?= htmlspecialchars($retName, ENT_QUOTES, 'UTF-8') ?>" value="<?= htmlspecialchars((string)$_GET[$retKey], ENT_QUOTES, 'UTF-8') ?>">
+                <?php endforeach; ?>
                 <div class="modal-header">
                     <h5 class="modal-title">
                         <i class="fas fa-user-edit"></i> Editar Usuario
@@ -1476,6 +1492,16 @@ function toggleClubField(formType) {
 // Inicializar el estado del campo club al cargar
 document.addEventListener('DOMContentLoaded', function() {
     toggleClubField('create');
+<?php if ($action === 'edit' && !empty($user)): ?>
+    editUser(
+        <?= (int)($user['id'] ?? 0) ?>,
+        <?= json_encode($user['username'] ?? '', JSON_UNESCAPED_UNICODE) ?>,
+        <?= json_encode($user['email'] ?? '', JSON_UNESCAPED_UNICODE) ?>,
+        <?= json_encode($user['role'] ?? 'usuario', JSON_UNESCAPED_UNICODE) ?>,
+        <?= isset($user['club_id']) && $user['club_id'] ? (int)$user['club_id'] : 'null' ?>,
+        <?= isset($user['entidad']) ? (int)$user['entidad'] : 0 ?>
+    );
+<?php endif; ?>
 });
 
 function editUser(id, username, email, role, club_id, entidad) {

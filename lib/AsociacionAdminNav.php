@@ -42,7 +42,7 @@ final class AsociacionAdminNav
             case self::KEY_INICIO:
                 return ['home', 'mi_organizacion', 'calendario'];
             case self::KEY_CLUBES:
-                return ['clubs', 'clubes_asociados', 'directorio_clubes'];
+                return ['clubs', 'asociacion_hub', 'directorio_clubes'];
             case self::KEY_TORNEOS:
                 return self::torneosPages();
             default:
@@ -74,10 +74,7 @@ final class AsociacionAdminNav
         $request = $request ?? $_GET;
 
         if ($currentPage === 'asociacion_hub') {
-            $tab = strtolower(trim((string) ($request['tab'] ?? 'info')));
-            if ($key === self::KEY_INICIO && $tab === 'info') {
-                return true;
-            }
+            $tab = strtolower(trim((string) ($request['tab'] ?? '')));
             if ($key === self::KEY_CLUBES && $tab === 'clubes') {
                 return true;
             }
@@ -115,8 +112,8 @@ final class AsociacionAdminNav
         }
 
         $clubesHref = $orgId > 0
-            ? AsociacionHubNavigation::hubUrl($orgId, 'clubes')
-            : $dashboardHref('clubs');
+            ? $dashboardHref('asociacion_hub', ['org_id' => $orgId, 'tab' => 'clubes'])
+            : $dashboardHref('home');
         $torneosHref = $orgId > 0
             ? AsociacionHubNavigation::torneosListUrl($orgId, 'en_proceso')
             : $dashboardHref('torneos_estructura', ['context' => 'asociaciones']);

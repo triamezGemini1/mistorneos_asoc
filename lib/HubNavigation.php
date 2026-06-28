@@ -28,7 +28,7 @@ final class HubNavigation
 
         $params['org_id'] = $orgId;
         if (! isset($params['tab'])) {
-            $params['tab'] = 'info';
+            $params['tab'] = 'torneos';
         }
 
         if (isset($params['error']) && trim((string) $params['error']) !== '') {
@@ -94,7 +94,7 @@ final class HubNavigation
             return null;
         }
 
-        return self::hubUrl($orgId);
+        return self::hubUrl($orgId, ['tab' => 'torneos']);
     }
 
     /**

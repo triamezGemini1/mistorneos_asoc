@@ -52,6 +52,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
 function getReturnUrl(): string {
     $return_to = trim($_POST['return_to'] ?? $_GET['return_to'] ?? '');
+    if ($return_to === 'clubs') {
+        require_once __DIR__ . '/../lib/ClubNavigation.php';
+        $club_id = isset($_POST['return_club_id']) ? (int)$_POST['return_club_id'] : (isset($_GET['return_club_id']) ? (int)$_GET['return_club_id'] : 0);
+        if ($club_id > 0) {
+            $req = array_merge($_GET, $_POST);
+            $req['from'] = trim($req['return_from'] ?? $req['from'] ?? 'clubes_asociados');
+            $return_genero = strtoupper(trim((string)($req['return_genero'] ?? '')));
+            $genero = ($return_genero === 'M' || $return_genero === 'F') ? $return_genero : null;
+
+            return ClubNavigation::detailUrl($club_id, $req, $genero);
+        }
+    }
     if ($return_to !== '' && preg_match('/^[a-z_]+$/', $return_to)) {
         $params = ['page' => $return_to];
         if ($return_to === 'admin_torneo_operadores') {
@@ -551,7 +563,7 @@ function handleUpdateUser() {
                 
                 if (empty($errors)) {
                     $_SESSION['success_message'] = 'Usuario actualizado exitosamente';
-                    header('Location: ?action=list');
+                    header('Location: ' . getReturnUrl());
                     exit;
                 }
             }

@@ -47,13 +47,51 @@ function asociacion_hub_redirigir_tab(int $orgId, string $tab): void
     if (! class_exists('AppHelpers', false)) {
         require_once __DIR__ . '/../lib/app_helpers.php';
     }
+    if ($tab === 'info' || trim($tab) === '') {
+        $tab = AsociacionHubNavigation::defaultOperationalTab();
+    }
     if (! headers_sent()) {
-        header('Location: ' . AppHelpers::dashboard('asociacion_hub', [
-            'org_id' => $orgId,
-            'tab' => $tab,
-        ]));
+        header('Location: ' . AsociacionHubNavigation::hubUrl($orgId, $tab));
         exit;
     }
+}
+
+/**
+ * @param list<string> $tabsVisibles
+ */
+function asociacion_hub_resolve_tab(int $orgId, string $requestedTab, bool $puedeAdministrar, array $tabsVisibles): string
+{
+    $requestedTab = strtolower(trim($requestedTab));
+    if ($requestedTab === 'info') {
+        return in_array('info', $tabsVisibles, true)
+            ? 'info'
+            : asociacion_hub_default_tab($puedeAdministrar, $tabsVisibles);
+    }
+    if ($requestedTab === '') {
+        return asociacion_hub_default_tab($puedeAdministrar, $tabsVisibles);
+    }
+
+    return $requestedTab;
+}
+
+/**
+ * @param list<string> $tabsVisibles
+ */
+function asociacion_hub_default_tab(bool $puedeAdministrar, array $tabsVisibles): string
+{
+    if ($puedeAdministrar && in_array('clubes', $tabsVisibles, true)) {
+        return 'clubes';
+    }
+    if (in_array('torneos', $tabsVisibles, true)) {
+        return 'torneos';
+    }
+    foreach ($tabsVisibles as $visibleTab) {
+        if ($visibleTab !== 'info') {
+            return $visibleTab;
+        }
+    }
+
+    return AsociacionHubNavigation::defaultOperationalTab();
 }
 
 try {
@@ -66,10 +104,6 @@ try {
     }
 
     $tabsConfig = asociacion_hub_tabs_config();
-    $tab = strtolower(trim((string) ($_GET['tab'] ?? 'info')));
-    if ($tab === '') {
-        $tab = 'info';
-    }
 
     // 2. Obtener contexto del usuario y datos
     $sessionUser = Auth::user();
@@ -82,26 +116,36 @@ try {
         return;
     }
 
+    $tabsVisibles = asociacion_hub_tabs_visibles($org_id, $authUser, $tabsConfig);
+    $puedeVerReportes = AsociacionAuth::checkAccess(AsociacionAuth::AFILIADO, $org_id, $authUser);
+    $puedeAdministrar = AsociacionAuth::checkAccess(AsociacionAuth::ADMIN_ASOC, $org_id, $authUser);
+    $esSuperAdmin = AsociacionAuth::checkAccess(AsociacionAuth::SUPER_ADMIN, $org_id, $authUser);
+
+    $requestedTab = array_key_exists('tab', $_GET)
+        ? strtolower(trim((string) ($_GET['tab'] ?? '')))
+        : '';
+    $tabMissing = ! array_key_exists('tab', $_GET) || trim((string) ($_GET['tab'] ?? '')) === '';
+    $tab = asociacion_hub_resolve_tab($org_id, $requestedTab, $puedeAdministrar, $tabsVisibles);
+
+    if ($tabMissing || ($requestedTab !== '' && $requestedTab !== $tab)) {
+        asociacion_hub_redirigir_tab($org_id, $tab);
+    }
+
     // 3. Whitelist de pestañas
     if (! array_key_exists($tab, $tabsConfig)) {
-        asociacion_hub_redirigir_tab($org_id, 'info');
-        $tab = 'info';
+        asociacion_hub_redirigir_tab($org_id, asociacion_hub_resolve_tab($org_id, '', $puedeAdministrar, $tabsVisibles));
     }
 
     // 4. Permisos por pestaña
     $nivelRequerido = (int) $tabsConfig[$tab]['level'];
     if (! AsociacionAuth::checkAccess($nivelRequerido, $org_id, $authUser)) {
         $_SESSION['warning'] = 'No tiene permiso para acceder a esa sección.';
-        asociacion_hub_redirigir_tab($org_id, 'info');
-        $tab = 'info';
+        if (! class_exists('AppHelpers', false)) {
+            require_once __DIR__ . '/../lib/app_helpers.php';
+        }
+        header('Location: ' . AppHelpers::dashboard('home'));
+        exit;
     }
-
-    $tabsVisibles = asociacion_hub_tabs_visibles($org_id, $authUser, $tabsConfig);
-
-    // 5. Verificación de acceso global (flags reutilizables en vistas)
-    $puedeVerReportes = AsociacionAuth::checkAccess(AsociacionAuth::AFILIADO, $org_id, $authUser);
-    $puedeAdministrar = AsociacionAuth::checkAccess(AsociacionAuth::ADMIN_ASOC, $org_id, $authUser);
-    $esSuperAdmin = AsociacionAuth::checkAccess(AsociacionAuth::SUPER_ADMIN, $org_id, $authUser);
 
     $hubNav = AsociacionHubNavigation::captureEntry($org_id);
 
@@ -133,9 +177,7 @@ try {
     $tabFile = __DIR__ . '/views/asociacion_hub/tabs/' . $tab . '.php';
     if (! is_file($tabFile)) {
         error_log('asociacion_hub_controller: pestaña no encontrada ' . $tab);
-        $tab = 'info';
-        $viewData['tab'] = 'info';
-        $tabFile = __DIR__ . '/views/asociacion_hub/tabs/info.php';
+        asociacion_hub_redirigir_tab($org_id, asociacion_hub_resolve_tab($org_id, '', $puedeAdministrar, $tabsVisibles));
     }
 
     $viewData['tab_file'] = $tabFile;

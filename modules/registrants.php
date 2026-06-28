@@ -30,6 +30,37 @@ $error_message = $_GET['error'] ?? null;
 $return_to = $_GET['return_to'] ?? 'index'; // 'panel_torneo' cuando se entra desde panel_torneo.php para retorno correcto
 
 // Procesar eliminaci�n si se solicita
+// POST: confirmar todas las inscripciones pendientes del torneo
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'confirmar_inscripciones_torneo') {
+    $torneo_id_redir = (int) ($_POST['torneo_id'] ?? 0);
+    $csrf_token = $_POST['csrf_token'] ?? '';
+    $session_token = $_SESSION['csrf_token'] ?? '';
+    $success_message = null;
+    if ($csrf_token && $session_token && hash_equals($session_token, $csrf_token)
+        && $torneo_id_redir > 0 && Auth::canAccessTournament($torneo_id_redir)) {
+        $pdo = DB::pdo();
+        $sqlNoRet = str_replace('estatus', 'r.estatus', InscritosHelper::SQL_WHERE_NO_RETIRADO);
+        $stmt = $pdo->prepare("
+            UPDATE inscritos r SET r.estatus = ?
+            WHERE r.torneo_id = ?
+              AND {$sqlNoRet}
+              AND NOT (r.estatus = 1 OR r.estatus = 2 OR CAST(r.estatus AS CHAR) IN ('confirmado', 'solvente', 'pagado'))
+        ");
+        $stmt->execute([InscritosHelper::ESTATUS_CONFIRMADO_NUM, $torneo_id_redir]);
+        $n = $stmt->rowCount();
+        $success_message = $n > 0
+            ? "Se confirmaron {$n} inscripción(es) pendiente(s)."
+            : 'No había inscripciones pendientes por confirmar.';
+    }
+    $return_to_redir = $_POST['return_to'] ?? $return_to;
+    $query = 'page=registrants&torneo_id=' . $torneo_id_redir . ($success_message ? '&success=' . urlencode($success_message) : '');
+    if ($return_to_redir !== 'index') {
+        $query .= '&return_to=' . urlencode($return_to_redir);
+    }
+    header('Location: index.php?' . $query);
+    exit;
+}
+
 // POST: cambiar estatus de inscrito (Confirmar/Retirar)
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'cambiar_estatus_inscrito') {
     $success_message = null;
@@ -314,6 +345,7 @@ if (!empty($filter_torneo) && $action === 'list') {
             FROM inscritos r
             LEFT JOIN usuarios u ON r.id_usuario = u.id
             WHERE r.torneo_id = ?
+              AND " . str_replace('estatus', 'r.estatus', InscritosHelper::SQL_WHERE_NO_RETIRADO) . "
         ");
         $stmt->execute([(int)$filter_torneo]);
         $torneo_stats = $stmt->fetch(PDO::FETCH_ASSOC);
@@ -339,6 +371,7 @@ if (!empty($filter_torneo) && $action === 'list') {
             LEFT JOIN clubes c ON c.id = r.id_club
             LEFT JOIN usuarios u ON r.id_usuario = u.id
             WHERE r.torneo_id = ?
+              AND " . str_replace('estatus', 'r.estatus', InscritosHelper::SQL_WHERE_NO_RETIRADO) . "
             GROUP BY COALESCE(c.id, r.id_club), COALESCE(NULLIF(TRIM(c.nombre), ''), CONCAT('Club #', r.id_club))
             ORDER BY total_inscritos DESC, club_nombre ASC
         ");
@@ -370,9 +403,10 @@ if ($action === 'list') {
             $total_registrants = 0;
             $pagination = null;
         } else {
-            // Filtro base: torneo seleccionado
+            // Filtro base: torneo seleccionado (sin retirados en el listado)
             $where[] = "r.torneo_id = ?";
             $params[] = (int)$filter_torneo;
+            $where[] = str_replace('estatus', 'r.estatus', InscritosHelper::SQL_WHERE_NO_RETIRADO);
             
             // En "Gestionar inscripciones" (con torneo seleccionado): mostrar TODOS los inscritos del torneo
             // por cualquier vía (en línea, en sitio, evento masivo, invitación). No filtrar por club.
@@ -425,6 +459,13 @@ if ($action === 'list') {
         ");
         $stmt->execute($params);
         $registrants_list = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+        $pendientes_confirmar = 0;
+        foreach ($registrants_list as $rowPend) {
+            if (!InscritosHelper::esConfirmado($rowPend['estatus'] ?? 0)) {
+                ++$pendientes_confirmar;
+            }
+        }
         }
     } catch (Exception $e) {
         $error_message = "Error al cargar los inscritos: " . $e->getMessage();
@@ -1031,6 +1072,23 @@ if (isset($_GET['ajax']) && $_GET['ajax'] === 'deuda') {
                             <span class="text-muted">- <?= count($clubes_en_lista) ?> Clubes</span>
                         <?php endif; ?>
                     </h3>
+                </div>
+                <?php endif; ?>
+                <?php
+                $pendientes_confirmar = (int) ($pendientes_confirmar ?? 0);
+                $csrf_confirmar = class_exists('CSRF') ? CSRF::token() : '';
+                if (!empty($filter_torneo) && empty($torneo_cerrado_reg) && $pendientes_confirmar > 0): ?>
+                <div class="mb-3 d-flex flex-wrap gap-2 align-items-center">
+                    <form method="post" action="" class="d-inline" onsubmit="return confirm('¿Confirmar las <?= (int)$pendientes_confirmar ?> inscripción(es) pendiente(s)?');">
+                        <input type="hidden" name="action" value="confirmar_inscripciones_torneo">
+                        <input type="hidden" name="torneo_id" value="<?= (int)$filter_torneo ?>">
+                        <input type="hidden" name="return_to" value="<?= htmlspecialchars($return_to) ?>">
+                        <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($csrf_confirmar) ?>">
+                        <button type="submit" class="btn btn-success">
+                            <i class="fas fa-check-double me-2"></i>Confirmar inscripciones (<?= (int)$pendientes_confirmar ?> pendiente<?= $pendientes_confirmar === 1 ? '' : 's' ?>)
+                        </button>
+                    </form>
+                    <span class="text-muted small">Los retirados no aparecen en este listado.</span>
                 </div>
                 <?php endif; ?>
                 <div class="table-responsive">

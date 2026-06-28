@@ -8,6 +8,7 @@ require_once __DIR__ . '/../config/bootstrap.php';
 require_once __DIR__ . '/../config/auth_service.php';
 require_once __DIR__ . '/../lib/app_helpers.php';
 require_once __DIR__ . '/../lib/HubNavigation.php';
+require_once __DIR__ . '/../lib/AsociacionHubNavigation.php';
 
 AuthService::requireAuth();
 
@@ -21,9 +22,7 @@ if ($orgId > 0) {
     $params['org_id'] = $orgId;
 }
 $tab = trim((string) ($_GET['tab'] ?? ''));
-if ($tab !== '') {
-    $params['tab'] = $tab;
-}
+$params['tab'] = $tab !== '' ? AsociacionHubNavigation::normalizeOperationalTab($tab) : AsociacionHubNavigation::defaultOperationalTab();
 $estado = trim((string) ($_GET['estado'] ?? ''));
 if ($estado !== '') {
     $params['estado'] = $estado;

@@ -25,7 +25,7 @@ final class AsociacionHubNavigation
         $returnUrl = trim((string) ($_GET['return_url'] ?? ''));
         if ($returnUrl !== '' && self::isAllowedOriginUrl($returnUrl)) {
             $origin = [
-                'origin_url' => self::normalizeInternalUrl($returnUrl),
+                'origin_url' => self::normalizeInternalUrl(self::sanitizeRedirectUrl($returnUrl)),
                 'origin_label' => self::labelFromUrl($returnUrl),
             ];
             $_SESSION[$key] = $origin;
@@ -36,7 +36,7 @@ final class AsociacionHubNavigation
         $referer = trim((string) ($_SERVER['HTTP_REFERER'] ?? ''));
         if ($referer !== '' && ! self::isHubUrl($referer) && self::isAllowedOriginUrl($referer)) {
             $origin = [
-                'origin_url' => self::normalizeInternalUrl($referer),
+                'origin_url' => self::normalizeInternalUrl(self::sanitizeRedirectUrl($referer)),
                 'origin_label' => self::labelFromUrl($referer),
             ];
             $_SESSION[$key] = $origin;
@@ -48,7 +48,7 @@ final class AsociacionHubNavigation
             $stored = (string) $_SESSION[$key]['origin_url'];
             if (self::isAllowedOriginUrl($stored)) {
                 return [
-                    'origin_url' => $stored,
+                    'origin_url' => self::sanitizeRedirectUrl($stored),
                     'origin_label' => (string) ($_SESSION[$key]['origin_label'] ?? 'Origen'),
                 ];
             }
@@ -74,7 +74,7 @@ final class AsociacionHubNavigation
             $stored = (string) $_SESSION[$key]['origin_url'];
             if (self::isAllowedOriginUrl($stored)) {
                 return [
-                    'origin_url' => $stored,
+                    'origin_url' => self::sanitizeRedirectUrl($stored),
                     'origin_label' => (string) ($_SESSION[$key]['origin_label'] ?? 'Origen'),
                 ];
             }
@@ -84,16 +84,95 @@ final class AsociacionHubNavigation
         return self::captureEntry($orgId);
     }
 
-    public static function hubUrl(int $orgId, string $tab = 'info', array $extra = []): string
+    public static function hubUrl(int $orgId, string $tab = 'clubes', array $extra = []): string
     {
         if (! class_exists('AppHelpers', false)) {
             require_once __DIR__ . '/app_helpers.php';
         }
 
+        $tab = self::normalizeOperationalTab($tab);
+
         return AppHelpers::dashboard('asociacion_hub', array_merge([
             'org_id' => $orgId,
-            'tab' => $tab !== '' ? $tab : 'info',
+            'tab' => $tab,
         ], $extra));
+    }
+
+    /**
+     * Pestaña operativa por defecto (nunca «info» en navegación automática).
+     */
+    public static function defaultOperationalTab(): string
+    {
+        return 'clubes';
+    }
+
+    /**
+     * Normaliza tab del hub: «info» no se usa en redirects ni retornos.
+     */
+    public static function normalizeOperationalTab(string $tab): string
+    {
+        $tab = strtolower(trim($tab));
+        if ($tab === '' || $tab === 'info') {
+            return self::defaultOperationalTab();
+        }
+
+        return $tab;
+    }
+
+    /** @deprecated Usar clubesListUrl; no enlazar tab=info. */
+    public static function verAsociacionUrl(int $orgId, ?string $returnUrl = null): string
+    {
+        return self::clubesListUrl($orgId);
+    }
+
+    /**
+     * Si la URL apunta al hub con tab=info (o sin tab), devuelve una URL operativa o inicio.
+     */
+    public static function sanitizeRedirectUrl(string $url): string
+    {
+        if (! self::isHubInfoTabUrl($url)) {
+            return $url;
+        }
+        if (! class_exists('AppHelpers', false)) {
+            require_once __DIR__ . '/app_helpers.php';
+        }
+        $query = parse_url($url, PHP_URL_QUERY);
+        if (! is_string($query) || $query === '') {
+            return AppHelpers::dashboard('home');
+        }
+        parse_str($query, $params);
+        $orgId = (int) ($params['org_id'] ?? 0);
+        if ($orgId > 0) {
+            return self::clubesListUrl($orgId);
+        }
+
+        return AppHelpers::dashboard('home');
+    }
+
+    public static function isHubInfoTabUrl(string $url): bool
+    {
+        $query = parse_url($url, PHP_URL_QUERY);
+        if (! is_string($query) || $query === '') {
+            return str_contains($url, 'page=asociacion_hub') && ! str_contains($url, 'tab=');
+        }
+        parse_str($query, $params);
+        if ((string) ($params['page'] ?? '') !== 'asociacion_hub') {
+            return false;
+        }
+        $tab = strtolower(trim((string) ($params['tab'] ?? '')));
+
+        return $tab === '' || $tab === 'info';
+    }
+
+    /** Listado de clubes en el hub (siempre con tab=clubes). */
+    public static function clubesListUrl(int $orgId): string
+    {
+        return self::hubUrl($orgId, 'clubes');
+    }
+
+    public static function afiliadosListUrl(int $orgId): string
+    {
+        return self::hubUrl($orgId, 'afiliados');
     }
 
     public static function normalizeEstadoTorneos(?string $estado): string
@@ -142,7 +221,7 @@ final class AsociacionHubNavigation
         $out = [
             'from' => 'asociacion_hub',
             'hub_org_id' => $orgId,
-            'hub_tab' => $tab !== '' ? $tab : 'info',
+            'hub_tab' => $tab !== '' ? $tab : 'clubes',
         ];
         if ($tab === 'torneos') {
             $out['hub_estado'] = self::normalizeEstadoTorneos($estadoTorneos ?? 'en_proceso');
@@ -161,6 +240,7 @@ final class AsociacionHubNavigation
 
     /**
      * URL de retorno desde una pantalla hija (torneo, ficha club, etc.).
+     * Nunca devuelve la ficha «ver asociación» (tab=info); solo pestañas operativas.
      */
     public static function returnUrlFromRequest(?array $request = null): ?string
     {
@@ -169,16 +249,71 @@ final class AsociacionHubNavigation
             return null;
         }
         $orgId = (int) ($request['hub_org_id'] ?? 0);
-        $tab = trim((string) ($request['hub_tab'] ?? 'info'));
-        if ($tab === '') {
-            $tab = 'info';
-        }
-        $extra = [];
-        if ($tab === 'torneos' && isset($request['hub_estado'])) {
-            $extra['estado'] = self::normalizeEstadoTorneos((string) $request['hub_estado']);
+        if ($orgId <= 0) {
+            return null;
         }
 
-        return self::hubUrl($orgId, $tab, $extra);
+        return self::hubUrlForReturnTab($orgId, self::inferReturnTab($request), $request);
+    }
+
+    /**
+     * URL segura para header('Location: …') — nunca tab=info.
+     */
+    public static function safeRedirectUrl(string $url): string
+    {
+        return self::sanitizeRedirectUrl($url);
+    }
+
+    /**
+     * Pestaña de retorno según contexto (nunca «info» salvo entrada explícita del operador).
+     *
+     * @param array<string, mixed> $request
+     */
+    public static function inferReturnTab(array $request): string
+    {
+        $tab = strtolower(trim((string) ($request['hub_tab'] ?? '')));
+        if ($tab !== '' && $tab !== 'info') {
+            return $tab;
+        }
+        if ((int) ($request['torneo_id'] ?? 0) > 0) {
+            return 'torneos';
+        }
+        $page = strtolower(trim((string) ($request['page'] ?? $_GET['page'] ?? '')));
+        if (in_array($page, ['torneo_gestion', 'tournaments', 'gestion_torneos', 'torneos_estructura'], true)) {
+            return 'torneos';
+        }
+        if (in_array($page, ['clubs', 'clubes_asociados', 'register_by_club'], true)) {
+            return 'clubes';
+        }
+        if ((int) ($request['club_id'] ?? $request['id'] ?? 0) > 0
+            && in_array($page, ['clubs', 'clubes_asociados', 'register_by_club', ''], true)) {
+            return 'clubes';
+        }
+        if ($page === 'users') {
+            return 'afiliados';
+        }
+
+        return 'clubes';
+    }
+
+    /**
+     * @param array<string, mixed> $request
+     */
+    private static function hubUrlForReturnTab(int $orgId, string $tab, array $request): string
+    {
+        if ($tab === 'clubes') {
+            return self::clubesListUrl($orgId);
+        }
+        if ($tab === 'torneos') {
+            $estado = (string) ($request['hub_estado'] ?? 'en_proceso');
+
+            return self::torneosListUrl($orgId, $estado);
+        }
+        if ($tab === 'afiliados') {
+            return self::afiliadosListUrl($orgId);
+        }
+
+        return self::clubesListUrl($orgId);
     }
 
     public static function returnLabelFromRequest(?array $request = null): string
@@ -187,11 +322,11 @@ final class AsociacionHubNavigation
         if (! self::isHubContext($request)) {
             return 'Volver';
         }
-        $tab = (string) ($request['hub_tab'] ?? 'info');
+        $tab = (string) ($request['hub_tab'] ?? 'clubes');
         $labels = [
             'info' => 'Información',
             'torneos' => 'Torneos',
-            'clubes' => 'Clubes',
+            'clubes' => 'Listado de clubes',
             'afiliados' => 'Afiliados',
         ];
 
@@ -213,7 +348,8 @@ final class AsociacionHubNavigation
 
         return array_merge(self::outboundParams(
             (int) $request['hub_org_id'],
-            (string) ($request['hub_tab'] ?? 'info')
+            (string) ($request['hub_tab'] ?? 'torneos'),
+            isset($request['hub_estado']) ? (string) $request['hub_estado'] : null
         ), $extra);
     }
 
@@ -250,6 +386,9 @@ final class AsociacionHubNavigation
     private static function isAllowedOriginUrl(string $url): bool
     {
         if (! self::isSafeInternalUrl($url)) {
+            return false;
+        }
+        if (self::isHubInfoTabUrl($url)) {
             return false;
         }
         if (self::isTorneoGestionIndexUrl($url)) {

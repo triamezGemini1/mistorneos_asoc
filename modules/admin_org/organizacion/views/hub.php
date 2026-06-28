@@ -4,7 +4,7 @@
  * Muestra logo, nombre, estadísticas y accesos rápidos.
  */
 $logo_url = !empty($organizacion['logo']) ? AppHelpers::imageUrl($organizacion['logo']) : AppHelpers::getAppLogo();
-$url_gestionar_clubes = AppHelpers::dashboard('clubes_asociados');
+$url_gestionar_clubes = AppHelpers::dashboard('asociacion_hub', ['org_id' => (int) ($organizacion['id'] ?? 0), 'tab' => 'clubes']);
 $url_ver_torneos = 'index.php?page=torneo_gestion&action=index';
 $url_ver_estructura = AppHelpers::dashboard('organizaciones', ['id' => $organizacion['id']]);
 ?>

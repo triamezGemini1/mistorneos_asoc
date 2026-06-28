@@ -63,39 +63,46 @@ body.admin-general-home-page main.container-fluid {
 }
 
 .admin-general-stats-block__title {
-  font-size: 0.95rem;
-  font-weight: 600;
+  font-size: 1.33rem;
+  font-weight: 700;
   color: #6b7280;
   margin-bottom: 0.75rem;
 }
 
-/* Tarjetas ~40% más compactas que el dashboard estándar */
-.admin-general-home .stat-card {
-  padding: 1.05rem;
+/* Gadgets de estadísticas: +40% respecto al dashboard base y texto en negrita */
+body.page-home .stat-card {
+  padding: 2.45rem;
 }
 
-.admin-general-home .stat-card::after {
-  width: 72px;
-  height: 72px;
-  top: -12px;
-  right: -12px;
+body.page-home .stat-card::after {
+  width: 168px;
+  height: 168px;
+  top: -20px;
+  right: -20px;
 }
 
-.admin-general-home .stat-card h3 {
-  font-size: 1.35rem;
-  margin-bottom: 0.3rem;
+body.page-home .stat-card h3 {
+  font-size: 3.15rem;
+  font-weight: 700;
+  margin-bottom: 0.5rem;
 }
 
-.admin-general-home .stat-card p {
-  font-size: 0.75rem;
-  letter-spacing: 0.35px;
+body.page-home .stat-card p {
+  font-size: 1.225rem;
+  font-weight: 700;
+  letter-spacing: 0.5px;
 }
 
-.admin-general-home .stat-card:hover {
-  transform: translateY(-3px);
+body.page-home .stat-card p i {
+  font-weight: 700;
 }
 
-.admin-general-home .row.g-3 {
-  --bs-gutter-y: 0.75rem;
-  --bs-gutter-x: 0.75rem;
+body.page-home .stat-card:hover {
+  transform: translateY(-6px);
+}
+
+body.page-home .admin-general-home .row.g-3,
+body.page-home .row.g-3 {
+  --bs-gutter-y: 1rem;
+  --bs-gutter-x: 1rem;
 }

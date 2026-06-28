@@ -177,7 +177,7 @@ $stats_admin_torneo = isset($stats_admin_torneo) ? (int)$stats_admin_torneo : 0;
         <div class="card-header bg-light d-flex flex-wrap justify-content-between align-items-center gap-2">
             <h5 class="mb-0"><i class="fas fa-sitemap me-2"></i>Asociaciones de la organización</h5>
             <?php if (empty($is_admin_general)): ?>
-                <a href="<?= htmlspecialchars(class_exists('AppHelpers') ? AppHelpers::dashboard('clubes_asociados') : 'index.php?page=clubes_asociados') ?>" class="btn btn-sm btn-outline-primary">
+                <a href="<?= htmlspecialchars(class_exists('AppHelpers') ? AppHelpers::dashboard('asociacion_hub', ['org_id' => (int) ($organizacion['id'] ?? 0), 'tab' => 'clubes']) : 'index.php?page=home') ?>" class="btn btn-sm btn-outline-primary">
                     <i class="fas fa-cog me-1"></i>Gestionar altas de clubes
                 </a>
             <?php endif; ?>
@@ -225,7 +225,7 @@ $stats_admin_torneo = isset($stats_admin_torneo) ? (int)$stats_admin_torneo : 0;
                                             <a href="index.php?page=organizaciones&id=<?= (int)$organizacion['id'] ?>&club_id=<?= (int)$c['id'] ?>" class="btn btn-sm btn-outline-primary" title="Club en base de datos: id interno <?= (int)$c['id'] ?> (distinto del código de federación de la org)">
                                                 <i class="fas fa-eye me-1"></i>Ver detalle y afiliados
                                             </a>
-                                            <a href="<?= htmlspecialchars(AppHelpers::dashboard('clubes_asociados', ['club_id' => $c['id']])) ?>" class="btn btn-sm btn-outline-secondary ms-1" title="Editar solo este club (mismo id que ves en la fila; datos de tu federación)">
+                                            <a href="<?= htmlspecialchars(AppHelpers::dashboard('asociacion_hub', ['org_id' => (int) ($organizacion['id'] ?? 0), 'tab' => 'clubes', 'club_id' => $c['id']])) ?>" class="btn btn-sm btn-outline-secondary ms-1" title="Editar solo este club (mismo id que ves en la fila; datos de tu federación)">
                                                 <i class="fas fa-edit me-1"></i>Editar Club
                                             </a>
                                         <?php else: ?>

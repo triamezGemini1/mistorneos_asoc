@@ -2,7 +2,7 @@
 /** @var string $context_label $es_particulares $qs_base $organizacion_id $organizaciones_filtro $por_entidad $por_organizacion $total_eventos $total_jugadores $has_tipo_org $context $scope_solo_mi_org */
 ?>
 <div class="container-fluid ds-estadisticas-torneos-13 py-4">
-    <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-4">
+    <div class="report-page-title-bar d-flex justify-content-between align-items-center flex-wrap gap-2">
         <div>
             <h1 class="h3 mb-1">
                 <i class="fas fa-chart-line me-2"></i>Reporte de torneos — <?= htmlspecialchars($context_label) ?>

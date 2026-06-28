@@ -11,6 +11,7 @@ require_once __DIR__ . '/../config/auth.php';
 require_once __DIR__ . '/../config/db.php';
 require_once __DIR__ . '/../lib/TorneosEstructuraService.php';
 require_once __DIR__ . '/../lib/OrganizacionDashboardStats.php';
+require_once __DIR__ . '/../lib/AsociacionAdminHelper.php';
 
 // Permisos verificados en public/index.php antes del layout.
 $is_admin_general = Auth::isAdminGeneral();
@@ -18,6 +19,11 @@ $is_admin_club = Auth::isAdminClub();
 $scope_solo_mi_org = !$is_admin_general && $is_admin_club;
 
 $pdo = DB::pdo();
+$puede_crear_torneo = AsociacionAdminHelper::puedeCrearYAdministrarTorneos(
+    $pdo,
+    (int) Auth::id(),
+    (string) (Auth::user()['role'] ?? '')
+);
 $context = isset($_GET['context']) && TorneosEstructuraService::isValidContext((string) $_GET['context'])
     ? (string) $_GET['context']
     : TorneosEstructuraService::CONTEXT_ASOCIACIONES;
@@ -86,6 +92,11 @@ $page_title = ($vista === 'reporte' ? 'Reporte de torneos' : 'Torneos') . ' — 
 $qs_base = 'index.php?page=torneos_estructura&context=' . urlencode($context);
 if ($organizacion_id > 0 && $is_admin_general) {
     $qs_base .= '&organizacion_id=' . $organizacion_id;
+}
+
+$nuevo_torneo_url = 'index.php?page=tournaments&action=new';
+if ($organizacion_id > 0) {
+    $nuevo_torneo_url .= '&organizacion_id=' . $organizacion_id;
 }
 
 include __DIR__ . '/torneos_estructura/' . ($vista === 'reporte' ? 'reporte.php' : 'lista.php');

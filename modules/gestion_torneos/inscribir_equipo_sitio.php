@@ -485,7 +485,7 @@ $api_guardar_equipo = $base_url . ($use_standalone ? '?' : '&') . 'action=guarda
                         </div>
                         <?php if (empty($clubes_disponibles) && !empty($is_admin_club ?? false)): ?>
                             <small class="text-muted d-block mb-2">
-                                <a href="<?php echo (function_exists('AppHelpers') ? AppHelpers::dashboard('clubes_asociados') : 'index.php?page=clubes_asociados'); ?>">Registrar asociación</a> en Asociaciones de la organización
+                                <a href="<?php echo htmlspecialchars(function_exists('AppHelpers') ? AppHelpers::dashboard('home') : 'index.php?page=home'); ?>">Registrar asociación</a> en Asociaciones de la organización
                             </small>
                         <?php endif; ?>
 

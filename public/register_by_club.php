@@ -19,16 +19,81 @@ require_once __DIR__ . '/../config/csrf.php';
 require_once __DIR__ . '/../lib/security.php';
 require_once __DIR__ . '/../lib/LandingDataService.php';
 require_once __DIR__ . '/../lib/app_helpers.php';
+require_once __DIR__ . '/../lib/ClubHelper.php';
+require_once __DIR__ . '/../lib/ClubNavigation.php';
 require_once __DIR__ . '/includes/branding_init.php';
 
-// Si ya está logueado, redirigir
-if (isset($_SESSION['user'])) {
+/**
+ * Sube imagen (foto o cédula). Devuelve ruta relativa o null si no hubo archivo.
+ */
+function register_by_club_upload_image(array $file, string $subdir, ?string $oldRelativePath, string $namePrefix): ?string
+{
+    if (!isset($file['tmp_name']) || $file['tmp_name'] === '' || ($file['error'] ?? UPLOAD_ERR_NO_FILE) === UPLOAD_ERR_NO_FILE) {
+        return null;
+    }
+    if (($file['error'] ?? UPLOAD_ERR_OK) !== UPLOAD_ERR_OK) {
+        throw new RuntimeException('Error al subir la imagen');
+    }
+    $allowed_ext = ['jpg', 'jpeg', 'png', 'gif', 'webp'];
+    $ext = strtolower(pathinfo((string) ($file['name'] ?? ''), PATHINFO_EXTENSION));
+    if (!in_array($ext, $allowed_ext, true)) {
+        throw new RuntimeException('Tipo de archivo no permitido. Use JPG, PNG, GIF o WebP');
+    }
+    $allowed_mime = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
+    $mime = (string) ($file['type'] ?? '');
+    if ($mime !== '' && !in_array($mime, $allowed_mime, true)) {
+        throw new RuntimeException('Tipo de imagen no permitido');
+    }
+    if (($file['size'] ?? 0) > 2 * 1024 * 1024) {
+        throw new RuntimeException('La imagen no debe superar 2MB');
+    }
+    $upload_dir = dirname(__DIR__) . '/uploads/' . $subdir . '/';
+    if (!is_dir($upload_dir)) {
+        mkdir($upload_dir, 0755, true);
+    }
+    $filename = $namePrefix . '_' . time() . '.' . $ext;
+    $target = $upload_dir . $filename;
+    if (!move_uploaded_file($file['tmp_name'], $target)) {
+        throw new RuntimeException('No se pudo guardar la imagen');
+    }
+    if ($oldRelativePath !== null && $oldRelativePath !== '') {
+        $old = dirname(__DIR__) . '/' . ltrim(str_replace(['../', '..\\'], '', $oldRelativePath), '/\\');
+        if (is_file($old)) {
+            @unlink($old);
+        }
+    }
+    return 'uploads/' . $subdir . '/' . $filename;
+}
+
+$edit_user_id = isset($_GET['user_id']) ? (int) $_GET['user_id'] : 0;
+$return_url_param = ClubNavigation::safeReturnUrl($_GET['return_url'] ?? $_POST['return_url'] ?? '');
+$es_edicion_afiliado = false;
+$afiliado_edit = null;
+
+if ($edit_user_id > 0) {
+    require_once __DIR__ . '/../config/auth.php';
+    Auth::requireRole(['admin_general', 'admin_club']);
+    $es_edicion_afiliado = true;
+}
+
+// Si ya está logueado como jugador, redirigir (excepto admin editando afiliado)
+if (isset($_SESSION['user']) && !$es_edicion_afiliado) {
     header('Location: index.php');
     exit;
 }
 
 
 $pdo = DB::pdo();
+$has_cedula_image_col = false;
+try {
+    $has_cedula_image_col = (bool) $pdo->query("SHOW COLUMNS FROM usuarios LIKE 'cedula_image_path'")->fetch(PDO::FETCH_ASSOC);
+    if (!$has_cedula_image_col) {
+        $pdo->exec("ALTER TABLE usuarios ADD COLUMN cedula_image_path VARCHAR(200) NULL DEFAULT NULL COMMENT 'Imagen escaneada de cédula' AFTER photo_path");
+        $has_cedula_image_col = true;
+    }
+} catch (Throwable $ignored) {
+    $has_cedula_image_col = false;
+}
 $base_url = app_base_url();
 $landingService = new LandingDataService($pdo);
 $has_cod_org = false;
@@ -42,13 +107,16 @@ $step = (int)($_GET['step'] ?? 1);
 $entidad_id = isset($_GET['entidad']) ? (int)$_GET['entidad'] : 0;
 $org_id = isset($_GET['org']) ? (int)$_GET['org'] : 0;
 $club_id = isset($_GET['club_id']) ? (int)$_GET['club_id'] : 0;
-$es_invitacion = $club_id > 0 && !isset($_GET['step']) && !isset($_GET['entidad']) && !isset($_GET['org']);
+if ($es_edicion_afiliado && $club_id <= 0 && isset($_POST['club_id'])) {
+    $club_id = (int) $_POST['club_id'];
+}
+$es_invitacion = $club_id > 0 && !isset($_GET['step']) && !isset($_GET['entidad']) && !isset($_GET['org']) && !$es_edicion_afiliado;
 
 $error = '';
 $success = '';
 
-// Si es invitación directa, ir directo al paso 3 (formulario)
-if ($es_invitacion) {
+// Si es invitación directa o edición admin, ir al paso 3 (formulario)
+if ($es_invitacion || $es_edicion_afiliado) {
     $step = 3;
 }
 
@@ -130,11 +198,37 @@ if ($club_id > 0) {
     $org_join = $has_cod_org
         ? "LEFT JOIN organizaciones o ON (c.cod_org = o.id OR c.cod_org = o.cod_org)"
         : "LEFT JOIN organizaciones o ON c.cod_org = o.id";
-    $stmt = $pdo->prepare("SELECT c.*, o.entidad as org_entidad FROM clubes c {$org_join} WHERE c.id = ? AND c.estatus = 1");
+    $stmt = $pdo->prepare("SELECT c.*, o.entidad as org_entidad FROM clubes c {$org_join} WHERE c.id = ?" . ($es_edicion_afiliado ? '' : ' AND c.estatus = 1'));
     $stmt->execute([$club_id]);
     $club_info = $stmt->fetch(PDO::FETCH_ASSOC);
     if ($club_info && !$entidad_id && ($club_info['org_entidad'] ?? $club_info['entidad'] ?? 0) > 0) {
         $entidad_id = (int)($club_info['org_entidad'] ?? $club_info['entidad'] ?? 0);
+    }
+}
+
+// Cargar afiliado para edición (admin)
+if ($es_edicion_afiliado && $club_info && $edit_user_id > 0) {
+    $current_admin = Auth::user();
+    $admin_id = (int) ($current_admin['id'] ?? 0);
+    $role = (string) ($current_admin['role'] ?? '');
+    $puede_editar = false;
+    if ($role === 'admin_general') {
+        $puede_editar = true;
+    } elseif ($role === 'admin_club') {
+        $puede_editar = ClubHelper::isClubManagedByAdmin($admin_id, $club_id);
+    }
+    if (!$puede_editar) {
+        http_response_code(403);
+        die('No tiene permisos para editar afiliados de este club.');
+    }
+    [$scopeSqlAf, $scopeParamsAf] = ClubHelper::afiliadosMatchSqlAndParams($pdo, $club_info, $club_id);
+    $afiliado_edit = ClubHelper::fetchAfiliadoInClub($pdo, $club_info, $club_id, $edit_user_id);
+    if (!$afiliado_edit) {
+        http_response_code(404);
+        die('Afiliado no encontrado en este club.');
+    }
+    if ($return_url_param === null) {
+        $return_url_param = ClubNavigation::detailUrl($club_id, ['from' => 'clubes_asociados']);
     }
 }
 
@@ -164,8 +258,172 @@ if ($entidad_nombre === '' && $entidad_form > 0) {
     $entidad_nombre = "Entidad $entidad_form";
 }
 
-// Procesar registro
+// Procesar registro o actualización de afiliado
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && $club_id > 0 && $club_info) {
+    $post_user_id = (int) ($_POST['user_id'] ?? 0);
+    $modo_editar = $post_user_id > 0 && $es_edicion_afiliado;
+
+    if ($modo_editar) {
+        CSRF::validate();
+        $nacionalidad = trim($_POST['nacionalidad'] ?? 'V');
+        $cedula = preg_replace('/\D/', '', trim($_POST['cedula'] ?? ''));
+        $nombre = trim($_POST['nombre'] ?? '');
+        $sexo = strtoupper(trim($_POST['sexo'] ?? ''));
+        if (!in_array($sexo, ['M', 'F', 'O'], true)) {
+            $sexo = null;
+        }
+        $email = trim($_POST['email'] ?? '');
+        $celular = trim($_POST['celular'] ?? '');
+        $fechnac = trim($_POST['fechnac'] ?? '');
+        $username = trim($_POST['username'] ?? '');
+        $password = trim((string) ($_POST['password'] ?? ''));
+        $password_confirm = trim((string) ($_POST['password_confirm'] ?? ''));
+        $entidad_form = (int) ($_POST['entidad'] ?? $entidad_form);
+        $return_after = ClubNavigation::safeReturnUrl($_POST['return_url'] ?? '') ?? ClubNavigation::detailUrl($club_id, ['from' => 'clubes_asociados']);
+
+        if ($cedula === '' || $nombre === '' || $username === '' || $entidad_form <= 0) {
+            $error = 'Todos los campos marcados con * son requeridos';
+        } elseif ($password !== '' && strlen($password) < 6) {
+            $error = 'La contraseña debe tener al menos 6 caracteres';
+        } elseif ($password !== '' && $password !== $password_confirm) {
+            $error = 'Las contraseñas no coinciden';
+        } elseif (!empty($email) && !filter_var($email, FILTER_VALIDATE_EMAIL)) {
+            $error = 'El email no es válido';
+        } else {
+            try {
+                [$scopeSqlAf, $scopeParamsAf] = ClubHelper::afiliadosMatchSqlAndParams($pdo, $club_info, $club_id);
+                if (! ClubHelper::afiliadoBelongsToClub($pdo, $club_info, $club_id, $post_user_id)) {
+                    $error = 'Afiliado no pertenece a este club';
+                } else {
+                    $stmtDup = $pdo->prepare('SELECT id FROM usuarios WHERE cedula = ? AND id != ?');
+                    $stmtDup->execute([$cedula, $post_user_id]);
+                    if ($stmtDup->fetch()) {
+                        $error = 'Ya existe otro usuario con esta cédula';
+                    } else {
+                        $stmtDupU = $pdo->prepare('SELECT id FROM usuarios WHERE username = ? AND id != ?');
+                        $stmtDupU->execute([$username, $post_user_id]);
+                        if ($stmtDupU->fetch()) {
+                            $error = 'El nombre de usuario ya está en uso';
+                        } else {
+                            $photo_path = (string) ($afiliado_edit['photo_path'] ?? '');
+                            $cedula_image_path = (string) ($afiliado_edit['cedula_image_path'] ?? '');
+                            try {
+                                $newPhoto = register_by_club_upload_image(
+                                    $_FILES['photo'] ?? [],
+                                    'photos',
+                                    $photo_path !== '' ? $photo_path : null,
+                                    'user_' . $post_user_id
+                                );
+                                if ($newPhoto !== null) {
+                                    $photo_path = $newPhoto;
+                                }
+                                if ($has_cedula_image_col) {
+                                    $newCedulaImg = register_by_club_upload_image(
+                                        $_FILES['cedula_imagen'] ?? [],
+                                        'cedulas',
+                                        $cedula_image_path !== '' ? $cedula_image_path : null,
+                                        'cedula_' . $post_user_id
+                                    );
+                                    if ($newCedulaImg !== null) {
+                                        $cedula_image_path = $newCedulaImg;
+                                    }
+                                }
+                            } catch (RuntimeException $uploadEx) {
+                                $error = $uploadEx->getMessage();
+                            }
+                            $afiliado_edit['photo_path'] = $photo_path;
+                            if ($has_cedula_image_col) {
+                                $afiliado_edit['cedula_image_path'] = $cedula_image_path;
+                            }
+                            if ($error === '') {
+                            if ($password !== '') {
+                                $hash = Security::hashPassword($password);
+                                if ($has_cedula_image_col) {
+                                    $stmtUp = $pdo->prepare('UPDATE usuarios SET nacionalidad = ?, cedula = ?, nombre = ?, sexo = ?, email = ?, celular = ?, fechnac = ?, username = ?, password_hash = ?, entidad = ?, club_id = ?, photo_path = ?, cedula_image_path = ?, updated_at = NOW() WHERE id = ?');
+                                    $stmtUp->execute([
+                                        in_array($nacionalidad, ['V', 'E', 'J', 'P'], true) ? strtoupper($nacionalidad) : 'V',
+                                        $cedula,
+                                        $nombre,
+                                        $sexo,
+                                        $email ?: null,
+                                        $celular ?: null,
+                                        $fechnac ?: null,
+                                        $username,
+                                        $hash,
+                                        $entidad_form,
+                                        $club_id,
+                                        $photo_path !== '' ? $photo_path : null,
+                                        $cedula_image_path !== '' ? $cedula_image_path : null,
+                                        $post_user_id,
+                                    ]);
+                                } else {
+                                    $stmtUp = $pdo->prepare('UPDATE usuarios SET nacionalidad = ?, cedula = ?, nombre = ?, sexo = ?, email = ?, celular = ?, fechnac = ?, username = ?, password_hash = ?, entidad = ?, club_id = ?, photo_path = ?, updated_at = NOW() WHERE id = ?');
+                                    $stmtUp->execute([
+                                        in_array($nacionalidad, ['V', 'E', 'J', 'P'], true) ? strtoupper($nacionalidad) : 'V',
+                                        $cedula,
+                                        $nombre,
+                                        $sexo,
+                                        $email ?: null,
+                                        $celular ?: null,
+                                        $fechnac ?: null,
+                                        $username,
+                                        $hash,
+                                        $entidad_form,
+                                        $club_id,
+                                        $photo_path !== '' ? $photo_path : null,
+                                        $post_user_id,
+                                    ]);
+                                }
+                            } else {
+                                if ($has_cedula_image_col) {
+                                    $stmtUp = $pdo->prepare('UPDATE usuarios SET nacionalidad = ?, cedula = ?, nombre = ?, sexo = ?, email = ?, celular = ?, fechnac = ?, username = ?, entidad = ?, club_id = ?, photo_path = ?, cedula_image_path = ?, updated_at = NOW() WHERE id = ?');
+                                    $stmtUp->execute([
+                                        in_array($nacionalidad, ['V', 'E', 'J', 'P'], true) ? strtoupper($nacionalidad) : 'V',
+                                        $cedula,
+                                        $nombre,
+                                        $sexo,
+                                        $email ?: null,
+                                        $celular ?: null,
+                                        $fechnac ?: null,
+                                        $username,
+                                        $entidad_form,
+                                        $club_id,
+                                        $photo_path !== '' ? $photo_path : null,
+                                        $cedula_image_path !== '' ? $cedula_image_path : null,
+                                        $post_user_id,
+                                    ]);
+                                } else {
+                                    $stmtUp = $pdo->prepare('UPDATE usuarios SET nacionalidad = ?, cedula = ?, nombre = ?, sexo = ?, email = ?, celular = ?, fechnac = ?, username = ?, entidad = ?, club_id = ?, photo_path = ?, updated_at = NOW() WHERE id = ?');
+                                    $stmtUp->execute([
+                                        in_array($nacionalidad, ['V', 'E', 'J', 'P'], true) ? strtoupper($nacionalidad) : 'V',
+                                        $cedula,
+                                        $nombre,
+                                        $sexo,
+                                        $email ?: null,
+                                        $celular ?: null,
+                                        $fechnac ?: null,
+                                        $username,
+                                        $entidad_form,
+                                        $club_id,
+                                        $photo_path !== '' ? $photo_path : null,
+                                        $post_user_id,
+                                    ]);
+                                }
+                            }
+                            header('Location: ' . $return_after . (str_contains($return_after, '?') ? '&' : '?') . 'success=' . urlencode('Afiliado actualizado correctamente'));
+                            exit;
+                            }
+                        }
+                    }
+                }
+            } catch (Exception $e) {
+                $error = 'Error al actualizar: ' . $e->getMessage();
+            }
+        }
+        $edit_user_id = $post_user_id;
+        $afiliado_edit = $afiliado_edit ?: ['id' => $post_user_id];
+        $step = 3;
+    } else {
     require_once __DIR__ . '/../lib/RateLimiter.php';
     if (!RateLimiter::canSubmit('register_by_club', 30)) {
         $error = 'Por favor espera 30 segundos antes de intentar registrarte de nuevo.';
@@ -235,8 +493,38 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $club_id > 0 && $club_info) {
             }
         }
     }
+    }
     $step = 3;
 }
+
+$form_values = [
+    'nacionalidad' => 'V',
+    'cedula' => '',
+    'nombre' => '',
+    'sexo' => '',
+    'email' => '',
+    'celular' => '',
+    'username' => '',
+    'fechnac' => '',
+    'photo_path' => '',
+    'cedula_image_path' => '',
+];
+if ($es_edicion_afiliado && is_array($afiliado_edit)) {
+    $form_values = [
+        'nacionalidad' => (string) ($afiliado_edit['nacionalidad'] ?? 'V'),
+        'cedula' => (string) ($afiliado_edit['cedula'] ?? ''),
+        'nombre' => (string) ($afiliado_edit['nombre'] ?? ''),
+        'sexo' => (string) ($afiliado_edit['sexo'] ?? ''),
+        'email' => (string) ($afiliado_edit['email'] ?? ''),
+        'celular' => (string) ($afiliado_edit['celular'] ?? ''),
+        'username' => (string) ($afiliado_edit['username'] ?? ''),
+        'fechnac' => (string) ($afiliado_edit['fechnac'] ?? ''),
+        'photo_path' => (string) ($afiliado_edit['photo_path'] ?? ''),
+        'cedula_image_path' => (string) ($afiliado_edit['cedula_image_path'] ?? ''),
+    ];
+}
+$afiliado_photo_url = AppHelpers::imageUrl($form_values['photo_path'] !== '' ? $form_values['photo_path'] : null);
+$afiliado_cedula_image_url = AppHelpers::imageUrl($form_values['cedula_image_path'] !== '' ? $form_values['cedula_image_path'] : null);
 
 $landing_url = AppHelpers::url('go_landing.php');
 ?>
@@ -246,7 +534,7 @@ $landing_url = AppHelpers::url('go_landing.php');
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes">
     <meta name="theme-color" content="#1a365d">
-    <title><?= htmlspecialchars(Branding::pageTitle('Registro por Club')) ?></title>
+    <title><?= htmlspecialchars(Branding::pageTitle($es_edicion_afiliado ? 'Editar afiliado' : 'Registro por Club')) ?></title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
@@ -276,6 +564,9 @@ $landing_url = AppHelpers::url('go_landing.php');
         .btn-register:hover { background: linear-gradient(135deg, #38a169 0%, #2f855a 100%); }
         .search-status { font-size: 0.85rem; margin-top: 0.5rem; }
         .selected-club-badge { background: var(--accent); color: white; padding: 0.5rem 1rem; border-radius: 20px; display: inline-block; margin-bottom: 1rem; }
+        .afiliado-image-box { border: 1px dashed #cbd5e0; border-radius: 12px; padding: 1rem; background: #f8fafc; height: 100%; }
+        .afiliado-image-box .current-image { max-height: 140px; object-fit: cover; border-radius: 8px; }
+        .afiliado-image-box .image-placeholder { width: 100%; min-height: 120px; border-radius: 8px; background: #edf2f7; display: flex; align-items: center; justify-content: center; color: #a0aec0; font-size: 2rem; margin-bottom: 0.5rem; }
         @media (max-width: 576px) { .step-line { width: 20px; } }
     </style>
 </head>
@@ -376,11 +667,20 @@ $landing_url = AppHelpers::url('go_landing.php');
                             </div>
                         <?php endif; ?>
 
-                        <?php elseif ($step === 3 && (($org_id > 0 && $org_info && !$es_invitacion) || ($club_info && $es_invitacion))): ?>
+                        <?php elseif ($step === 3 && (($org_id > 0 && $org_info && !$es_invitacion && !$es_edicion_afiliado) || ($club_info && ($es_invitacion || $es_edicion_afiliado)))): ?>
                         <!-- PASO 3: Clubes + Formulario (o solo formulario si es invitación) -->
                         <?php if ($es_invitacion): ?>
                         <div class="mb-4">
                             <a href="<?= htmlspecialchars($landing_url) ?>" class="btn btn-outline-secondary btn-sm"><i class="fas fa-arrow-left me-1"></i>Volver al Inicio</a>
+                        </div>
+                        <?php elseif ($es_edicion_afiliado && $return_url_param):
+                            $fromRet = 'clubs';
+                            if (preg_match('/[?&]from=([^&]+)/', $return_url_param, $mRet)) {
+                                $fromRet = urldecode($mRet[1]);
+                            }
+                        ?>
+                        <div class="mb-4">
+                            <a href="<?= htmlspecialchars($return_url_param) ?>" class="btn btn-outline-secondary btn-sm"><i class="fas fa-arrow-left me-1"></i><?= htmlspecialchars(ClubNavigation::returnLabelFromRequest(['from' => $fromRet])) ?></a>
                         </div>
                         <?php else: ?>
                         <div class="mb-4 d-flex flex-wrap gap-2">
@@ -426,7 +726,12 @@ $landing_url = AppHelpers::url('go_landing.php');
                             <?php if (!empty($club_info['delegado'])): ?><br><small class="opacity-90"><i class="fas fa-user me-1"></i><?= htmlspecialchars($club_info['delegado']) ?></small><?php endif; ?>
                         </div>
 
-                        <?php if ($es_invitacion): ?>
+                        <?php if ($es_edicion_afiliado): ?>
+                        <div class="info-box">
+                            <i class="fas fa-user-edit text-success me-2"></i>
+                            <strong>Editar afiliado:</strong> Actualice los datos del jugador en este club.
+                        </div>
+                        <?php elseif ($es_invitacion): ?>
                         <div class="info-box">
                             <i class="fas fa-info-circle text-success me-2"></i>
                             <strong>Invitación directa:</strong> Te registras en este club. Podrás participar en cualquier torneo de la plataforma.
@@ -451,28 +756,34 @@ $landing_url = AppHelpers::url('go_landing.php');
                                 </div>
                             </div>
                         <?php else: ?>
-                            <form method="POST" id="registerForm">
+                            <form method="POST" id="registerForm"<?= $es_edicion_afiliado ? ' enctype="multipart/form-data"' : '' ?>>
                                 <input type="hidden" name="csrf_token" value="<?= CSRF::token() ?>">
-                                <input type="hidden" name="fechnac" id="fechnac" value="">
+                                <input type="hidden" name="fechnac" id="fechnac" value="<?= htmlspecialchars($form_values['fechnac']) ?>">
                                 <input type="hidden" name="club_id" value="<?= (int)$club_id ?>">
+                                <?php if ($es_edicion_afiliado && $edit_user_id > 0): ?>
+                                    <input type="hidden" name="user_id" value="<?= (int) $edit_user_id ?>">
+                                    <?php if ($return_url_param): ?>
+                                    <input type="hidden" name="return_url" value="<?= htmlspecialchars($return_url_param, ENT_QUOTES, 'UTF-8') ?>">
+                                    <?php endif; ?>
+                                <?php endif; ?>
 
                                 <h6 class="text-muted mb-3"><i class="fas fa-user me-2"></i>Datos Personales</h6>
                                 <div class="row">
                                     <div class="col-md-3 mb-3">
                                         <label class="form-label">Nacionalidad *</label>
                                         <select name="nacionalidad" id="nacionalidad" class="form-select" required>
-                                            <option value="V" selected>V</option>
-                                            <option value="E">E</option>
+                                            <option value="V" <?= $form_values['nacionalidad'] === 'V' ? 'selected' : '' ?>>V</option>
+                                            <option value="E" <?= $form_values['nacionalidad'] === 'E' ? 'selected' : '' ?>>E</option>
                                         </select>
                                     </div>
                                     <div class="col-md-4 mb-3">
                                         <label class="form-label">Cédula *</label>
-                                        <input type="text" name="cedula" id="cedula" class="form-control" value="" onblur="debouncedBuscarPersona()" required>
-                                        <div id="busqueda_resultado" class="search-status"></div>
+                                        <input type="text" name="cedula" id="cedula" class="form-control" value="<?= htmlspecialchars($form_values['cedula']) ?>" <?= $es_edicion_afiliado ? 'readonly' : 'onblur="debouncedBuscarPersona()"' ?> required>
+                                        <?php if (!$es_edicion_afiliado): ?><div id="busqueda_resultado" class="search-status"></div><?php endif; ?>
                                     </div>
                                     <div class="col-md-5 mb-3">
                                         <label class="form-label">Nombre Completo *</label>
-                                        <input type="text" name="nombre" id="nombre" class="form-control" value="" required>
+                                        <input type="text" name="nombre" id="nombre" class="form-control" value="<?= htmlspecialchars($form_values['nombre']) ?>" required>
                                     </div>
                                 </div>
                                 <div class="row">
@@ -480,18 +791,18 @@ $landing_url = AppHelpers::url('go_landing.php');
                                         <label for="sexo" class="form-label">Sexo *</label>
                                         <select name="sexo" id="sexo" class="form-select" required>
                                             <option value="">-- Seleccionar --</option>
-                                            <option value="M">Masculino</option>
-                                            <option value="F">Femenino</option>
-                                            <option value="O">Otro</option>
+                                            <option value="M" <?= $form_values['sexo'] === 'M' ? 'selected' : '' ?>>Masculino</option>
+                                            <option value="F" <?= $form_values['sexo'] === 'F' ? 'selected' : '' ?>>Femenino</option>
+                                            <option value="O" <?= $form_values['sexo'] === 'O' ? 'selected' : '' ?>>Otro</option>
                                         </select>
                                     </div>
                                     <div class="col-md-4 mb-3">
                                         <label class="form-label">Email</label>
-                                        <input type="email" name="email" id="email" class="form-control" value="">
+                                        <input type="email" name="email" id="email" class="form-control" value="<?= htmlspecialchars($form_values['email']) ?>">
                                     </div>
                                     <div class="col-md-4 mb-3">
                                         <label class="form-label">Celular</label>
-                                        <input type="text" name="celular" id="celular" class="form-control" value="">
+                                        <input type="text" name="celular" id="celular" class="form-control" value="<?= htmlspecialchars($form_values['celular']) ?>">
                                     </div>
                                 </div>
                                 <div class="mb-3">
@@ -500,25 +811,68 @@ $landing_url = AppHelpers::url('go_landing.php');
                                     <input type="hidden" name="entidad" value="<?= (int)$entidad_form ?>">
                                 </div>
 
+                                <?php if ($es_edicion_afiliado): ?>
+                                <hr class="my-4">
+                                <h6 class="text-muted mb-3"><i class="fas fa-images me-2"></i>Foto y documento de identidad</h6>
+                                <div class="row mb-3">
+                                    <div class="col-md-6 mb-3">
+                                        <div class="afiliado-image-box">
+                                            <label class="form-label" for="photo-input"><i class="fas fa-camera me-1"></i>Foto del jugador</label>
+                                            <?php if ($afiliado_photo_url): ?>
+                                                <div class="mb-2 text-center">
+                                                    <img src="<?= htmlspecialchars($afiliado_photo_url) ?>" alt="Foto actual" class="img-thumbnail current-image">
+                                                    <div class="small text-muted mt-1">Imagen actual</div>
+                                                </div>
+                                            <?php else: ?>
+                                                <div class="image-placeholder mb-2"><i class="fas fa-user"></i></div>
+                                            <?php endif; ?>
+                                            <input type="file" name="photo" id="photo-input" class="form-control form-control-sm" accept="image/jpeg,image/png,image/gif,image/webp" data-preview-target="afiliado-photo-preview">
+                                            <div id="afiliado-photo-preview"></div>
+                                            <small class="text-muted d-block mt-1">JPG, PNG, GIF o WebP. Máximo 2MB.</small>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-6 mb-3">
+                                        <div class="afiliado-image-box">
+                                            <label class="form-label" for="cedula-imagen-input"><i class="fas fa-id-card me-1"></i>Imagen de cédula</label>
+                                            <?php if ($afiliado_cedula_image_url): ?>
+                                                <div class="mb-2 text-center">
+                                                    <img src="<?= htmlspecialchars($afiliado_cedula_image_url) ?>" alt="Cédula actual" class="img-thumbnail current-image">
+                                                    <div class="small text-muted mt-1">Documento actual</div>
+                                                </div>
+                                            <?php else: ?>
+                                                <div class="image-placeholder mb-2"><i class="fas fa-id-card"></i></div>
+                                            <?php endif; ?>
+                                            <input type="file" name="cedula_imagen" id="cedula-imagen-input" class="form-control form-control-sm" accept="image/jpeg,image/png,image/gif,image/webp" data-preview-target="afiliado-cedula-preview">
+                                            <div id="afiliado-cedula-preview"></div>
+                                            <small class="text-muted d-block mt-1">Foto o escaneo de la cédula. Máximo 2MB.</small>
+                                        </div>
+                                    </div>
+                                </div>
+                                <?php endif; ?>
+
                                 <hr class="my-4">
                                 <h6 class="text-muted mb-3"><i class="fas fa-key me-2"></i>Credenciales de Acceso</h6>
                                 <div class="row">
                                     <div class="col-md-4 mb-3">
                                         <label class="form-label">Nombre de Usuario *</label>
-                                        <input type="text" name="username" id="username" class="form-control" value="" required>
+                                        <input type="text" name="username" id="username" class="form-control" value="<?= htmlspecialchars($form_values['username']) ?>" required>
                                     </div>
                                     <div class="col-md-4 mb-3">
-                                        <label class="form-label">Contraseña *</label>
-                                        <input type="password" name="password" id="password" class="form-control" required>
-                                        <small class="text-muted">Mínimo 6 caracteres</small>
+                                        <label class="form-label">Contraseña <?= $es_edicion_afiliado ? '' : '*' ?></label>
+                                        <input type="password" name="password" id="password" class="form-control" <?= $es_edicion_afiliado ? '' : 'required' ?>>
+                                        <small class="text-muted"><?= $es_edicion_afiliado ? 'Dejar vacío para mantener la actual' : 'Mínimo 6 caracteres' ?></small>
                                     </div>
                                     <div class="col-md-4 mb-3">
-                                        <label class="form-label">Confirmar *</label>
-                                        <input type="password" name="password_confirm" id="password_confirm" class="form-control" required>
+                                        <label class="form-label">Confirmar <?= $es_edicion_afiliado ? '' : '*' ?></label>
+                                        <input type="password" name="password_confirm" id="password_confirm" class="form-control" <?= $es_edicion_afiliado ? '' : 'required' ?>>
                                     </div>
                                 </div>
                                 <button type="submit" class="btn btn-register btn-primary w-100 mt-3">
-                                    <i class="fas fa-user-plus me-2"></i>Registrarme en <?= htmlspecialchars($club_info['nombre']) ?>
+                                    <?php if ($es_edicion_afiliado): ?>
+                                        <i class="fas fa-save me-2"></i>Guardar cambios del afiliado
+                                    <?php else: ?>
+                                        <i class="fas fa-user-plus me-2"></i>Registrarme en <?= htmlspecialchars($club_info['nombre']) ?>
+                                    <?php endif; ?>
                                 </button>
                             </form>
                         <?php endif; ?>
@@ -532,9 +886,11 @@ $landing_url = AppHelpers::url('go_landing.php');
                         <?php endif; ?>
 
                         <div class="text-center mt-4 pt-3 border-top">
+                            <?php if (!$es_edicion_afiliado): ?>
                             <p class="text-muted mb-2">¿Ya tienes cuenta?</p>
                             <a href="login.php" class="btn btn-outline-primary btn-sm"><i class="fas fa-sign-in-alt me-1"></i>Iniciar Sesión</a>
-                            <a href="<?= htmlspecialchars($landing_url) ?>" class="btn btn-outline-secondary btn-sm ms-2"><i class="fas fa-home me-1"></i>Inicio</a>
+                            <?php endif; ?>
+                            <a href="<?= htmlspecialchars($landing_url) ?>" class="btn btn-outline-secondary btn-sm <?= $es_edicion_afiliado ? '' : 'ms-2' ?>"><i class="fas fa-home me-1"></i>Inicio</a>
                         </div>
                     </div>
                 </div>
@@ -544,6 +900,9 @@ $landing_url = AppHelpers::url('go_landing.php');
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js" defer></script>
     <script src="<?= htmlspecialchars(rtrim($base_url ?? app_base_url(), '/') . '/assets/form-utils.js') ?>" defer></script>
+    <?php if ($es_edicion_afiliado): ?>
+    <script src="<?= htmlspecialchars(rtrim($base_url ?? app_base_url(), '/') . '/assets/image-preview.js') ?>" defer></script>
+    <?php endif; ?>
     <script>
     document.addEventListener('DOMContentLoaded', function() {
         const form = document.getElementById('registerForm');

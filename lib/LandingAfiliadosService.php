@@ -9,6 +9,8 @@ require_once __DIR__ . '/ClubService.php';
 require_once __DIR__ . '/AfiliadoService.php';
 require_once __DIR__ . '/AsociacionAuth.php';
 require_once __DIR__ . '/LandingAfiliadosAccess.php';
+require_once __DIR__ . '/ClubNavigation.php';
+require_once __DIR__ . '/ClubHelper.php';
 
 /**
  * Datos públicos de asociaciones afiliadas para la landing ASOC.
@@ -271,7 +273,7 @@ final class LandingAfiliadosService
         $puedeGestionar = $this->puedeGestionarClub($orgId, $clubId);
         $afiliados = [];
         foreach (AfiliadoService::getByOrg($orgId) as $af) {
-            if ((int) ($af['club_id'] ?? 0) !== $clubId) {
+            if (ClubHelper::resolveAfiliadoClubId($af) !== $clubId) {
                 continue;
             }
             $userId = (int) ($af['id'] ?? 0);
@@ -313,8 +315,24 @@ final class LandingAfiliadosService
             return null;
         }
 
+        $clubRow = null;
+        foreach (ClubService::getByOrg($orgId) as $club) {
+            if ((int) ($club['id'] ?? 0) === $clubId) {
+                $clubRow = $club;
+                break;
+            }
+        }
+        if ($clubRow === null) {
+            return null;
+        }
+
+        $afRow = ClubHelper::fetchAfiliadoInClub($this->pdo, $clubRow, $clubId, $userId);
+        if ($afRow === null) {
+            return null;
+        }
+
         $af = AfiliadoService::getByIdInOrg($orgId, $userId);
-        if ($af === null || (int) ($af['club_id'] ?? 0) !== $clubId) {
+        if ($af === null) {
             return null;
         }
 
@@ -403,8 +421,8 @@ final class LandingAfiliadosService
             'ver' => $base . 'landing-afiliados.php#/a/' . $orgId . '/club/' . $clubId . '/u/' . $userId,
         ];
         if ($puedeGestionar) {
-            $urls['editar'] = $base . 'index.php?page=users&action=edit&id=' . $userId;
-            $urls['admin_ver'] = $base . 'index.php?page=clubs&action=afiliado_detail&club_id=' . $clubId . '&user_id=' . $userId;
+            $urls['editar'] = ClubNavigation::afiliadoFormUrl($clubId, $userId, ['from' => 'asociacion_hub', 'hub_org_id' => $orgId, 'hub_tab' => 'afiliados']);
+            $urls['admin_ver'] = $base . 'index.php?page=clubs&action=afiliado_detail&club_id=' . $clubId . '&user_id=' . $userId . '&from=asociacion_hub&hub_org_id=' . $orgId . '&hub_tab=afiliados';
         }
 
         return $urls;

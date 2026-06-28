@@ -47,16 +47,9 @@
       });
     }
 
-    // Mover alertas del contenido a la zona superpuesta (no desplazan el layout)
-    var flashContainer = document.getElementById('app-flash-messages');
-    var main = document.querySelector('main');
-    if (flashContainer && main) {
-      var alerts = main.querySelectorAll('.alert.alert-dismissible, .alert.alert-success, .alert.alert-danger, .alert.alert-warning, .alert.alert-info');
-      alerts.forEach(function (el) {
-        if (el.closest('.modal') || el.closest('[role="dialog"]')) return;
-        el.classList.add('app-flash-item', 'show');
-        flashContainer.appendChild(el);
-      });
+    // Mensajes informativos → SweetAlert (app-flash-swal.js)
+    if (typeof window.AppFlashSwal !== 'undefined') {
+      window.AppFlashSwal.processPageAlerts();
     }
 
     // Toggle sidebar
@@ -139,15 +132,6 @@
         if (searchInput) searchInput.blur();
       }
     });
-
-    // Auto-hide alerts
-    setTimeout(function () {
-      document.querySelectorAll('.alert.alert-success, .alert.alert-info').forEach(function (a) {
-        a.style.transition = 'opacity 0.5s';
-        a.style.opacity = '0';
-        setTimeout(function () { a.remove(); }, 500);
-      });
-    }, 3000);
 
     // torneo_id en sessionStorage
     var torneoId = (new URLSearchParams(window.location.search)).get('torneo_id');

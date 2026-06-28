@@ -201,6 +201,10 @@ if (empty($_GET['page'])) {
     $uriPathLegacy = rtrim($uriPathLegacy, '/');
     if ($uriPathLegacy === '/asociacion_hub' || str_ends_with($uriPathLegacy, '/asociacion_hub')) {
         $_GET['page'] = 'asociacion_hub';
+    } elseif ($uriPathLegacy === '/clubes_asociados' || str_ends_with($uriPathLegacy, '/clubes_asociados')) {
+        require_once __DIR__ . '/../lib/app_helpers.php';
+        header('Location: ' . AppHelpers::dashboard('home'));
+        exit;
     }
 }
 
@@ -221,7 +225,7 @@ if ($page === 'asociacion_panel' && empty($_GET['legacy']) && HubNavigation::isE
         if ($tabNum === 2 || (int) ($_GET['torneo_id'] ?? 0) > 0) {
             $hubParams['tab'] = 'torneos';
         } else {
-            $hubParams['tab'] = 'info';
+            $hubParams['tab'] = 'clubes';
         }
         if (isset($_GET['error']) && trim((string) $_GET['error']) !== '') {
             $_SESSION['error'] = (string) $_GET['error'];
@@ -367,6 +371,12 @@ if ($page === 'admin_clubs' && $action === 'send_notification') {
     exit;
 }
 
+// Página obsoleta: redirigir al origen (detalle de club o listado)
+if ($page === 'clubs/invitation_link') {
+    require_once __DIR__ . '/../lib/ClubNavigation.php';
+    ClubNavigation::redirectLegacyInvitationLink($_GET);
+}
+
 // Desactivar/Reactivar organización: delegado a admin_org (centraliza responsabilidades)
 if ($page === 'mi_organizacion' && isset($_GET['id']) && in_array($action, ['desactivar', 'reactivar'], true)) {
     require_once __DIR__ . '/../modules/admin_org/organizacion/actions/' . $action . '.php';
@@ -402,7 +412,7 @@ if (in_array($page, $special_endpoints, true)) {
 // POST clubs: actualizar o guardar club (evita 404 cuando la URL base no es public/)
 if (Auth::isOperativoSoloAsociacion() && $page === 'clubs' && (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST')) {
     require_once __DIR__ . '/../lib/app_helpers.php';
-    header('Location: ' . HubNavigation::panelOrHubUrl(['error' => 'No puede crear ni editar clubes.']));
+    header('Location: ' . HubNavigation::panelOrHubUrl(['tab' => 'clubes', 'error' => 'No puede crear ni editar clubes.']));
     exit;
 }
 
@@ -521,7 +531,7 @@ if ($page === 'tournaments') {
     if (!AsociacionAdminHelper::puedeCrearYAdministrarTorneos(DB::pdo(), (int) Auth::id(), $roleTor)) {
         require_once __DIR__ . '/../lib/app_helpers.php';
         if (Auth::isOperativoSoloAsociacion()) {
-            header('Location: ' . HubNavigation::panelOrHubUrl(['error' => 'No puede crear ni administrar torneos.']));
+            header('Location: ' . HubNavigation::panelOrHubUrl(['tab' => 'torneos', 'error' => 'No puede crear ni administrar torneos.']));
         } else {
             $_SESSION['error'] = 'No tiene permiso para crear ni administrar torneos.';
             header('Location: ' . AppHelpers::dashboard('home'));
@@ -532,10 +542,12 @@ if ($page === 'tournaments') {
 
 if ($page === 'tournaments' && ($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'GET') {
     require_once __DIR__ . '/../lib/AsociacionHubNavigation.php';
-    if (AsociacionHubNavigation::isHubContext($_GET)) {
+    $tg_action = trim((string) ($_GET['action'] ?? 'index'));
+    // Con contexto hub: volver al listado del hub solo en listado legacy; no interceptar new/edit/view.
+    $hub_form_actions = ['new', 'edit', 'view'];
+    if (AsociacionHubNavigation::isHubContext($_GET) && ! in_array($tg_action, $hub_form_actions, true)) {
         $hubReturn = AsociacionHubNavigation::returnUrlFromRequest($_GET);
         if (is_string($hubReturn) && $hubReturn !== '') {
-            $qs = [];
             if (isset($_GET['success'])) {
                 $_SESSION['success_msg'] = (string) $_GET['success'];
             }
@@ -546,7 +558,6 @@ if ($page === 'tournaments' && ($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'GET') 
             exit;
         }
     }
-    $tg_action = $_GET['action'] ?? 'index';
     if ($tg_action === '' || $tg_action === 'index' || $tg_action === 'list') {
         header('Location: index.php?page=torneo_gestion&action=index' . (isset($_GET['error']) ? '&error=' . urlencode($_GET['error']) : '') . (isset($_GET['success']) ? '&success=' . urlencode($_GET['success']) : ''));
         exit;
@@ -600,21 +611,19 @@ if ($page === 'torneo_gestion' && ob_get_level() === 0) {
     ob_start();
 }
 
-// clubes_asociados GET: validar club_id antes del layout (header() no puede enviarse tras HTML del layout)
+// clubes_asociados GET: solo POST; las peticiones GET van al hub (tab clubes) o al inicio
 if ($page === 'clubes_asociados' && ($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'GET') {
-    $cid = (int) ($_GET['club_id'] ?? 0);
-    if ($cid > 0) {
-        $u = Auth::user();
-        if (is_array($u) && ($u['role'] ?? '') === 'admin_club') {
-            require_once __DIR__ . '/../lib/ClubHelper.php';
-            $admin_club_user_id = (int) Auth::id();
-            if (!ClubHelper::isClubManagedByAdmin($admin_club_user_id, $cid)) {
-                $loc = class_exists('AppHelpers') ? AppHelpers::dashboard('clubes_asociados') : 'index.php?page=clubes_asociados';
-                header('Location: ' . $loc);
-                exit;
-            }
-        }
+    require_once __DIR__ . '/../lib/app_helpers.php';
+    require_once __DIR__ . '/../lib/ClubNavigation.php';
+    $loc = ClubNavigation::clubesListUrl($_GET);
+    if (! empty($_GET['success'])) {
+        $loc .= (str_contains($loc, '?') ? '&' : '?') . 'success=' . urlencode((string) $_GET['success']);
     }
+    if (! empty($_GET['error'])) {
+        $loc .= (str_contains($loc, '?') ? '&' : '?') . 'error=' . urlencode((string) $_GET['error']);
+    }
+    header('Location: ' . $loc);
+    exit;
 }
 
 // =================================================================

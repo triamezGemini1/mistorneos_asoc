@@ -59,50 +59,30 @@ $hubHref = static function (int $orgId) use ($dashboard_href): string {
     $returnUrl = class_exists('AppHelpers', false)
         ? AppHelpers::dashboard('listado_asociaciones')
         : 'index.php?page=listado_asociaciones';
-    $params = ['org_id' => $orgId, 'return_url' => $returnUrl];
-    if (is_callable($dashboard_href)) {
-        return $dashboard_href('asociacion_hub', $params);
-    }
 
-    return 'index.php?page=asociacion_hub&' . http_build_query($params);
+    return AsociacionHubNavigation::verAsociacionUrl($orgId, $returnUrl);
 };
 ?>
-<div class="container-fluid py-4">
-    <div class="estacion-hub-header mb-4">
+<div class="container-fluid py-4 asoc-report asoc-report--listado">
+    <div class="estacion-hub-header listado-asociaciones-header mb-4">
         <h1 class="h3 mb-1">
             <i class="fas fa-handshake me-2"></i>Asociaciones Afiliadas
         </h1>
         <p class="estacion-hub-subtitle small">Active o desactive asociaciones y entre al hub de cada una.</p>
     </div>
 
-    <?php if (! empty($_SESSION['success'])): ?>
-        <div class="alert alert-success alert-dismissible fade show" role="alert">
-            <?= htmlspecialchars((string) $_SESSION['success'], ENT_QUOTES, 'UTF-8') ?>
-            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Cerrar"></button>
-        </div>
-        <?php unset($_SESSION['success']); ?>
-    <?php endif; ?>
-
-    <?php if (! empty($_SESSION['error'])): ?>
-        <div class="alert alert-danger alert-dismissible fade show" role="alert">
-            <?= htmlspecialchars((string) $_SESSION['error'], ENT_QUOTES, 'UTF-8') ?>
-            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Cerrar"></button>
-        </div>
-        <?php unset($_SESSION['error']); ?>
-    <?php endif; ?>
-
     <?php if ($asociaciones === []): ?>
-        <div class="card shadow-sm">
+        <div class="card shadow-sm asoc-report-card">
             <div class="card-body estacion-empty-state">
                 <i class="fas fa-building fa-3x mb-3 d-block"></i>
                 <p class="mb-0">No hay asociaciones registradas.</p>
             </div>
         </div>
     <?php else: ?>
-        <div class="card shadow-sm">
+        <div class="card shadow-sm asoc-report-card">
             <div class="card-header d-flex align-items-center justify-content-between">
                 <span><i class="fas fa-list me-2"></i>Listado</span>
-                <span class="badge estacion-count-badge">
+                <span class="badge asoc-report-count-badge">
                     <?= $activasCount ?> activa(s) · <?= count($asociaciones) ?> total
                 </span>
             </div>

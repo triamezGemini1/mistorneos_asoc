@@ -98,9 +98,71 @@ body.admin-general-home-page main.container-fluid {
   }
 }
 
+/* Sidebar legacy (+100% cuando el menú lateral está visible) */
+#sidebar .nav-link {
+  font-size: 1.875rem;
+}
+
+#sidebar .nav-sub-link,
+#sidebar .nav-sub-sub-link {
+  font-size: 1.75rem !important;
+}
+
+.sidebar-brand {
+  font-size: 2.5rem;
+}
+
+.sidebar-brand i {
+  font-size: 3.5rem;
+}
+
+#sidebar .sidebar-header h4 {
+  font-size: 2.25rem;
+}
+
+/* +100% tipografía: menú header y título del navbar (solo admin general) */
+body.admin-general-header-nav-active:not(.asociacion-header-nav-active) .admin-general-header-nav .admin-general-nav-link {
+  font-size: 1.875rem !important;
+  padding: 0.5rem 1rem !important;
+  font-weight: 600 !important;
+}
+
+body.admin-general-header-nav-active:not(.asociacion-header-nav-active) .admin-general-header-nav .admin-general-nav-link.active {
+  font-weight: 700 !important;
+}
+
+body.admin-general-header-nav-active:not(.asociacion-header-nav-active) #page-content-wrapper > nav.navbar h5 {
+  font-size: 2.5rem !important;
+  font-weight: 700 !important;
+}
+
+body.admin-general-header-nav-active:not(.asociacion-header-nav-active) #page-content-wrapper > nav.navbar h6 {
+  font-size: 2rem !important;
+  font-weight: 700 !important;
+}
+
+body.admin-general-header-nav-active:not(.asociacion-header-nav-active) #page-content-wrapper > nav.navbar .btn-outline-secondary {
+  font-size: 1.75rem !important;
+  font-weight: 600 !important;
+  padding: 0.45rem 0.85rem !important;
+}
+
+@media (max-width: 991.98px) {
+  body.admin-general-header-nav-active:not(.asociacion-header-nav-active) .admin-general-header-nav .admin-general-nav-link {
+    font-size: 1.75rem !important;
+  }
+}
+
 @media (max-width: 575.98px) {
-  .admin-general-header-nav .admin-general-nav-link {
-    font-size: 0.8125rem;
-    padding: 0.3rem 0.4rem;
+  body.admin-general-header-nav-active:not(.asociacion-header-nav-active) .admin-general-header-nav .admin-general-nav-link {
+    font-size: 1.625rem !important;
+  }
+
+  body.admin-general-header-nav-active:not(.asociacion-header-nav-active) #page-content-wrapper > nav.navbar h5 {
+    font-size: 2rem !important;
+  }
+
+  body.admin-general-header-nav-active:not(.asociacion-header-nav-active) #page-content-wrapper > nav.navbar h6 {
+    font-size: 1.75rem !important;
   }
 }

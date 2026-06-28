@@ -125,7 +125,38 @@ $tid_panel = (int)($torneo['id'] ?? 0);
 $url_reportes_inscritos = ($tid_panel > 0 && class_exists('AppHelpers', false))
     ? AppHelpers::torneoGestionUrl('reportes_inscritos', $tid_panel)
     : ($tid_panel > 0 ? 'index.php?page=torneo_gestion&action=reportes_inscritos&torneo_id=' . $tid_panel : '#');
+$inscritos_confirmados_header = isset($inscritos_confirmados) && $inscritos_confirmados !== null
+    ? (int) $inscritos_confirmados
+    : (int) $inscritos_para_rondas;
+$inscritos_header_etiqueta = $es_modalidad_equipos ? 'Jugadores' : 'Inscritos';
 $invitar_clubes_inhabil = ($ultima_ronda > 0);
+
+$puede_editar_torneo_panel = false;
+$url_editar_torneo_panel = '';
+if (class_exists('Auth', false) && $tid_panel > 0) {
+    if (! class_exists('AsociacionHubNavigation', false)) {
+        require_once __DIR__ . '/../../lib/AsociacionHubNavigation.php';
+    }
+    $admin_general_corrige_finalizado = Auth::isAdminGeneral();
+    $torneo_cerrado_panel = $isLocked || ((int) ($torneo['locked'] ?? 0) === 1);
+    if (Auth::canModifyTournament($tid_panel) && (!$torneo_cerrado_panel || $admin_general_corrige_finalizado)) {
+        $puede_editar_torneo_panel = true;
+        $editTorneoParams = ['action' => 'edit', 'id' => $tid_panel];
+        if (AsociacionHubNavigation::isHubContext($_GET)) {
+            $editTorneoParams = array_merge(
+                $editTorneoParams,
+                AsociacionHubNavigation::outboundParams(
+                    (int) ($_GET['hub_org_id'] ?? 0),
+                    (string) ($_GET['hub_tab'] ?? 'torneos'),
+                    isset($_GET['hub_estado']) ? (string) $_GET['hub_estado'] : null
+                )
+            );
+        }
+        $url_editar_torneo_panel = class_exists('AppHelpers', false)
+            ? AppHelpers::dashboard('tournaments', $editTorneoParams)
+            : ('index.php?page=tournaments&' . http_build_query($editTorneoParams));
+    }
+}
 ?>
 
 <link rel="stylesheet" href="assets/css/design-system.css">
@@ -161,7 +192,11 @@ tailwind.config = {
     if (! class_exists('AsociacionHubNavigation', false)) {
         require_once __DIR__ . '/../../lib/AsociacionHubNavigation.php';
     }
-    $hubBackUrl = AsociacionHubNavigation::returnUrlFromRequest($_GET);
+    $hubBackUrl = AsociacionHubNavigation::returnUrlFromRequest(
+        AsociacionHubNavigation::isHubContext($_GET)
+            ? array_merge($_GET, ['hub_tab' => $_GET['hub_tab'] ?? 'torneos'])
+            : $_GET
+    );
     $hubBackLabel = AsociacionHubNavigation::returnLabelFromRequest($_GET);
     ?>
     <nav aria-label="breadcrumb" class="mb-2">
@@ -200,6 +235,19 @@ tailwind.config = {
                     <span><i class="fas fa-layer-group mr-1"></i> <?php echo ($torneo['rondas'] ?? 0); ?> rondas</span>
                 </div>
             </div>
+            <a href="<?php echo htmlspecialchars($url_reportes_inscritos, ENT_QUOTES, 'UTF-8'); ?>"
+               class="panel-inscritos-badge"
+               title="Ver reporte de inscritos"
+               aria-label="<?php echo htmlspecialchars($inscritos_header_etiqueta . ': ' . number_format($total_inscritos) . ' — ver detalle', ENT_QUOTES, 'UTF-8'); ?>">
+                <span class="panel-inscritos-badge__icon" aria-hidden="true"><i class="fas fa-users"></i></span>
+                <span class="panel-inscritos-badge__body">
+                    <span class="panel-inscritos-badge__count"><?php echo number_format($total_inscritos); ?></span>
+                    <span class="panel-inscritos-badge__label"><?php echo htmlspecialchars($inscritos_header_etiqueta); ?></span>
+                    <?php if ($inscritos_confirmados_header >= 0 && $inscritos_confirmados_header !== $total_inscritos): ?>
+                    <span class="panel-inscritos-badge__sub"><?php echo number_format($inscritos_confirmados_header); ?> confirmados</span>
+                    <?php endif; ?>
+                </span>
+            </a>
             <?php if ($has_panel_context_switch): ?>
             <div class="panel-header-context">
                 <?php
@@ -495,6 +543,16 @@ tailwind.config = {
                     </h3>
                     </div>
                     <div class="p-5 space-y-4">
+                        <?php if ($puede_editar_torneo_panel): ?>
+                        <a href="<?php echo htmlspecialchars($url_editar_torneo_panel, ENT_QUOTES, 'UTF-8'); ?>"
+                           class="tw-btn bg-orange-500 hover:bg-orange-600 text-white w-full text-center">
+                            <i class="fas fa-edit"></i> Editar torneo
+                        </a>
+                        <?php elseif ($isLocked && class_exists('Auth', false) && Auth::canAccessTournament($tid_panel)): ?>
+                        <button type="button" disabled class="tw-btn bg-gray-400 text-white w-full text-center" title="Torneo finalizado">
+                            <i class="fas fa-lock"></i> Editar torneo (cerrado)
+                        </button>
+                        <?php endif; ?>
                         <!-- Actualizar Resultados -->
                         <form method="POST" action="<?php echo $use_standalone ? $base_url : 'index.php?page=torneo_gestion'; ?>" 
                               onsubmit="event.preventDefault(); actualizarEstadisticasConfirmar(event);">

@@ -7,7 +7,7 @@
 declare(strict_types=1);
 
 $orgId = (int) ($viewData['org_id'] ?? 0);
-$tabActiva = (string) ($viewData['tab'] ?? 'info');
+$tabActiva = (string) ($viewData['tab'] ?? 'clubes');
 $nombre = htmlspecialchars((string) ($viewData['nombre_asociacion'] ?? ''), ENT_QUOTES, 'UTF-8');
 $tabs = is_array($viewData['tabs'] ?? null) ? $viewData['tabs'] : [];
 $tabsVisibles = is_array($viewData['tabs_visibles'] ?? null) ? $viewData['tabs_visibles'] : [];
@@ -74,30 +74,6 @@ if ($listadoHref === '') {
             <?php endif; ?>
         </div>
     </div>
-
-    <?php if (! empty($_SESSION['success_msg'])): ?>
-        <div class="alert alert-success alert-dismissible fade show" role="alert">
-            <?= htmlspecialchars((string) $_SESSION['success_msg'], ENT_QUOTES, 'UTF-8') ?>
-            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Cerrar"></button>
-        </div>
-        <?php unset($_SESSION['success_msg']); ?>
-    <?php endif; ?>
-
-    <?php if (! empty($_SESSION['error'])): ?>
-        <div class="alert alert-danger alert-dismissible fade show" role="alert">
-            <?= htmlspecialchars((string) $_SESSION['error'], ENT_QUOTES, 'UTF-8') ?>
-            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Cerrar"></button>
-        </div>
-        <?php unset($_SESSION['error']); ?>
-    <?php endif; ?>
-
-    <?php if (! empty($_SESSION['warning'])): ?>
-        <div class="alert alert-warning alert-dismissible fade show" role="alert">
-            <?= htmlspecialchars((string) $_SESSION['warning'], ENT_QUOTES, 'UTF-8') ?>
-            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Cerrar"></button>
-        </div>
-        <?php unset($_SESSION['warning']); ?>
-    <?php endif; ?>
 
     <?php if ($tabsVisibles !== []): ?>
     <div class="estacion-hub-tabs-shell">

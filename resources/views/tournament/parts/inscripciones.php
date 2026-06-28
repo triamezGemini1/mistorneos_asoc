@@ -154,9 +154,9 @@ $puede_confirmar_retirar = isset($puede_confirmar_retirar) ? $puede_confirmar_re
 
 <!-- Listado de Inscritos -->
 <div class="card-modern" style="box-shadow: 0 2px 8px rgba(0,0,0,0.1); border-radius: 10px;">
-    <div class="card-header-modern p-3" style="background: linear-gradient(135deg, rgba(16, 185, 129, 0.1) 0%, rgba(16, 185, 129, 0.05) 100%); border-bottom: 2px solid #e5e7eb;">
-        <h5 class="mb-0 fw-bold" style="color: #1f2937;">
-            <i class="fas fa-list me-2" style="color: #10b981;"></i>
+    <div class="card-header-modern p-3 inscripciones-listado-header">
+        <h5 class="mb-0 fw-bold">
+            <i class="fas fa-list me-2"></i>
             Listado de Inscritos (<?php echo $total_inscritos; ?>)
         </h5>
     </div>

@@ -509,6 +509,14 @@ final class AsociacionAdminHelper
 
     public static function idClubForzadoInscripcion(PDO $pdo): ?int
     {
+        if (!class_exists('Auth', false) || !Auth::isOperativoSoloAsociacion()) {
+            return null;
+        }
+        // Responsable de organización: puede elegir cualquier club de la asociación.
+        $uid = (int) (Auth::id() ?? 0);
+        if ($uid > 0 && self::usuarioAdministraOrganizacionActiva($pdo, $uid) !== null) {
+            return null;
+        }
         $ctx = self::contextoInscripcionOperativa($pdo);
 
         return $ctx !== null && ($ctx['club_id'] ?? 0) > 0 ? (int) $ctx['club_id'] : null;

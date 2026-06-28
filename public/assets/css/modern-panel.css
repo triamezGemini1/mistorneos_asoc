@@ -296,6 +296,88 @@ html {
   max-width: min(100%, 50%);
   min-width: 0;
 }
+
+/* Contador de inscritos destacado en encabezado del panel */
+.tw-panel .panel-inscritos-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.65rem;
+  padding: 0.45rem 1.1rem 0.45rem 0.85rem;
+  border-radius: 9999px;
+  background: #ffffff;
+  color: #4338ca;
+  text-decoration: none;
+  flex-shrink: 0;
+  border: 2px solid rgba(255, 255, 255, 0.85);
+  box-shadow:
+    0 4px 18px rgba(15, 23, 42, 0.22),
+    0 0 0 3px rgba(255, 255, 255, 0.25);
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+.tw-panel .panel-inscritos-badge:hover,
+.tw-panel .panel-inscritos-badge:focus {
+  transform: translateY(-2px);
+  color: #3730a3;
+  text-decoration: none;
+  box-shadow:
+    0 8px 24px rgba(15, 23, 42, 0.28),
+    0 0 0 4px rgba(255, 255, 255, 0.45);
+}
+.tw-panel .panel-inscritos-badge__icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.5rem;
+  height: 2.5rem;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+  color: #fff;
+  font-size: 1.15rem;
+  line-height: 1;
+  flex-shrink: 0;
+}
+.tw-panel .panel-inscritos-badge__body {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  line-height: 1.15;
+  min-width: 0;
+}
+.tw-panel .panel-inscritos-badge__count {
+  font-size: 2.1rem;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  color: #0f172a;
+  letter-spacing: -0.02em;
+}
+.tw-panel .panel-inscritos-badge__label {
+  font-size: 0.72rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: #6366f1;
+}
+.tw-panel .panel-inscritos-badge__sub {
+  font-size: 0.62rem;
+  font-weight: 700;
+  color: #64748b;
+  margin-top: 0.1rem;
+}
+.tw-panel .panel-header--compact .panel-header-inner.panel-header-inner--spread .panel-inscritos-badge {
+  margin-left: auto;
+  margin-right: 0.5rem;
+}
+@media (max-width: 767.98px) {
+  .tw-panel .panel-inscritos-badge {
+    width: 100%;
+    justify-content: center;
+    margin-top: 0.35rem;
+  }
+  .tw-panel .panel-inscritos-badge__count {
+    font-size: 1.75rem;
+  }
+}
+
 .tw-panel .panel-header-context .tcs {
   display: flex;
   flex-wrap: wrap;
@@ -1053,15 +1135,15 @@ html {
   .tw-panel .tw-column { width: 100% !important; margin-bottom: 1rem; }
 }
 
-/* ========== Panel de control: +40% tipografía, bold, sin iconos (solo esta página) ========== */
+/* ========== Panel de control: +70% tipografía, bold, sin iconos (solo esta página) ========== */
 .tw-panel {
-  font-size: 0.84em;
+  font-size: 1.428em;
   font-weight: 700;
 }
 .tw-panel .tw-btn,
 .tw-panel a.tw-btn,
 .tw-panel span.tw-btn {
-  font-size: 0.91rem !important;
+  font-size: 1.547rem !important;
   padding: 0.5rem 0.7rem;
   font-weight: 700 !important;
   letter-spacing: 0.02em;
@@ -1073,71 +1155,71 @@ html {
   display: none !important;
 }
 .tw-panel nav ol {
-  font-size: 0.616rem;
+  font-size: 1.047rem;
   font-weight: 700;
 }
 .tw-panel .panel-header .titulo-torneo {
-  font-size: 1.26rem !important;
+  font-size: 2.142rem !important;
   font-weight: 700 !important;
 }
 .tw-panel .panel-header .meta {
-  font-size: 0.616rem !important;
+  font-size: 1.047rem !important;
   font-weight: 700 !important;
 }
 .tw-panel .text-xl {
-  font-size: 0.9rem !important;
+  font-size: 1.53rem !important;
   font-weight: 700 !important;
 }
 .tw-panel .text-sm {
-  font-size: 0.616rem !important;
+  font-size: 1.047rem !important;
   font-weight: 700 !important;
 }
 .tw-panel .alert-success,
 .tw-panel .alert-error {
-  font-size: 0.756rem !important;
+  font-size: 1.285rem !important;
   padding: 0.45rem 0.6rem;
   font-weight: 700 !important;
 }
 .tw-panel .ronda-info {
-  font-size: 0.616rem;
+  font-size: 1.047rem;
   padding: 0.3rem 0.45rem;
   font-weight: 700 !important;
 }
 .tw-panel .p-5,
 .tw-panel .space-y-4 {
-  font-size: 0.616rem;
+  font-size: 1.047rem;
   padding: 0.45rem 0.6rem;
   font-weight: 700 !important;
 }
 .tw-panel div[class*="bg-gradient-to-r"] {
-  font-size: 0.862rem;
+  font-size: 1.465rem;
   padding: 0.55rem 0.75rem;
   font-weight: 700 !important;
 }
 .tw-panel div[class*="bg-gradient-to-r"] h3 {
-  font-size: 0.862rem !important;
+  font-size: 1.465rem !important;
   color: #fff !important;
-  font-weight: 600 !important;
+  font-weight: 700 !important;
   letter-spacing: 0.04em;
 }
 .tw-panel .text-xs {
-  font-size: 0.63rem !important;
+  font-size: 1.071rem !important;
   font-weight: 700 !important;
 }
 .tw-panel .cronometro-finalizar-torneo .cron-finalizar-label {
-  font-size: 0.756rem !important;
+  font-size: 1.285rem !important;
   font-weight: 700 !important;
 }
 .tw-panel .cronometro-finalizar-torneo .countdown-tiempo-restante {
-  font-size: 2.1rem !important;
+  font-size: 3.57rem !important;
   font-weight: 800 !important;
 }
 .tw-panel .cronometro-finalizar-torneo .cron-finalizar-hint {
-  font-size: 0.63rem !important;
+  font-size: 1.071rem !important;
   font-weight: 700 !important;
 }
 .tw-panel #btnCronometro {
-  font-size: 0.616rem !important;
+  font-size: 1.047rem !important;
   padding: 0.45rem 0.6rem;
   font-weight: 700 !important;
 }
@@ -1150,25 +1232,25 @@ html {
   font-weight: 700 !important;
 }
 
-/* ========== Panel: incrementos de fuente (nombre/logo +100%, breadcrumb +150%, meta +100%, ronda +150%, tarjetas +100%, cronómetro +100%) ========== */
-/* Nombre del torneo: 50% respecto al tamaño incrementado del panel (antes 2.52rem) */
+/* ========== Panel: incrementos de fuente (+70% sobre tamaños previos del panel) ========== */
 .tw-panel .panel-header .titulo-torneo {
-  font-size: 1.26rem !important;
+  font-size: 2.142rem !important;
+  font-weight: 700 !important;
 }
-/* Breadcrumb: +150% */
 .tw-panel nav[aria-label="breadcrumb"] ol,
 .tw-panel nav[aria-label="breadcrumb"] a,
 .tw-panel nav[aria-label="breadcrumb"] .text-gray-700 {
-  font-size: 1.54rem !important;
+  font-size: 2.618rem !important;
+  font-weight: 700 !important;
 }
-/* Línea de fecha, modalidad y rondas (meta): +100% */
 .tw-panel .panel-header .meta {
-  font-size: 1.23rem !important;
+  font-size: 2.091rem !important;
+  font-weight: 700 !important;
 }
-/* Información ronda actual, mesas, inscritos, pendientes: +150% */
 .tw-panel .ronda-info {
-  font-size: 1.54rem !important;
+  font-size: 2.618rem !important;
   padding: 0.5rem 0.65rem;
+  font-weight: 700 !important;
 }
 .tw-panel .ronda-info .text-gray-600,
 .tw-panel .ronda-info .text-blue-600,
@@ -1176,25 +1258,55 @@ html {
 .tw-panel .ronda-info .text-indigo-600,
 .tw-panel .ronda-info .text-amber-600,
 .tw-panel .ronda-info .font-semibold {
-  font-size: 1.54rem !important;
+  font-size: 2.618rem !important;
+  font-weight: 700 !important;
 }
 .tw-panel .ronda-info .text-xl {
-  font-size: 2.25rem !important;
+  font-size: 3.825rem !important;
+  font-weight: 700 !important;
 }
-/* Títulos de las tarjetas (Gestión de Mesas, Operaciones, Resultados): +100% */
 .tw-panel div[class*="bg-gradient-to-r"] h3 {
-  font-size: 1.72rem !important;
+  font-size: 2.924rem !important;
+  font-weight: 700 !important;
 }
 .tw-panel div[class*="bg-gradient-to-r"] {
-  font-size: 1.72rem !important;
+  font-size: 2.924rem !important;
+  font-weight: 700 !important;
 }
-/* Botón Activar cronómetro: +100% */
 .tw-panel #btnCronometro {
-  font-size: 1.23rem !important;
+  font-size: 2.091rem !important;
   padding: 0.6rem 0.9rem;
+  font-weight: 700 !important;
 }
 .tw-panel #btnCronometro #lblCronometro {
-  font-size: 1.23rem !important;
+  font-size: 2.091rem !important;
+  font-weight: 700 !important;
+}
+
+.tw-panel .tw-column h3 {
+  font-size: 1.806rem !important;
+  font-weight: 700 !important;
+}
+.tw-panel .tw-panel-btn__badge {
+  font-size: 1.224rem !important;
+  font-weight: 800 !important;
+}
+.tw-panel .font-semibold,
+.tw-panel .font-bold {
+  font-weight: 700 !important;
+}
+.tw-panel .tcs.tcs--on-dark .tcs__pill,
+.tw-panel .tcs.tcs--on-dark.tcs--compact .tcs__pill {
+  font-size: 22px !important;
+  font-weight: 700 !important;
+}
+.tw-panel .tcs.tcs--on-dark .tcs__pill-name {
+  font-size: 22px !important;
+  font-weight: 700 !important;
+}
+.tw-panel .tcs.tcs--on-dark .tcs__pill-meta {
+  font-size: 17px !important;
+  font-weight: 700 !important;
 }
 
 /* ========== Franja superior: 3 columnas (auditoría | cronómetro | estadísticas) ========== */
@@ -1206,8 +1318,9 @@ html {
   margin-bottom: 0.4rem;
   width: 100%;
   max-width: 100%;
-  font-size: 0.9rem;
+  font-size: 1.53rem;
   line-height: 1.35;
+  font-weight: 700;
   font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
@@ -1247,7 +1360,7 @@ html {
   display: block;
   width: 100%;
   text-align: center;
-  font-size: 0.78rem !important;
+  font-size: 1.326rem !important;
   font-weight: 800 !important;
   text-transform: uppercase;
   letter-spacing: 0.06em;
@@ -1355,7 +1468,7 @@ html {
   padding: 0.1rem 0;
 }
 .tw-panel .panel-top-strip__bloqueo-full {
-  font-size: 0.8rem !important;
+  font-size: 1.36rem !important;
   font-weight: 700 !important;
   color: #b45309;
   background: #fffbeb;
@@ -1430,7 +1543,7 @@ html {
 }
 /* Activar cronómetro: +80% sobre ~0.9rem ≈ 1.62rem; relieve, borde y hover/active */
 .tw-panel #btnCronometroVentana {
-  font-size: 1.62rem !important;
+  font-size: 2.754rem !important;
   line-height: 1.25 !important;
   padding: 0.58rem 0.95rem !important;
   border-radius: 0.45rem;
@@ -1493,6 +1606,7 @@ html {
 }
 .tw-panel.reportes-inscritos-page .reportes-inscritos-card-head {
   padding: 0.5rem 0.85rem !important;
+  background: #00C6FB !important;
 }
 .tw-panel.reportes-inscritos-page .reportes-inscritos-card-head h1 {
   font-size: 1.125rem !important;

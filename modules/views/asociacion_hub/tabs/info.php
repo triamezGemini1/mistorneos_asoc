@@ -26,11 +26,11 @@ $logo = $asociacion !== null ? trim((string) ($asociacion->logo ?? '')) : '';
 $logoPreviewUrl = OrganizacionService::logoPublicUrl($logo);
 
 $formAction = is_callable($dashboard_href ?? null)
-    ? $dashboard_href('asociacion_hub', ['org_id' => $orgId, 'tab' => 'info'])
-    : 'index.php?page=asociacion_hub&org_id=' . $orgId . '&tab=info';
+    ? $dashboard_href('asociacion_hub', ['org_id' => $orgId])
+    : 'index.php?page=asociacion_hub&org_id=' . $orgId;
 ?>
-<div class="card shadow-sm">
-    <div class="card-header bg-light d-flex flex-wrap align-items-center justify-content-between gap-2">
+<div class="card shadow-sm asoc-report-card">
+    <div class="card-header d-flex flex-wrap align-items-center justify-content-between gap-2">
         <h2 class="h5 mb-0"><i class="fas fa-info-circle me-2"></i>Información general</h2>
         <?php if ($puedeEditar): ?>
         <button type="button"
@@ -100,7 +100,6 @@ $formAction = is_callable($dashboard_href ?? null)
                   novalidate>
                 <?= CSRF::input() ?>
                 <input type="hidden" name="org_id" value="<?= $orgId ?>">
-                <input type="hidden" name="tab" value="info">
 
                 <div class="modal-header">
                     <h2 class="modal-title h5" id="estacionEditOrgModalLabel">

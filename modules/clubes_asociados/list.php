@@ -1,7 +1,7 @@
 <?php
 /**
- * Asociaciones de la organización (admin organización)
- * Muestra las asociaciones de la organización del admin con sus estadísticas
+ * Clubes de la asociación (admin organización)
+ * Muestra los clubes de la asociación del admin con sus estadísticas
  *
  * Regla de identificación:
  * - Listado / modal / POST editar: siempre el club por PK `clubes.id` (parámetro `club_id`). No sustituir por `cod_org`.
@@ -13,8 +13,11 @@ if (!defined('APP_BOOTSTRAPPED')) {
 }
 require_once __DIR__ . '/../../config/auth.php';
 require_once __DIR__ . '/../../config/db.php';
+require_once __DIR__ . '/../../config/csrf.php';
 require_once __DIR__ . '/../../lib/ClubHelper.php';
 require_once __DIR__ . '/../../lib/OrganizacionDashboardStats.php';
+require_once __DIR__ . '/../../lib/AsociacionHubNavigation.php';
+require_once __DIR__ . '/../../lib/ClubNavigation.php';
 
 /**
  * Normaliza una fila de club para listado / modal (mismos campos que espera editarClub() en JS).
@@ -64,6 +67,8 @@ function clubes_asociados_normalize_club_row(PDO $pdo, array $c): array
 // Solo admin_club (admin organización) puede acceder
 Auth::requireRole(['admin_club']);
 
+$clubes_asociados_embed = defined('CLUBES_ASOCIADOS_EMBED') && CLUBES_ASOCIADOS_EMBED;
+
 $current_user = Auth::user();
 $admin_club_user_id = Auth::id();
 /** @var int|null Código canónico cod_org de la federación (no PK de organizaciones) */
@@ -82,6 +87,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $action = $_POST['action'] ?? '';
     $redirect_msg = '';
     $redirect_error = '';
+
+    // Activar / desactivar club
+    if ($action === 'toggle_estatus') {
+        CSRF::validate();
+        $club_id = (int) ($_POST['club_id'] ?? 0);
+        $nuevo_estatus = (int) ($_POST['nuevo_estatus'] ?? 0) === 1 ? 1 : 0;
+
+        if (!ClubHelper::isClubManagedByAdmin($admin_club_user_id, $club_id)) {
+            $redirect_error = 'No tiene permisos para cambiar el estado de este club';
+        } else {
+            try {
+                $stmt = DB::pdo()->prepare('UPDATE clubes SET estatus = ?, updated_at = NOW() WHERE id = ?');
+                $stmt->execute([$nuevo_estatus, $club_id]);
+                $redirect_msg = $nuevo_estatus === 1 ? 'Club activado correctamente' : 'Club desactivado correctamente';
+            } catch (Exception $e) {
+                $redirect_error = 'Error al cambiar el estado: ' . $e->getMessage();
+            }
+        }
+    }
     
     // Crear nuevo club (estructura tabla: id, rif, nombre, direccion, delegado, delegado_user_id, telefono, email, admin_club_id, organizacion_id, entidad, indica, estatus, permite_inscripcion_linea, logo, created_at, updated_at)
     if ($action === 'crear') {
@@ -323,8 +347,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
     }
     
-    // Redirigir con mensaje (patrón PRG)
-    $redirect_url = 'index.php?page=clubes_asociados';
+    // Redirigir con mensaje (patrón PRG) — listado en hub (tab clubes)
+    $redirect_url = ClubNavigation::clubesListUrl($_POST);
     if ($redirect_msg) {
         $redirect_url .= '&success=' . urlencode($redirect_msg);
     }
@@ -420,7 +444,7 @@ $club_edit_modal_payload = null;
 if ($club_id_get > 0 && ClubHelper::isClubManagedByAdmin($admin_club_user_id, $club_id_get)) {
     try {
         $pdoModal = DB::pdo();
-        $stmtModal = $pdoModal->prepare('SELECT * FROM clubes WHERE id = ? AND estatus = 1 LIMIT 1');
+        $stmtModal = $pdoModal->prepare('SELECT * FROM clubes WHERE id = ? LIMIT 1');
         $stmtModal->execute([$club_id_get]);
         $rowModal = $stmtModal->fetch(PDO::FETCH_ASSOC);
         if (is_array($rowModal) && (int) ($rowModal['id'] ?? 0) === $club_id_get) {
@@ -449,18 +473,6 @@ if (!empty($club_ids)) {
     }
 }
 
-$mi_organizacion = null;
-try {
-    $oid = Auth::getUserOrganizacionId();
-    if ($oid) {
-        $stOrg = DB::pdo()->prepare('SELECT id, nombre, cod_org, entidad FROM organizaciones WHERE id = ? AND estatus = 1 LIMIT 1');
-        $stOrg->execute([(int) $oid]);
-        $mi_organizacion = $stOrg->fetch(PDO::FETCH_ASSOC) ?: null;
-    }
-} catch (Throwable $e) {
-    $mi_organizacion = null;
-}
-
 $hay_club_cod_distinto = false;
 if ($organizacion_cod_org && !empty($mis_clubes)) {
     foreach ($mis_clubes as $rowChk) {
@@ -473,53 +485,49 @@ if ($organizacion_cod_org && !empty($mis_clubes)) {
 }
 ?>
 
-<div class="container-fluid">
-    <div class="d-flex justify-content-between align-items-center mb-4">
-        <div>
-            <h2><i class="fas fa-building"></i> Asociaciones de la organización</h2>
-            <p class="text-muted mb-0">
-                Solo clubes vinculados a tu federación (misma regla en listados, edición y búsquedas).
-            </p>
-            <?php if (!empty($mi_organizacion)): ?>
-                <p class="mb-0 mt-2">
-                    <span class="text-muted">Federación:</span>
-                    <strong><?= htmlspecialchars(trim((string) ($mi_organizacion['nombre'] ?? ''))) ?></strong>
-                    <span class="text-muted">· código</span>
-                    <span class="badge bg-dark"><?= (int) ($organizacion_cod_org ?? 0) ?></span>
-                </p>
-                <p class="small text-muted mb-0 mt-1">
-                    La columna <strong>Club</strong> es el nombre del club local (editable). No confundir con el nombre de la federación (Capital, código <?= (int) ($organizacion_cod_org ?? 0) ?>).
-                </p>
-            <?php endif; ?>
-        </div>
-        <div class="d-flex gap-2 flex-wrap">
-            <a href="<?= htmlspecialchars(AppHelpers::dashboard('notificaciones_masivas', ['tipo' => 'club', 'from' => 'clubes'])) ?>" class="btn btn-outline-warning">
+<?php
+$hub_nav_params = ClubNavigation::hubParams($_GET);
+if ($hub_nav_params === [] && ! empty($_GET['org_id'])) {
+    $hub_nav_params = AsociacionHubNavigation::outboundParams((int) $_GET['org_id'], 'clubes');
+}
+$csrf_token = CSRF::token();
+$hub_hidden_params = $hub_nav_params;
+$clubes_list_req = array_merge($_GET, $hub_nav_params);
+unset($clubes_list_req['club_id']);
+$clubes_list_url = ClubNavigation::clubesListUrl($clubes_list_req);
+$clubes_post_url = ClubNavigation::clubesAsociadosPostUrl();
+?>
+
+<?php if ($clubes_asociados_embed): ?>
+<div class="asoc-report asoc-report--clubes clubes-asociados-embed">
+    <div class="d-flex justify-content-end flex-wrap gap-2 mb-3">
+        <a href="<?= htmlspecialchars(AppHelpers::dashboard('notificaciones_masivas', array_merge(['tipo' => 'club', 'from' => 'asociacion_hub'], $hub_nav_params))) ?>" class="clubes-asociados-notif-link btn btn-sm">
+            <i class="fas fa-bell me-1"></i>Notificación / invitación (toda la organización)
+        </a>
+        <button type="button" class="btn btn-success btn-sm" data-bs-toggle="modal" data-bs-target="#crearClubModal">
+            <i class="fas fa-plus"></i> Nuevo Club
+        </button>
+    </div>
+<?php else: ?>
+<div class="container-fluid asoc-report asoc-report--clubes">
+    <div class="clubes-asociados-page-bar">
+        <div class="clubes-asociados-page-bar__start"></div>
+        <h1 class="clubes-asociados-page-title">CLUBES</h1>
+        <div class="clubes-asociados-page-bar__end">
+            <a href="<?= htmlspecialchars(AppHelpers::dashboard('notificaciones_masivas', array_merge(['tipo' => 'club', 'from' => 'asociacion_hub'], $hub_nav_params))) ?>" class="clubes-asociados-notif-link btn btn-sm">
                 <i class="fas fa-bell me-1"></i>Notificación / invitación (toda la organización)
             </a>
-            <button type="button" class="btn btn-success" data-bs-toggle="modal" data-bs-target="#crearClubModal">
+            <button type="button" class="btn btn-success btn-sm" data-bs-toggle="modal" data-bs-target="#crearClubModal">
                 <i class="fas fa-plus"></i> Nuevo Club
             </button>
         </div>
     </div>
+<?php endif; ?>
 
     <?php if (empty($mis_clubes)): ?>
-        <div class="alert alert-info">
+        <div class="alert alert-info" data-swallow="0">
             <i class="fas fa-info-circle me-2"></i>
             Aún no tienes clubes. Crea el primero para comenzar a gestionar tu organización.
-        </div>
-    <?php endif; ?>
-
-    <?php if ($message): ?>
-        <div class="alert alert-success alert-dismissible fade show">
-            <i class="fas fa-check-circle"></i> <?= htmlspecialchars($message) ?>
-            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-        </div>
-    <?php endif; ?>
-
-    <?php if ($error): ?>
-        <div class="alert alert-danger alert-dismissible fade show">
-            <i class="fas fa-exclamation-triangle"></i> <?= htmlspecialchars($error) ?>
-            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
         </div>
     <?php endif; ?>
 
@@ -530,32 +538,22 @@ if ($organizacion_cod_org && !empty($mis_clubes)) {
         </div>
     <?php endif; ?>
 
-    <!-- Resumen total (si hay clubes) -->
-    <?php if (!empty($mis_clubes)): ?>
-    <div class="row mb-4">
-        <div class="col-md-6">
-            <div class="card text-center bg-primary text-white">
-                <div class="card-body">
-                    <h3 class="mb-0"><?= count($mis_clubes) ?></h3>
-                    <small>Asociaciones de la organización</small>
-                </div>
-            </div>
-        </div>
-        <div class="col-md-6">
-            <div class="card text-center bg-info text-white">
-                <div class="card-body">
-                    <h3 class="mb-0"><?= number_format(array_sum(array_column($mis_clubes, 'total_afiliados'))) ?></h3>
-                    <small>Total Afiliados</small>
-                </div>
-            </div>
-        </div>
-    </div>
-    <?php endif; ?>
-    
     <!-- Lista de clubes con estadísticas -->
     <div class="card">
-        <div class="card-header bg-primary text-white">
-            <h5 class="mb-0"><i class="fas fa-building me-2"></i>Asociaciones de la organización (<?= count($mis_clubes) ?>)</h5>
+        <div class="card-header clubes-asociados-list-header d-flex flex-wrap align-items-center gap-2">
+            <h6 class="mb-0 asoc-report-list-label fw-semibold">Listado</h6>
+            <?php if (!empty($mis_clubes)): ?>
+            <div class="clubes-asociados-header-stats">
+                <span class="clubes-asociados-header-stat">
+                    <i class="fas fa-building text-primary" aria-hidden="true"></i>
+                    Clubes: <strong><?= count($mis_clubes) ?></strong>
+                </span>
+                <span class="clubes-asociados-header-stat">
+                    <i class="fas fa-users text-info" aria-hidden="true"></i>
+                    Afiliados: <strong><?= number_format(array_sum(array_column($mis_clubes, 'total_afiliados'))) ?></strong>
+                </span>
+            </div>
+            <?php endif; ?>
         </div>
         <div class="card-body">
             <?php if (empty($mis_clubes)): ?>
@@ -567,11 +565,9 @@ if ($organizacion_cod_org && !empty($mis_clubes)) {
             <?php else: ?>
                 <div class="table-responsive">
                     <table class="table table-hover align-middle">
-                        <thead class="table-light">
+                        <thead>
                             <tr>
                                 <th><i class="fas fa-building me-2"></i>Club</th>
-                                <th class="text-center" title="Código de federación (debe coincidir con el tuyo)"><small>Cód.</small></th>
-                                <th>RIF</th>
                                 <th>Delegado</th>
                                 <th>Teléfono</th>
                                 <th class="text-center">Insc. línea</th>
@@ -583,7 +579,11 @@ if ($organizacion_cod_org && !empty($mis_clubes)) {
                             </tr>
                         </thead>
                         <tbody>
-                            <?php foreach ($mis_clubes as $club): ?>
+                            <?php foreach ($mis_clubes as $club):
+                                $clubPk = (int) ($club['club_id_pk'] ?? $club['id'] ?? 0);
+                                $detailUrl = ClubNavigation::detailUrl($clubPk, array_merge(['from' => 'asociacion_hub'], $hub_nav_params));
+                                $notifParams = array_merge(['tipo' => 'club', 'club_id' => $clubPk, 'from' => 'asociacion_hub'], $hub_nav_params);
+                            ?>
                                 <tr>
                                     <td>
                                         <div class="d-flex align-items-center gap-2">
@@ -596,24 +596,9 @@ if ($organizacion_cod_org && !empty($mis_clubes)) {
                                             <?php endif; ?>
                                             <div>
                                                 <strong><?= htmlspecialchars(trim((string) ($club['nombre'] ?? ''))) ?></strong>
-                                                <br>
-                                                <a href="index.php?page=clubs&action=detail&id=<?= (int) ($club['club_id_pk'] ?? $club['id'] ?? 0) ?>&from=clubes_asociados" class="btn btn-sm btn-link p-0 text-primary" title="Ver afiliados"><small><i class="fas fa-users me-1"></i>Ver afiliados</small></a>
                                             </div>
                                         </div>
                                     </td>
-                                    <td class="text-center">
-                                        <?php
-                                        $fedR = (int) ($club['fed_codigo_resuelto'] ?? 0);
-                                        $cc = $fedR > 0 ? $fedR : null;
-                                        $okCod = $organizacion_cod_org && $cc !== null && $cc === (int) $organizacion_cod_org;
-                                        ?>
-                                        <?php if ($cc !== null): ?>
-                                            <span class="badge <?= $okCod ? 'bg-success' : 'bg-warning text-dark' ?>" title="COALESCE(cod_org, entidad)"><?= $cc ?><?php if (empty($club['cod_org']) && !empty($club['entidad'])): ?><small class="d-block">(entidad)</small><?php endif; ?></span>
-                                        <?php else: ?>
-                                            <span class="text-muted">—</span>
-                                        <?php endif; ?>
-                                    </td>
-                                    <td><code><?= htmlspecialchars($club['rif'] ?? 'J000000000000') ?></code></td>
                                     <td><?= htmlspecialchars($club['delegado'] ?? '-') ?></td>
                                     <td><?= htmlspecialchars($club['telefono'] ?? '-') ?></td>
                                     <td class="text-center">
@@ -624,38 +609,38 @@ if ($organizacion_cod_org && !empty($mis_clubes)) {
                                         <?php endif; ?>
                                     </td>
                                     <td class="text-center">
-                                        <span class="badge bg-info"><?= (int)($club['total_afiliados'] ?? 0) ?></span>
+                                        <span class="badge bg-info clubes-asociados-stat-badge"><?= (int)($club['total_afiliados'] ?? 0) ?></span>
                                     </td>
                                     <td class="text-center">
-                                        <span class="badge bg-primary"><?= (int)($club['hombres'] ?? 0) ?></span>
+                                        <span class="badge bg-primary clubes-asociados-stat-badge"><?= (int)($club['hombres'] ?? 0) ?></span>
                                     </td>
                                     <td class="text-center">
-                                        <span class="badge bg-danger"><?= (int)($club['mujeres'] ?? 0) ?></span>
+                                        <span class="badge bg-danger clubes-asociados-stat-badge"><?= (int)($club['mujeres'] ?? 0) ?></span>
                                     </td>
                                     <td>
-                                        <?php if ($club['estatus']): ?>
-                                            <span class="badge bg-success">Activo</span>
-                                        <?php else: ?>
-                                            <span class="badge bg-secondary">Inactivo</span>
-                                        <?php endif; ?>
+                                        <?php
+                                        $clubId = $clubPk;
+                                        $estatus = (int) ($club['estatus'] ?? 0);
+                                        include __DIR__ . '/../views/_club_estatus_switch.php';
+                                        ?>
                                     </td>
-                                    <td class="text-center">
-                                        <a href="<?= htmlspecialchars(AppHelpers::dashboard('notificaciones_masivas', ['tipo' => 'club', 'club_id' => (int) ($club['club_id_pk'] ?? $club['id'] ?? 0), 'from' => 'clubes'])) ?>" 
-                                           class="btn btn-sm btn-outline-warning" title="Enviar notificación a afiliados del club">
+                                    <td class="text-center text-nowrap">
+                                        <a href="<?= htmlspecialchars($detailUrl) ?>"
+                                           class="btn btn-sm btn-outline-info" title="Ver afiliados">
+                                            <i class="fas fa-eye"></i>
+                                        </a>
+                                        <a href="<?= htmlspecialchars(AppHelpers::dashboard('notificaciones_masivas', $notifParams)) ?>"
+                                           class="btn btn-sm btn-outline-warning" title="Notificar afiliados del club">
                                             <i class="fas fa-bell"></i>
                                         </a>
-                                        <a href="<?= htmlspecialchars(AppHelpers::dashboard('clubs/invitation_link', ['club_id' => (int) ($club['club_id_pk'] ?? $club['id'] ?? 0)])) ?>" 
-                                           class="btn btn-sm btn-outline-success" title="Link invitación club">
-                                            <i class="fab fa-whatsapp"></i>
-                                        </a>
                                         <button type="button" class="btn btn-sm btn-outline-primary"
-                                                onclick="editarClubPorId(<?= (int) ($club['club_id_pk'] ?? $club['id'] ?? 0) ?>)"
-                                                title="Editar este club (PK <?= (int) ($club['club_id_pk'] ?? $club['id'] ?? 0) ?>)">
+                                                onclick="editarClubPorId(<?= $clubPk ?>)"
+                                                title="Editar club">
                                             <i class="fas fa-edit"></i>
                                         </button>
                                         <?php if (($club['total_afiliados'] ?? 0) == 0): ?>
                                             <button type="button" class="btn btn-sm btn-outline-danger"
-                                                    onclick="eliminarClub(<?= (int) ($club['club_id_pk'] ?? $club['id'] ?? 0) ?>, <?= json_encode($club['nombre']) ?>)">
+                                                    onclick="eliminarClub(<?= $clubPk ?>, <?= json_encode($club['nombre']) ?>)">
                                                 <i class="fas fa-trash"></i>
                                             </button>
                                         <?php endif; ?>
@@ -679,27 +664,21 @@ if ($organizacion_cod_org && !empty($mis_clubes)) {
             <?php endif; ?>
         </div>
     </div>
-
-    <!-- Info -->
-    <div class="card mt-3">
-        <div class="card-body">
-            <h6><i class="fas fa-info-circle text-info"></i> Información</h6>
-            <ul class="small text-muted mb-0">
-                <li>Todos los clubes que crees se mostrarán aquí con sus estadísticas</li>
-                <li>Los atletas pueden inscribirse eligiendo cualquiera de tus clubes</li>
-                <li>Puedes crear torneos asignando cualquiera de tus clubes como responsable</li>
-                <li>Si el nombre del club no corresponde (ej. otro estado), usa <strong>Editar</strong> y corrígelo; el vínculo a tu federación es el código en la columna «Cód.»</li>
-            </ul>
-        </div>
-    </div>
+<?php if ($clubes_asociados_embed): ?>
 </div>
+<?php else: ?>
+</div>
+<?php endif; ?>
 
 <!-- Modal Crear Club (misma estructura que organizaciones) -->
 <div class="modal fade" id="crearClubModal" tabindex="-1">
     <div class="modal-dialog">
         <div class="modal-content">
-            <form method="POST" enctype="multipart/form-data">
+            <form method="POST" action="<?= htmlspecialchars($clubes_post_url) ?>" enctype="multipart/form-data">
                 <input type="hidden" name="action" value="crear">
+                <?php foreach ($hub_hidden_params as $hk => $hv): ?>
+                <input type="hidden" name="<?= htmlspecialchars((string) $hk, ENT_QUOTES, 'UTF-8') ?>" value="<?= htmlspecialchars((string) $hv, ENT_QUOTES, 'UTF-8') ?>">
+                <?php endforeach; ?>
                 <div class="modal-header bg-success text-white">
                     <h5 class="modal-title"><i class="fas fa-plus"></i> Crear Club</h5>
                     <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
@@ -770,9 +749,12 @@ if ($organizacion_cod_org && !empty($mis_clubes)) {
 <div class="modal fade" id="editarClubModal" tabindex="-1">
     <div class="modal-dialog">
         <div class="modal-content">
-            <form method="POST" enctype="multipart/form-data">
+            <form method="POST" action="<?= htmlspecialchars($clubes_post_url) ?>" enctype="multipart/form-data">
                 <input type="hidden" name="action" value="editar">
                 <input type="hidden" name="club_id" id="edit_club_id" value="" autocomplete="off"><?php /* PK clubes.id; no cod_org */ ?>
+                <?php foreach ($hub_hidden_params as $hk => $hv): ?>
+                <input type="hidden" name="<?= htmlspecialchars((string) $hk, ENT_QUOTES, 'UTF-8') ?>" value="<?= htmlspecialchars((string) $hv, ENT_QUOTES, 'UTF-8') ?>">
+                <?php endforeach; ?>
                 <div class="modal-header bg-primary text-white">
                     <h5 class="modal-title"><i class="fas fa-edit"></i> Editar Club</h5>
                     <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
@@ -847,9 +829,12 @@ if ($organizacion_cod_org && !empty($mis_clubes)) {
 <div class="modal fade" id="eliminarClubModal" tabindex="-1">
     <div class="modal-dialog">
         <div class="modal-content">
-            <form method="POST">
+            <form method="POST" action="<?= htmlspecialchars($clubes_post_url) ?>">
                 <input type="hidden" name="action" value="eliminar">
                 <input type="hidden" name="club_id" id="delete_club_id">
+                <?php foreach ($hub_hidden_params as $hk => $hv): ?>
+                <input type="hidden" name="<?= htmlspecialchars((string) $hk, ENT_QUOTES, 'UTF-8') ?>" value="<?= htmlspecialchars((string) $hv, ENT_QUOTES, 'UTF-8') ?>">
+                <?php endforeach; ?>
                 <div class="modal-header bg-danger text-white">
                     <h5 class="modal-title"><i class="fas fa-trash"></i> Eliminar Club</h5>
                     <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
@@ -959,16 +944,44 @@ function eliminarClub(id, nombre) {
 }
 
 (function() {
+    var listUrl = <?= json_encode($clubes_list_url, JSON_UNESCAPED_SLASHES) ?>;
+    function limpiarClubIdEnUrl() {
+        history.replaceState(null, '', listUrl);
+    }
     var params = new URLSearchParams(window.location.search);
     var clubId = parseInt(params.get('club_id'), 10);
-    if (clubId <= 0) return;
     document.addEventListener('DOMContentLoaded', function() {
+        var editModal = document.getElementById('editarClubModal');
+        if (editModal) {
+            editModal.addEventListener('hidden.bs.modal', limpiarClubIdEnUrl);
+        }
+        if (clubId <= 0) {
+            return;
+        }
         var club = clubParaEdicionDesdeUrl(clubId);
         if (club) {
             editarClub(club);
             mis_clubes_json = '[]';
-            history.replaceState(null, '', window.location.pathname + '?page=clubes_asociados');
+            limpiarClubIdEnUrl();
         }
     });
 })();
+
+document.querySelectorAll('.club-estatus-switch').forEach(function (input) {
+    input.addEventListener('change', function () {
+        var form = this.closest('form.club-toggle-form');
+        if (!form) {
+            return;
+        }
+        var hidden = form.querySelector('input[name="nuevo_estatus"]');
+        if (!hidden) {
+            hidden = document.createElement('input');
+            hidden.type = 'hidden';
+            hidden.name = 'nuevo_estatus';
+            form.appendChild(hidden);
+        }
+        hidden.value = this.checked ? '1' : '0';
+        form.submit();
+    });
+});
 </script>

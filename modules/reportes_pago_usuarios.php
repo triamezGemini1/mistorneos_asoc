@@ -200,9 +200,9 @@ $stats = [
 
 $csrf_token = CSRF::token();
 ?>
-<div class="fade-in">
+<div class="fade-in report-page">
     <!-- Header -->
-    <div class="d-flex justify-content-between align-items-center mb-4">
+    <div class="report-page-title-bar d-flex justify-content-between align-items-center flex-wrap gap-2">
         <div>
             <h1 class="h3 mb-1">
                 <i class="fas fa-money-bill-wave me-2"></i>

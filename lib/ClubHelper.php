@@ -33,7 +33,7 @@ class ClubHelper {
 
     /**
      * Fragmento WHERE (alias u) + parámetros: afiliados de un club.
-     * Regla canónica: usuarios.entidad = PK clubes.id; opcionalmente club_id.
+     * Con columna club_id: prioriza u.club_id; u.entidad solo si club_id está vacío (legacy).
      *
      * @param array<string, mixed> $club Fila de clubes
      * @return array{0: string, 1: list<int>}
@@ -48,10 +48,73 @@ class ClubHelper {
         }
 
         if (self::usuariosHasClubIdColumn($pdo)) {
-            return ['(u.entidad = ? OR u.club_id = ?)', [$clubPk, $clubPk]];
+            return [
+                '(u.club_id = ? OR (COALESCE(NULLIF(u.club_id, 0), 0) = 0 AND u.entidad = ?))',
+                [$clubPk, $clubPk],
+            ];
         }
 
         return ['u.entidad = ?', [$clubPk]];
+    }
+
+    /**
+     * Id de club efectivo del afiliado (club_id; si no hay, entidad legacy).
+     *
+     * @param array<string, mixed> $row Fila usuarios o mapRow parcial
+     */
+    public static function resolveAfiliadoClubId(array $row): int
+    {
+        $clubId = (int) ($row['club_id'] ?? 0);
+        if ($clubId > 0) {
+            return $clubId;
+        }
+
+        return (int) ($row['entidad'] ?? 0);
+    }
+
+    /**
+     * Carga un usuario si pertenece al club (misma regla que el listado de afiliados).
+     *
+     * @param array<string, mixed> $club Fila de clubes
+     * @return array<string, mixed>|null
+     */
+    public static function fetchAfiliadoInClub(
+        PDO $pdo,
+        array $club,
+        int $clubPk,
+        int $userId,
+        ?string $roleFilter = null
+    ): ?array {
+        if ($clubPk <= 0 || $userId <= 0) {
+            return null;
+        }
+
+        [$scopeSql, $scopeParams] = self::afiliadosMatchSqlAndParams($pdo, $club, $clubPk);
+        $roleSql = $roleFilter !== null && $roleFilter !== '' ? ' AND u.role = ?' : '';
+        $params = array_merge([$userId], $scopeParams);
+        if ($roleFilter !== null && $roleFilter !== '') {
+            $params[] = $roleFilter;
+        }
+
+        try {
+            $stmt = $pdo->prepare("SELECT u.* FROM usuarios u WHERE u.id = ? AND ({$scopeSql}){$roleSql} LIMIT 1");
+            $stmt->execute($params);
+            $row = $stmt->fetch(PDO::FETCH_ASSOC);
+
+            return is_array($row) && $row !== [] ? $row : null;
+        } catch (Throwable $e) {
+            error_log('ClubHelper::fetchAfiliadoInClub: ' . $e->getMessage());
+
+            return null;
+        }
+    }
+
+    /**
+     * @param array<string, mixed> $club Fila de clubes
+     */
+    public static function afiliadoBelongsToClub(PDO $pdo, array $club, int $clubPk, int $userId): bool
+    {
+        return self::fetchAfiliadoInClub($pdo, $club, $clubPk, $userId) !== null;
     }
 
     /**
@@ -64,7 +127,7 @@ class ClubHelper {
         }
 
         if (self::usuariosHasClubIdColumn($pdo)) {
-            return "(u.entidad = {$clubAlias}.id OR u.club_id = {$clubAlias}.id)";
+            return "((COALESCE(NULLIF(u.club_id, 0), 0) > 0 AND u.club_id = {$clubAlias}.id) OR (COALESCE(NULLIF(u.club_id, 0), 0) = 0 AND u.entidad = {$clubAlias}.id))";
         }
 
         return "u.entidad = {$clubAlias}.id";
@@ -319,6 +382,107 @@ class ClubHelper {
             error_log("ClubHelper::getClubesDisponibles error: " . $e->getMessage());
             return [];
         }
+    }
+
+    /**
+     * Alcance de clubes de la organización que gestiona un torneo.
+     *
+     * @return array{org_id: int|null, club_ids: int[], clubes: list<array{id: int, nombre: string}>}
+     */
+    public static function getTorneoOrganizacionClubesScope(int $torneo_id): array
+    {
+        if ($torneo_id <= 0) {
+            return ['org_id' => null, 'club_ids' => [], 'clubes' => []];
+        }
+        if (!class_exists('Auth', false)) {
+            require_once __DIR__ . '/../config/auth.php';
+        }
+        $org_id = Auth::getTournamentOrganizacionId($torneo_id);
+        if ($org_id === null || $org_id <= 0) {
+            return ['org_id' => null, 'club_ids' => [], 'clubes' => []];
+        }
+        $club_ids = self::getClubesByOrganizacionId($org_id);
+        if ($club_ids === []) {
+            return ['org_id' => $org_id, 'club_ids' => [], 'clubes' => []];
+        }
+        try {
+            $placeholders = implode(',', array_fill(0, count($club_ids), '?'));
+            $stmt = DB::pdo()->prepare("
+                SELECT id, nombre
+                FROM clubes
+                WHERE id IN ({$placeholders}) AND estatus = 1
+                ORDER BY nombre ASC
+            ");
+            $stmt->execute($club_ids);
+            $clubes = $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+
+            return [
+                'org_id' => $org_id,
+                'club_ids' => $club_ids,
+                'clubes' => array_map(static function (array $row): array {
+                    return [
+                        'id' => (int) ($row['id'] ?? 0),
+                        'nombre' => (string) ($row['nombre'] ?? ''),
+                    ];
+                }, $clubes),
+            ];
+        } catch (Exception $e) {
+            error_log('ClubHelper::getTorneoOrganizacionClubesScope error: ' . $e->getMessage());
+
+            return ['org_id' => $org_id, 'club_ids' => $club_ids, 'clubes' => []];
+        }
+    }
+
+    public static function clubPerteneceTorneoOrganizacion(int $torneo_id, int $club_id): bool
+    {
+        if ($torneo_id <= 0 || $club_id <= 0) {
+            return false;
+        }
+        $scope = self::getTorneoOrganizacionClubesScope($torneo_id);
+
+        return in_array($club_id, $scope['club_ids'], true);
+    }
+
+    /**
+     * Club de inscripción en torneo de asociación.
+     * Prioridad: club elegido → club del jugador (si pertenece a la org) → club del operador en org → club default de la asociación activa.
+     */
+    public static function resolverClubInscripcionTorneo(
+        int $torneo_id,
+        ?int $clubExplicito = null,
+        ?int $jugadorClubId = null,
+        ?int $actorClubId = null
+    ): ?int {
+        $scope = self::getTorneoOrganizacionClubesScope($torneo_id);
+        $ids = $scope['club_ids'];
+        $enAlcance = static function (?int $cid) use ($ids): bool {
+            return $cid !== null && $cid > 0 && ($ids === [] || in_array((int) $cid, $ids, true));
+        };
+        if ($enAlcance($clubExplicito)) {
+            return (int) $clubExplicito;
+        }
+        if ($enAlcance($jugadorClubId)) {
+            return (int) $jugadorClubId;
+        }
+        if ($enAlcance($actorClubId)) {
+            return (int) $actorClubId;
+        }
+        if ($ids !== []) {
+            $clubes = $scope['clubes'];
+            if ($clubes !== []) {
+                return (int) ($clubes[0]['id'] ?? $ids[0]);
+            }
+
+            return (int) $ids[0];
+        }
+        if ($clubExplicito !== null && $clubExplicito > 0) {
+            return $clubExplicito;
+        }
+        if ($jugadorClubId !== null && $jugadorClubId > 0) {
+            return $jugadorClubId;
+        }
+
+        return ($actorClubId !== null && $actorClubId > 0) ? $actorClubId : null;
     }
 }
 

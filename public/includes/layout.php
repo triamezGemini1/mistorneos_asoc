@@ -85,8 +85,10 @@ if (! class_exists('SegmentConfig', false)) {
 $use_admin_general_header_nav = AdminGeneralNav::useHeaderNav($role_original_layout, $role_activo_layout);
 $use_asociacion_header_nav = AsociacionAdminNav::useHeaderNav($role_original_layout, $role_activo_layout);
 $use_sector_header_nav = $use_admin_general_header_nav || $use_asociacion_header_nav;
-$is_admin_general_home_page = ($current_page === 'home' && $role_activo_layout === 'admin_general');
-$is_asociacion_home_page = ($current_page === 'home' && $role_activo_layout === 'admin_club' && $use_asociacion_header_nav);
+$is_home_page = ($current_page === 'home');
+$is_admin_general_home_page = ($is_home_page && $role_activo_layout === 'admin_general');
+$is_asociacion_home_page = ($is_home_page && $role_activo_layout === 'admin_club' && $use_asociacion_header_nav);
+$load_asociacion_reportes_css = $is_estacion_hub_page || $use_asociacion_header_nav;
 
 // Contar solicitudes pendientes (visible para admin_general base, incluso en modo prueba)
 $solicitudes_pendientes = 0;
@@ -150,13 +152,17 @@ $modo_prueba_badge_class = $role_badge_class[$role_activo_layout] ?? 'bg-warning
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" media="print" onload="this.media='all'">
   <noscript><link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css"></noscript>
   <link rel="stylesheet" href="<?= htmlspecialchars($layout_asset_base) ?>/assets/css/custom-13inch.css">
+  <link rel="stylesheet" href="<?= htmlspecialchars($layout_asset_base) ?>/assets/css/list-form-titles.css">
+<?php if ($load_asociacion_reportes_css): ?>
+  <link rel="stylesheet" href="<?= htmlspecialchars($layout_asset_base) ?>/assets/css/asociacion-reportes.css">
+<?php endif; ?>
 <?php if ($is_estacion_hub_page): ?>
   <link rel="stylesheet" href="<?= htmlspecialchars($layout_asset_base) ?>/assets/css/estacion-hub.css">
 <?php endif; ?>
 <?php if ($use_sector_header_nav): ?>
   <link rel="stylesheet" href="<?= htmlspecialchars($layout_asset_base) ?>/assets/css/admin-general-header-nav.css">
 <?php endif; ?>
-<?php if ($is_admin_general_home_page || $is_asociacion_home_page): ?>
+<?php if ($is_home_page): ?>
   <link rel="stylesheet" href="<?= htmlspecialchars($layout_asset_base) ?>/assets/css/admin-general-home.css">
 <?php endif; ?>
 <?php include __DIR__ . '/partials/brand_theme.php'; ?>
@@ -202,43 +208,36 @@ if ($current_page === 'estadisticas_torneos' || ($current_page === 'torneos_estr
 if ($is_estacion_hub_page) {
     $body_page_extra .= ' estacion-hub-page';
 }
+if (! empty($load_asociacion_reportes_css)) {
+    $body_page_extra .= ' asoc-reportes-module';
+}
 ?>
-<body class="bg-light<?= $is_panel_control_torneos ? ' page-panel-control-torneos' : '' ?><?= $use_sector_header_nav ? ' admin-general-header-nav-active' : '' ?><?= ($is_admin_general_home_page || $is_asociacion_home_page) ? ' admin-general-home-page' : '' ?><?= htmlspecialchars($body_page_extra, ENT_QUOTES, 'UTF-8') ?>"<?= $nav_origin !== '' ? ' data-nav-origin="' . $nav_origin . '"' : '' ?>>
+<body class="bg-light<?= $is_panel_control_torneos ? ' page-panel-control-torneos' : '' ?><?= $use_sector_header_nav ? ' admin-general-header-nav-active' : '' ?><?= $use_asociacion_header_nav ? ' asociacion-header-nav-active' : '' ?><?= ($is_admin_general_home_page || $is_asociacion_home_page) ? ' admin-general-home-page' : '' ?><?= $is_home_page ? ' page-home' : '' ?><?= htmlspecialchars($body_page_extra, ENT_QUOTES, 'UTF-8') ?>"<?= $nav_origin !== '' ? ' data-nav-origin="' . $nav_origin . '"' : '' ?>>
   <!-- Contenedor para notificaciones toast (Push + tarjeta visual) -->
   <div id="notification-container" aria-live="polite"></div>
 
-  <!-- Mensajes flash (éxito/error) superpuestos, no desplazan el contenido -->
-  <div id="app-flash-messages" class="app-flash-messages" aria-live="polite">
-    <?php
-    $flash_success = $_SESSION['success'] ?? $_SESSION['success_message'] ?? null;
-    $flash_error   = $_SESSION['error'] ?? $_SESSION['error_message'] ?? null;
-    $flash_warning = $_SESSION['warning'] ?? $_SESSION['warning_message'] ?? null;
-    $flash_info    = $_SESSION['info'] ?? $_SESSION['info_message'] ?? null;
-    if ($flash_success) { unset($_SESSION['success'], $_SESSION['success_message']); ?>
-    <div class="alert alert-success alert-dismissible fade show app-flash-item" role="alert">
-      <?= htmlspecialchars($flash_success) ?>
-      <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Cerrar"></button>
-    </div>
-    <?php }
-    if ($flash_error) { unset($_SESSION['error'], $_SESSION['error_message']); ?>
-    <div class="alert alert-danger alert-dismissible fade show app-flash-item" role="alert">
-      <?= htmlspecialchars($flash_error) ?>
-      <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Cerrar"></button>
-    </div>
-    <?php }
-    if ($flash_warning) { unset($_SESSION['warning'], $_SESSION['warning_message']); ?>
-    <div class="alert alert-warning alert-dismissible fade show app-flash-item" role="alert">
-      <?= htmlspecialchars($flash_warning) ?>
-      <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Cerrar"></button>
-    </div>
-    <?php }
-    if ($flash_info) { unset($_SESSION['info'], $_SESSION['info_message']); ?>
-    <div class="alert alert-info alert-dismissible fade show app-flash-item" role="alert">
-      <?= htmlspecialchars($flash_info) ?>
-      <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Cerrar"></button>
-    </div>
-    <?php } ?>
-  </div>
+  <!-- Mensajes flash → SweetAlert (app-flash-swal.js) -->
+  <?php
+    $flash_items = [];
+    $flash_map = [
+      ['keys' => ['success', 'success_message', 'success_msg'], 'type' => 'success'],
+      ['keys' => ['error', 'error_message'], 'type' => 'error'],
+      ['keys' => ['warning', 'warning_message'], 'type' => 'warning'],
+      ['keys' => ['info', 'info_message'], 'type' => 'info'],
+    ];
+    foreach ($flash_map as $entry) {
+      foreach ($entry['keys'] as $key) {
+        if (! empty($_SESSION[$key])) {
+          $flash_items[] = ['type' => $entry['type'], 'message' => (string) $_SESSION[$key]];
+          unset($_SESSION[$key]);
+        }
+      }
+    }
+  ?>
+  <?php if ($flash_items !== []): ?>
+  <script type="application/json" id="app-flash-data"><?= json_encode($flash_items, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?></script>
+  <?php endif; ?>
+  <div id="app-flash-messages" class="app-flash-messages d-none" aria-live="polite"></div>
 
   <div class="d-flex<?= $use_sector_header_nav ? ' admin-general-header-nav' : '' ?>" id="wrapper">
     
@@ -330,9 +329,10 @@ if ($is_estacion_hub_page) {
         <li class="mb-2">
           <?php
           $href_clubes_org = ($admin_club_org_id ?? 0) > 0
-            ? ($dashboard_href('organizaciones', ['id' => (int) $admin_club_org_id]) . '#lista-clubes-org')
-            : $dashboard_href('clubes_asociados');
-          $active_clubes_org = (($current_page === 'organizaciones' && (int)($_GET['id'] ?? 0) === (int)($admin_club_org_id ?? 0)) || $current_page === 'clubes_asociados');
+            ? ($dashboard_href('asociacion_hub', ['org_id' => (int) $admin_club_org_id, 'tab' => 'clubes']))
+            : $dashboard_href('home');
+          $active_clubes_org = ($current_page === 'asociacion_hub' && ($_GET['tab'] ?? '') === 'clubes')
+            || (($current_page === 'organizaciones' && (int)($_GET['id'] ?? 0) === (int)($admin_club_org_id ?? 0)));
           ?>
           <a href="<?= htmlspecialchars($href_clubes_org) ?>" class="nav-link <?= $active_clubes_org ? 'active' : '' ?>">
             <i class="fas fa-sitemap me-3"></i>
@@ -779,6 +779,7 @@ if ($is_estacion_hub_page) {
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js" defer></script>
   <!-- SweetAlert2: mensajes modales; ?v= para cache-busting -->
   <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11?v=4.0" defer></script>
+  <script src="<?= htmlspecialchars($layout_asset_base) ?>/assets/app-flash-swal.js" defer></script>
   <?php
 $app_base_for_js = $layout_asset_base;
 if (str_ends_with($app_base_for_js, '/public')) {

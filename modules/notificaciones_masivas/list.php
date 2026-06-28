@@ -12,6 +12,7 @@ require_once __DIR__ . '/../../config/csrf.php';
 require_once __DIR__ . '/../../lib/ClubHelper.php';
 require_once __DIR__ . '/../../lib/NotificationSender.php';
 require_once __DIR__ . '/../../lib/NotificationManager.php';
+require_once __DIR__ . '/../../lib/ClubNavigation.php';
 
 Auth::requireRole(['admin_general', 'admin_torneo', 'admin_club']);
 
@@ -557,12 +558,13 @@ if (isset($resultados) && $resultados !== null) {
     <?php else: ?>
     <!-- ========== FORMULARIO ADMIN CLUB: tipo organización / inscritos torneo ========== -->
     <?php
-    $url_retorno = ($from_origin === 'torneo_gestion' || $torneo_id > 0) ? 'index.php?page=torneo_gestion&action=index' : '';
+    $url_retorno = ClubNavigation::notificacionesReturnUrl($_GET);
+    $retorno_label = $url_retorno !== '' ? ClubNavigation::returnLabelFromRequest($_GET) : '';
     ?>
-    <?php if ($url_retorno): ?>
+    <?php if ($url_retorno !== ''): ?>
     <div class="mb-3">
         <a href="<?= htmlspecialchars($url_retorno) ?>" class="btn btn-outline-secondary">
-            <i class="fas fa-arrow-left me-2"></i>Volver al origen
+            <i class="fas fa-arrow-left me-2"></i><?= htmlspecialchars($retorno_label !== '' ? $retorno_label : 'Volver al origen') ?>
         </a>
     </div>
     <?php endif; ?>
@@ -574,6 +576,13 @@ if (isset($resultados) && $resultados !== null) {
             <form method="GET" action="" class="row g-3">
                 <input type="hidden" name="page" value="notificaciones_masivas">
                 <?php if ($from_origin): ?><input type="hidden" name="from" value="<?= htmlspecialchars($from_origin) ?>"><?php endif; ?>
+                <?php foreach (['club_id', 'hub_org_id', 'hub_tab', 'hub_estado'] as $hk):
+                    if (!isset($_GET[$hk]) || (string) $_GET[$hk] === '') {
+                        continue;
+                    }
+                ?>
+                <input type="hidden" name="<?= htmlspecialchars($hk) ?>" value="<?= htmlspecialchars((string) $_GET[$hk]) ?>">
+                <?php endforeach; ?>
                 <div class="col-md-4">
                     <label class="form-label">Tipo de destinatarios</label>
                     <select name="tipo" class="form-select" onchange="this.form.submit()">
@@ -624,6 +633,13 @@ if (isset($resultados) && $resultados !== null) {
                 <input type="hidden" name="tipo" value="<?= htmlspecialchars($tipo_destino) ?>">
                 <input type="hidden" name="torneo_id" value="<?= $torneo_id ?>">
                 <?php if ($from_origin): ?><input type="hidden" name="from" value="<?= htmlspecialchars($from_origin) ?>"><?php endif; ?>
+                <?php foreach (['club_id', 'hub_org_id', 'hub_tab', 'hub_estado'] as $hk):
+                    if (!isset($_GET[$hk]) || (string) $_GET[$hk] === '') {
+                        continue;
+                    }
+                ?>
+                <input type="hidden" name="<?= htmlspecialchars($hk) ?>" value="<?= htmlspecialchars((string) $_GET[$hk]) ?>">
+                <?php endforeach; ?>
                 <?php foreach ($destinatarios as $d):
                     $tratamiento = 'Estimado/a';
                     if (isset($d['sexo'])) {

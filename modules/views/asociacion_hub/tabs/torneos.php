@@ -11,7 +11,16 @@ $puedeAdmin = ! empty($viewData['puede_administrar']);
 $estadoActivo = (string) ($viewData['estado_torneos'] ?? 'en_proceso');
 
 require_once __DIR__ . '/../../../../config/csrf.php';
+require_once __DIR__ . '/../../../../config/auth.php';
 require_once __DIR__ . '/../../../../lib/AsociacionHubNavigation.php';
+require_once __DIR__ . '/../../../../lib/AsociacionAdminHelper.php';
+require_once __DIR__ . '/../../../../config/db.php';
+
+$puedeCrearTorneo = AsociacionAdminHelper::puedeCrearYAdministrarTorneos(
+    DB::pdo(),
+    (int) Auth::id(),
+    (string) (Auth::user()['role'] ?? '')
+);
 
 $orgId = (int) ($viewData['org_id'] ?? 0);
 $hubOut = AsociacionHubNavigation::outboundParams($orgId, 'torneos', $estadoActivo);
@@ -67,12 +76,12 @@ $filtros = [
     'pendientes' => ['label' => 'Pendientes', 'icon' => 'fa-calendar-plus', 'class' => 'btn-outline-success'],
 ];
 ?>
-<div class="card shadow-sm">
-    <div class="card-header bg-light d-flex flex-wrap align-items-center justify-content-between gap-2">
+<div class="card shadow-sm asoc-report-card">
+    <div class="card-header d-flex flex-wrap align-items-center justify-content-between gap-2">
         <h2 class="h5 mb-0"><i class="fas fa-trophy me-2"></i>Torneos</h2>
         <div class="d-flex align-items-center gap-2">
-            <span class="badge estacion-count-badge"><?= count($torneos) ?> evento(s)</span>
-            <?php if ($puedeAdmin): ?>
+            <span class="badge asoc-report-count-badge"><?= count($torneos) ?> evento(s)</span>
+            <?php if ($puedeCrearTorneo): ?>
             <a href="<?= htmlspecialchars($tournamentFormHref('new'), ENT_QUOTES, 'UTF-8') ?>"
                class="btn btn-sm btn-success">
                 <i class="fas fa-plus me-1"></i>Crear torneo
@@ -98,7 +107,7 @@ $filtros = [
         <?php if ($torneos === []): ?>
             <div class="estacion-empty-state mb-0">
                 <p class="mb-2">No hay torneos en la categoría «<?= htmlspecialchars($filtros[$estadoActivo]['label'] ?? $estadoActivo, ENT_QUOTES, 'UTF-8') ?>».</p>
-                <?php if ($puedeAdmin && $estadoActivo === 'pendientes'): ?>
+                <?php if ($puedeCrearTorneo && $estadoActivo === 'pendientes'): ?>
                 <a href="<?= htmlspecialchars($tournamentFormHref('new'), ENT_QUOTES, 'UTF-8') ?>"
                    class="btn btn-sm btn-success">
                     <i class="fas fa-plus me-1"></i>Crear torneo
@@ -108,7 +117,7 @@ $filtros = [
         <?php else: ?>
             <div class="table-responsive">
                 <table class="table table-hover table-striped mb-0 align-middle">
-                    <thead class="table-light">
+                    <thead>
                         <tr>
                             <th>Nombre</th>
                             <th>Fecha</th>
@@ -129,7 +138,8 @@ $filtros = [
                             $activo = $estatus === 1;
                             $finalizado = ! empty($t['finalizado']);
                             $puedeFinalizar = ! empty($t['puede_finalizar']);
-                            $puedeEditar = ! empty($t['puede_editar']);
+                            $puedeEditar = ! empty($t['puede_editar'])
+                                || ($puedeCrearTorneo && ! $finalizado && ! empty($t['puede_ver']));
                             $puedeVer = ! empty($t['puede_ver']);
                             $rondasPautadas = (int) ($t['rondas_pautadas'] ?? 0);
                             $ultimaRonda = (int) ($t['ultima_ronda'] ?? 0);

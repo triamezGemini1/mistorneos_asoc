@@ -27,9 +27,9 @@
             <a href="index.php?page=torneo_gestion&action=index" class="btn btn-outline-secondary btn-sm">
                 <i class="fas fa-cog me-1"></i>Gestión operativa
             </a>
-            <?php if ($scope_solo_mi_org): ?>
-            <a href="index.php?page=tournaments&action=new" class="btn btn-success btn-sm">
-                <i class="fas fa-plus-circle me-1"></i>Nuevo torneo
+            <?php if (!empty($puede_crear_torneo)): ?>
+            <a href="<?= htmlspecialchars($nuevo_torneo_url) ?>" class="btn btn-success btn-sm">
+                <i class="fas fa-plus-circle me-1"></i>Crear torneo
             </a>
             <?php endif; ?>
             <?php if ($is_admin_general): ?>
@@ -107,7 +107,16 @@
     </div>
 
     <?php if (empty($por_organizacion)): ?>
-        <div class="alert alert-info"><i class="fas fa-info-circle me-2"></i>No hay torneos para este criterio.</div>
+        <div class="alert alert-info">
+            <i class="fas fa-info-circle me-2"></i>No hay torneos para este criterio.
+            <?php if (!empty($puede_crear_torneo)): ?>
+            <div class="mt-2">
+                <a href="<?= htmlspecialchars($nuevo_torneo_url) ?>" class="btn btn-sm btn-success">
+                    <i class="fas fa-plus-circle me-1"></i>Crear torneo
+                </a>
+            </div>
+            <?php endif; ?>
+        </div>
     <?php else: ?>
         <?php foreach ($por_organizacion as $org): ?>
             <div class="card shadow-sm mb-4">

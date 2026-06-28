@@ -29,7 +29,7 @@ if (! is_int($org_id) || $org_id <= 0) {
 
 if (! is_int($org_id) || $org_id <= 0) {
     $_SESSION['error'] = 'Asociación no válida.';
-    header('Location: ' . AsociacionHubNavigation::getOrigin(0)['origin_url']);
+    header('Location: ' . AsociacionHubNavigation::safeRedirectUrl(AsociacionHubNavigation::getOrigin(0)['origin_url']));
     exit;
 }
 
@@ -38,10 +38,7 @@ $authUser = AsociacionAuth::userFromSession($sessionUser, $org_id);
 
 if (! AsociacionAuth::checkAccess(AsociacionAuth::ADMIN_ASOC, $org_id, $authUser)) {
     $_SESSION['error'] = 'No tiene permiso para editar esta asociación.';
-    header('Location: ' . AppHelpers::dashboard('asociacion_hub', [
-        'org_id' => $org_id,
-        'tab' => 'info',
-    ]));
+    header('Location: ' . AppHelpers::dashboard('home'));
     exit;
 }
 
@@ -49,38 +46,32 @@ try {
     CSRF::validate();
 } catch (Throwable $e) {
     $_SESSION['error'] = 'Token de seguridad inválido. Intente de nuevo.';
-    header('Location: ' . AppHelpers::dashboard('asociacion_hub', [
-        'org_id' => $org_id,
-        'tab' => 'info',
-    ]));
+    header('Location: ' . AppHelpers::dashboard('home'));
     exit;
 }
 
 $asociacion = OrganizacionService::getById($org_id);
 if ($asociacion === null) {
     $_SESSION['error'] = 'Asociación no encontrada.';
-    header('Location: ' . AsociacionHubNavigation::getOrigin($org_id)['origin_url']);
+    header('Location: ' . AsociacionHubNavigation::safeRedirectUrl(AsociacionHubNavigation::getOrigin($org_id)['origin_url']));
     exit;
 }
 
-$redirectHub = static function () use ($org_id): void {
-    header('Location: ' . AppHelpers::dashboard('asociacion_hub', [
-        'org_id' => $org_id,
-        'tab' => 'info',
-    ]));
+$redirectHome = static function () use ($org_id): void {
+    header('Location: ' . AppHelpers::dashboard('home'));
     exit;
 };
 
 $nombre = trim((string) ($_POST['nombre'] ?? ''));
 if ($nombre === '') {
     $_SESSION['error'] = 'El nombre de la asociación es obligatorio.';
-    $redirectHub();
+    $redirectHome();
 }
 
 $email = trim((string) ($_POST['email'] ?? ''));
 if ($email !== '' && ! filter_var($email, FILTER_VALIDATE_EMAIL)) {
     $_SESSION['error'] = 'El correo electrónico no es válido.';
-    $redirectHub();
+    $redirectHome();
 }
 
 $data = [
@@ -98,11 +89,11 @@ if (is_array($logoFile)) {
             $data['logo'] = OrganizacionService::saveLogoFromUpload($org_id, $logoFile);
         } catch (Throwable $e) {
             $_SESSION['error'] = $e->getMessage();
-            $redirectHub();
+            $redirectHome();
         }
     } elseif ($uploadErr !== UPLOAD_ERR_NO_FILE) {
         $_SESSION['error'] = 'Error al subir el archivo de logo.';
-        $redirectHub();
+        $redirectHome();
     }
 }
 if (! isset($data['logo'])) {
@@ -120,8 +111,5 @@ if ($ok) {
     $_SESSION['error'] = 'No se pudo actualizar la asociación.';
 }
 
-header('Location: ' . AppHelpers::dashboard('asociacion_hub', [
-    'org_id' => $org_id,
-    'tab' => 'info',
-]));
+header('Location: ' . AppHelpers::dashboard('home'));
 exit;

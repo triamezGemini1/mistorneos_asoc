@@ -332,12 +332,33 @@ function reporteInscritosLogoDataUri(?string $relativePath): string {
 }
 
 /**
+ * Filtro SQL para inscritos cuyo id_club pertenece a la organización del torneo.
+ *
+ * @return array{sql: string, params: int[]}
+ */
+function torneoGestionSqlFiltroClubesOrganizacion(int $torneoId, string $aliasInscritos = 'i'): array
+{
+    require_once __DIR__ . '/../lib/ClubHelper.php';
+    $scope = ClubHelper::getTorneoOrganizacionClubesScope($torneoId);
+    if ($scope['club_ids'] === []) {
+        return ['sql' => '', 'params' => []];
+    }
+    $ph = implode(',', array_fill(0, count($scope['club_ids']), '?'));
+
+    return [
+        'sql' => " AND {$aliasInscritos}.id_club IN ({$ph}) ",
+        'params' => $scope['club_ids'],
+    ];
+}
+
+/**
  * Inscritos del torneo agrupados por asociaciÃ³n (club) y equipo (nombre lÃ³gico).
  */
 function torneoGestionInscripcionesEquiposAgrupadas(PDO $pdo, int $torneoId): array {
     $usuarioTelefonoCoalesce = usuariosTelefonoCoalesceDosAliases($pdo);
     $exprInsNumfvd = inscritosColumnExists($pdo, 'numfvd') ? 'COALESCE(i.numfvd, 0)' : '0';
     $exprInsCedula = inscritosColumnExists($pdo, 'cedula') ? 'i.cedula' : "''";
+    $filtroOrg = torneoGestionSqlFiltroClubesOrganizacion($torneoId);
     $stmt = $pdo->prepare("
         SELECT i.id_usuario, {$exprInsNumfvd} AS inscrito_numfvd, {$exprInsCedula} AS cedula_inscrita,
                TRIM(COALESCE(i.codigo_equipo, '')) AS codigo_equipo,
@@ -354,11 +375,11 @@ function torneoGestionInscripcionesEquiposAgrupadas(PDO $pdo, int $torneoId): ar
             AND u_alt.numfvd = i.id_usuario
             AND EXISTS (SELECT 1 FROM tournaments tx WHERE tx.id = i.torneo_id AND tx.club_responsable = 7)
         LEFT JOIN equipos e ON e.id_torneo = i.torneo_id AND e.codigo_equipo = i.codigo_equipo AND e.estatus = 0
-        LEFT JOIN clubes c ON c.id = COALESCE(e.id_club, i.id_club)
-        WHERE i.torneo_id = ?
+        LEFT JOIN clubes c ON c.id = i.id_club
+        WHERE i.torneo_id = ?{$filtroOrg['sql']}
         ORDER BY asociacion_nombre ASC, equipo_nombre ASC, i.codigo_equipo ASC, i.id ASC
     ");
-    $stmt->execute([$torneoId]);
+    $stmt->execute(array_merge([$torneoId], $filtroOrg['params']));
     $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
     $agrupado = [];
     foreach ($rows as $r) {
@@ -1100,6 +1121,7 @@ if ($action === 'inscripciones_gestor_excel' && ($_SERVER['REQUEST_METHOD'] ?? '
         $orden = $tipoReporte === 'inscritos_por_equipo'
             ? 'asociacion_nombre ASC, codigo_equipo ASC, usuario_nombre ASC'
             : 'asociacion_nombre ASC, usuario_nombre ASC';
+        $filtroOrg = torneoGestionSqlFiltroClubesOrganizacion($torneo_id);
         $st = $pdo->prepare("
             SELECT
                 i.id_usuario,
@@ -1119,11 +1141,11 @@ if ($action === 'inscripciones_gestor_excel' && ($_SERVER['REQUEST_METHOD'] ?? '
                 AND u_alt.numfvd = i.id_usuario
                 AND EXISTS (SELECT 1 FROM tournaments tx WHERE tx.id = i.torneo_id AND tx.club_responsable = 7)
             LEFT JOIN equipos e ON e.id_torneo = i.torneo_id AND e.codigo_equipo = i.codigo_equipo AND e.estatus = 0
-            LEFT JOIN clubes c ON c.id = COALESCE(e.id_club, i.id_club)
-            WHERE i.torneo_id = ?
+            LEFT JOIN clubes c ON c.id = i.id_club
+            WHERE i.torneo_id = ?{$filtroOrg['sql']}
             ORDER BY {$orden}
         ");
-        $st->execute([$torneo_id]);
+        $st->execute(array_merge([$torneo_id], $filtroOrg['params']));
         $rawRows = $st->fetchAll(PDO::FETCH_ASSOC);
         $rows = [];
         foreach ($rawRows as $r) {
@@ -2240,6 +2262,30 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         case 'verificar_acta_rechazar':
             verificarActaRechazar($user_id, $is_admin_general);
             break;
+
+        case 'confirmar_inscripciones_torneo':
+            $torneo_id = (int) ($_POST['torneo_id'] ?? 0);
+            if ($torneo_id <= 0) {
+                $_SESSION['error'] = 'Torneo inválido.';
+                header('Location: ' . buildRedirectUrl('inscripciones', ['torneo_id' => $torneo_id]));
+                exit;
+            }
+            verificarPermisosTorneo($torneo_id, $user_id, $is_admin_general);
+            $pdo = DB::pdo();
+            $sqlNoRet = str_replace('estatus', 'i.estatus', InscritosHelper::SQL_WHERE_NO_RETIRADO);
+            $stmt = $pdo->prepare("
+                UPDATE inscritos i SET i.estatus = ?
+                WHERE i.torneo_id = ?
+                  AND {$sqlNoRet}
+                  AND NOT (i.estatus = 1 OR i.estatus = 2 OR CAST(i.estatus AS CHAR) IN ('confirmado', 'solvente', 'pagado'))
+            ");
+            $stmt->execute([InscritosHelper::ESTATUS_CONFIRMADO_NUM, $torneo_id]);
+            $n = $stmt->rowCount();
+            $_SESSION['success'] = $n > 0
+                ? "Se confirmaron {$n} inscripción(es) pendiente(s)."
+                : 'No había inscripciones pendientes por confirmar.';
+            header('Location: ' . buildRedirectUrl('inscripciones', ['torneo_id' => $torneo_id]));
+            exit;
 
         case 'cambiar_estatus_inscrito':
             $inscripcion_id = (int)($_POST['inscripcion_id'] ?? 0);
@@ -3518,7 +3564,8 @@ function obtenerDatosInscripciones($torneo_id) {
     $torneo_cerrado = (int)($torneo['locked'] ?? 0) === 1;
     $puede_confirmar_retirar = !$torneo_cerrado;
     
-    // Obtener TODOS los inscritos del torneo (cualquier estatus) para confirmar o retirar
+    // Inscritos activos (sin retirados) para gestión
+    $sqlNoRet = str_replace('estatus', 'i.estatus', InscritosHelper::SQL_WHERE_NO_RETIRADO);
     $sql = "SELECT 
                 i.*,
                 u.nombre as nombre_completo,
@@ -3530,21 +3577,33 @@ function obtenerDatosInscripciones($torneo_id) {
             INNER JOIN usuarios u ON i.id_usuario = u.id
             LEFT JOIN clubes c ON i.id_club = c.id
             WHERE i.torneo_id = ?
+              AND {$sqlNoRet}
             ORDER BY c.nombre ASC, u.nombre ASC";
     
     $stmt = $pdo->prepare($sql);
     $stmt->execute([$torneo_id]);
     $inscritos = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+    $stmtRet = $pdo->prepare("
+        SELECT COUNT(*) FROM inscritos i
+        WHERE i.torneo_id = ?
+          AND (i.estatus = ? OR CAST(i.estatus AS CHAR) = 'retirado')
+    ");
+    $stmtRet->execute([$torneo_id, InscritosHelper::ESTATUS_RETIRADO_NUM]);
+    $total_retirados = (int) $stmtRet->fetchColumn();
     
-    // EstadÃ­sticas
+    // EstadÃ­sticas (solo activos)
     $total_inscritos = count($inscritos);
     $confirmados = 0;
+    $pendientes_confirmar = 0;
     $hombres = 0;
     $mujeres = 0;
     
     foreach ($inscritos as $inscrito) {
         if (InscritosHelper::esConfirmado($inscrito['estatus'])) {
             $confirmados++;
+        } else {
+            $pendientes_confirmar++;
         }
         if ($inscrito['sexo'] == 1 || strtoupper($inscrito['sexo']) === 'M') {
             $hombres++;
@@ -3594,6 +3653,8 @@ function obtenerDatosInscripciones($torneo_id) {
         'torneo_iniciado' => $torneo_iniciado,
         'puede_confirmar_retirar' => $puede_confirmar_retirar,
         'contadores_inscripcion' => $contadores_inscripcion,
+        'pendientes_confirmar' => $pendientes_confirmar,
+        'total_retirados' => $total_retirados,
     ];
 }
 
@@ -4498,13 +4559,16 @@ function obtenerDatosInscribirEquipoSitio($torneo_id) {
     unset($jugador);
     
     $org_torneo_id = Auth::getTournamentOrganizacionId($torneo_id);
-    $clubes_disponibles = [];
+    $scopeOrg = ClubHelper::getTorneoOrganizacionClubesScope((int) $torneo_id);
+    $clubes_disponibles = $scopeOrg['clubes'];
+    $ids_select = $scopeOrg['club_ids'];
     $where_club_activo = "(c.estatus = 1 OR c.estatus = '1' OR c.estatus = 'activo')";
-    if ($org_torneo_id) {
+    if ($clubes_disponibles === [] && $org_torneo_id) {
         $stmt = $pdo->prepare("SELECT c.id, c.nombre, c.entidad FROM clubes c WHERE (c.cod_org = ?" . (organizacionesHasCodOrg() ? " OR c.cod_org = (SELECT id FROM organizaciones WHERE cod_org = ? LIMIT 1)" : "") . ") AND {$where_club_activo} ORDER BY c.nombre ASC");
         $stmt->execute(organizacionesHasCodOrg() ? [$org_torneo_id, $org_torneo_id] : [$org_torneo_id]);
         $clubes_disponibles = $stmt->fetchAll(PDO::FETCH_ASSOC);
-    } elseif ($is_admin_general) {
+        $ids_select = array_values(array_map('intval', array_column($clubes_disponibles, 'id')));
+    } elseif ($clubes_disponibles === [] && $is_admin_general) {
         $stmt = $pdo->query("SELECT id, nombre, entidad FROM clubes WHERE (estatus = 1 OR estatus = '1' OR estatus = 'activo') ORDER BY nombre ASC");
         $clubes_disponibles = $stmt->fetchAll(PDO::FETCH_ASSOC);
     } elseif ($user_club_id) {
@@ -4549,20 +4613,6 @@ function obtenerDatosInscribirEquipoSitio($torneo_id) {
         $eq0['id_club'] = (int)($eq0['id_club'] ?? 0);
     }
     unset($eq0);
-    $ids_select = array_map('intval', array_column($clubes_disponibles, 'id'));
-    foreach ($equipos_registrados as $eqm) {
-        $cid = (int)($eqm['id_club'] ?? 0);
-        if ($cid <= 0 || in_array($cid, $ids_select, true)) {
-            continue;
-        }
-        $stmt = $pdo->prepare('SELECT id, nombre, entidad FROM clubes WHERE id = ? LIMIT 1');
-        $stmt->execute([$cid]);
-        $fila = $stmt->fetch(PDO::FETCH_ASSOC);
-        if ($fila) {
-            $clubes_disponibles[] = ['id' => (int)$fila['id'], 'nombre' => $fila['nombre'] . ' (equipo)', 'entidad' => (int)($fila['entidad'] ?? 0)];
-            $ids_select[] = $cid;
-        }
-    }
     foreach ($clubes_disponibles as &$cClub) {
         $ent = (int)($cClub['entidad'] ?? 0);
         $cClub['codigo_prefijo'] = $ent > 0 ? (string)$ent : (string)(int)($cClub['id'] ?? 0);
@@ -4630,6 +4680,7 @@ function obtenerDatosInscribirEquipoSitio($torneo_id) {
  * Inscritos = ya inscritos con estatus confirmado.
  */
 function obtenerDatosInscribirSitio($torneo_id, $user_id, $is_admin_general) {
+    require_once __DIR__ . '/../lib/ClubHelper.php';
     $pdo = DB::pdo();
     
     $orgJoin = torneoOrgJoinExpr('t', 'o');
@@ -4642,11 +4693,49 @@ function obtenerDatosInscribirSitio($torneo_id, $user_id, $is_admin_general) {
     
     $entidad_torneo = isset($torneo['entidad_torneo']) ? (int)$torneo['entidad_torneo'] : (int)($torneo['entidad'] ?? 0);
     unset($torneo['entidad_torneo']);
-    
-    // Usuarios disponibles = todos los de la entidad del torneo (role usuario, activos)
-    // Pertenen a la entidad si: u.entidad = entidad_torneo O su club estÃ¡ en una org de esa entidad
+
+    $scopeOrg = ClubHelper::getTorneoOrganizacionClubesScope((int) $torneo_id);
+    $org_club_ids = $scopeOrg['club_ids'];
+    $clubes_disponibles = $scopeOrg['clubes'];
+
+    // Fallback legacy si el torneo no tiene organización resuelta
+    if ($clubes_disponibles === [] && $entidad_torneo > 0) {
+        $stmt = $pdo->prepare("
+            SELECT c.id, c.nombre
+            FROM clubes c
+            INNER JOIN organizaciones o ON (c.cod_org = o.id" . (organizacionesHasCodOrg() ? " OR c.cod_org = o.cod_org" : "") . ") AND o.estatus = 1
+            WHERE o.entidad = ? AND c.estatus = 1
+            ORDER BY c.nombre ASC
+        ");
+        $stmt->execute([$entidad_torneo]);
+        $clubes_disponibles = $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+        $org_club_ids = array_values(array_map('intval', array_column($clubes_disponibles, 'id')));
+    } elseif ($clubes_disponibles === []) {
+        $org_id = (int)($torneo['club_responsable'] ?? 0);
+        if ($org_id > 0) {
+            $stmt = $pdo->prepare("SELECT id, nombre FROM clubes WHERE (cod_org = ?" . (organizacionesHasCodOrg() ? " OR cod_org = (SELECT id FROM organizaciones WHERE cod_org = ? LIMIT 1)" : "") . ") AND estatus = 1 ORDER BY nombre ASC");
+            $stmt->execute(organizacionesHasCodOrg() ? [$org_id, $org_id] : [$org_id]);
+            $clubes_disponibles = $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+            $org_club_ids = array_values(array_map('intval', array_column($clubes_disponibles, 'id')));
+        }
+    }
+
+    // Atletas disponibles: afiliados a clubes de la asociación (externos se buscan por cédula/nombre)
     $usuarios_territorio = [];
-    if ($entidad_torneo > 0) {
+    if ($org_club_ids !== []) {
+        $placeholders = implode(',', array_fill(0, count($org_club_ids), '?'));
+        $stmt = $pdo->prepare("
+            SELECT DISTINCT u.id, u.username, u.nombre, u.cedula, u.entidad, c.nombre AS club_nombre, c.id AS club_id
+            FROM usuarios u
+            LEFT JOIN clubes c ON u.club_id = c.id
+            WHERE u.role = 'usuario'
+              AND u.status = 0
+              AND u.club_id IN ({$placeholders})
+            ORDER BY COALESCE(u.nombre, u.username) ASC
+        ");
+        $stmt->execute($org_club_ids);
+        $usuarios_territorio = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    } elseif ($entidad_torneo > 0) {
         $stmt = $pdo->prepare("
             SELECT DISTINCT u.id, u.username, u.nombre, u.cedula, u.entidad, c.nombre as club_nombre, c.id as club_id
             FROM usuarios u
@@ -4659,96 +4748,96 @@ function obtenerDatosInscribirSitio($torneo_id, $user_id, $is_admin_general) {
         ");
         $stmt->execute([$entidad_torneo, $entidad_torneo]);
         $usuarios_territorio = $stmt->fetchAll(PDO::FETCH_ASSOC);
-    } else {
-        // Sin entidad en torneo: usuarios de la organizaciÃ³n que organiza el torneo (club_responsable = org id)
-        $org_id = (int)($torneo['club_responsable'] ?? 0);
-        if ($org_id > 0) {
-            $stmt = $pdo->prepare("
-                SELECT DISTINCT u.id, u.username, u.nombre, u.cedula, u.entidad, c.nombre as club_nombre, c.id as club_id
-                FROM usuarios u
-                LEFT JOIN clubes c ON u.club_id = c.id
-                WHERE u.role = 'usuario'
-                  AND u.status = 0
-                  AND (c.cod_org = ?" . (organizacionesHasCodOrg() ? " OR c.cod_org = (SELECT id FROM organizaciones WHERE cod_org = ? LIMIT 1)" : "") . ")
-                ORDER BY COALESCE(u.nombre, u.username) ASC
-            ");
-            $stmt->execute(organizacionesHasCodOrg() ? [$org_id, $org_id] : [$org_id]);
-            $usuarios_territorio = $stmt->fetchAll(PDO::FETCH_ASSOC);
-        }
+    } elseif ($is_admin_general) {
+        $stmt = $pdo->query("
+            SELECT u.id, u.username, u.nombre, u.cedula, u.entidad, c.nombre AS club_nombre, c.id AS club_id
+            FROM usuarios u
+            LEFT JOIN clubes c ON u.club_id = c.id
+            WHERE u.role = 'usuario' AND u.status = 0
+            ORDER BY COALESCE(u.nombre, u.username) ASC
+            LIMIT 500
+        ");
+        $usuarios_territorio = $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
     }
-    
-    // Inscritos: solo confirmados (estatus = 'confirmado' o valor numÃ©rico 1)
-    $stmt = $pdo->prepare("
+
+    $inscritosSql = "
         SELECT i.id_usuario, i.estatus, i.id_club,
-               u.id, u.username, u.nombre, u.cedula, c.nombre as club_nombre
+               u.id, u.username, u.nombre, u.cedula, c.nombre AS club_nombre
         FROM inscritos i
         LEFT JOIN usuarios u ON i.id_usuario = u.id
         LEFT JOIN clubes c ON i.id_club = c.id
         WHERE i.torneo_id = ?
           AND (i.estatus IN ('confirmado', 'solvente', 'no_solvente') OR i.estatus IN (1, 2, 3))
-        ORDER BY COALESCE(u.nombre, u.username) ASC
-    ");
-    $stmt->execute([$torneo_id]);
+    ";
+    $inscritosParams = [$torneo_id];
+    if ($org_club_ids !== []) {
+        $phIns = implode(',', array_fill(0, count($org_club_ids), '?'));
+        $inscritosSql .= " AND i.id_club IN ({$phIns})";
+        $inscritosParams = array_merge($inscritosParams, $org_club_ids);
+    }
+    $inscritosSql .= ' ORDER BY COALESCE(u.nombre, u.username) ASC';
+    $stmt = $pdo->prepare($inscritosSql);
+    $stmt->execute($inscritosParams);
     $usuarios_inscritos = $stmt->fetchAll(PDO::FETCH_ASSOC);
     $usuarios_inscritos_ids = array_column($usuarios_inscritos, 'id_usuario');
     
-    // Disponibles = usuarios de la entidad que aÃºn no estÃ¡n inscritos (confirmados)
-    $usuarios_disponibles = array_filter($usuarios_territorio, function($u) use ($usuarios_inscritos_ids) {
-        return !in_array($u['id'], $usuarios_inscritos_ids);
-    });
-    
-    // Clubes disponibles: de la misma entidad (o de la org del torneo)
-    $clubes_disponibles = [];
-    if ($entidad_torneo > 0) {
-        $stmt = $pdo->prepare("
-            SELECT c.id, c.nombre
-            FROM clubes c
-            INNER JOIN organizaciones o ON (c.cod_org = o.id" . (organizacionesHasCodOrg() ? " OR c.cod_org = o.cod_org" : "") . ") AND o.estatus = 1
-            WHERE o.entidad = ? AND c.estatus = 1
-            ORDER BY c.nombre ASC
-        ");
-        $stmt->execute([$entidad_torneo]);
-        $clubes_disponibles = $stmt->fetchAll(PDO::FETCH_ASSOC);
-    } else {
-        $org_id = (int)($torneo['club_responsable'] ?? 0);
-        if ($org_id > 0) {
-            $stmt = $pdo->prepare("SELECT id, nombre FROM clubes WHERE (cod_org = ?" . (organizacionesHasCodOrg() ? " OR cod_org = (SELECT id FROM organizaciones WHERE cod_org = ? LIMIT 1)" : "") . ") AND estatus = 1 ORDER BY nombre ASC");
-            $stmt->execute(organizacionesHasCodOrg() ? [$org_id, $org_id] : [$org_id]);
-            $clubes_disponibles = $stmt->fetchAll(PDO::FETCH_ASSOC);
-        }
-    }
+    $usuarios_disponibles = array_values(array_filter($usuarios_territorio, static function ($u) use ($usuarios_inscritos_ids) {
+        return !in_array($u['id'], $usuarios_inscritos_ids, true);
+    }));
     
     $inscripcion_operativo_asoc = false;
     $club_forzado_id = 0;
     $club_forzado_nombre = '';
     require_once __DIR__ . '/../lib/AsociacionAdminHelper.php';
-    $ctxOp = AsociacionAdminHelper::contextoInscripcionOperativa($pdo);
-    if ($ctxOp !== null && ($ctxOp['club_id'] ?? 0) > 0) {
+    if (AsociacionAdminHelper::esOperativoSoloAsociacion($pdo, (int) $user_id, (string) (Auth::user()['role'] ?? ''))) {
         $inscripcion_operativo_asoc = true;
-        $club_forzado_id = (int) $ctxOp['club_id'];
-        $club_forzado_nombre = (string) ($ctxOp['club_nombre'] ?? '');
-        $eid = (int) ($ctxOp['entidad_id'] ?? 0);
-        $cid = $club_forzado_id;
-        $usuarios_territorio = array_values(array_filter($usuarios_territorio, static function ($u) use ($eid, $cid) {
-            $uEnt = (int) ($u['entidad'] ?? 0);
-            $uClub = (int) ($u['club_id'] ?? 0);
+        $forzado = AsociacionAdminHelper::idClubForzadoInscripcion($pdo);
+        if ($forzado !== null && $forzado > 0) {
+            $club_forzado_id = $forzado;
+            foreach ($clubes_disponibles as $cRow) {
+                if ((int) ($cRow['id'] ?? 0) === $forzado) {
+                    $club_forzado_nombre = (string) ($cRow['nombre'] ?? '');
+                    break;
+                }
+            }
+            if ($club_forzado_nombre === '') {
+                $stNom = $pdo->prepare('SELECT nombre FROM clubes WHERE id = ? LIMIT 1');
+                $stNom->execute([$forzado]);
+                $club_forzado_nombre = (string) ($stNom->fetchColumn() ?: '');
+            }
+        }
+    }
 
-            return $uEnt === $eid || $uClub === $cid;
-        }));
-        $usuarios_disponibles = array_values(array_filter($usuarios_territorio, function ($u) use ($usuarios_inscritos_ids) {
-            return !in_array($u['id'], $usuarios_inscritos_ids);
-        }));
-        $clubes_disponibles = [['id' => $club_forzado_id, 'nombre' => $club_forzado_nombre]];
+    $actor_club_id = (int) (Auth::user()['club_id'] ?? 0);
+    $club_default_id = $club_forzado_id > 0
+        ? $club_forzado_id
+        : (int) (ClubHelper::resolverClubInscripcionTorneo((int) $torneo_id, null, null, $actor_club_id > 0 ? $actor_club_id : null) ?? 0);
+    $club_default_nombre = '';
+    if ($club_default_id > 0) {
+        foreach ($clubes_disponibles as $cRow) {
+            if ((int) ($cRow['id'] ?? 0) === $club_default_id) {
+                $club_default_nombre = (string) ($cRow['nombre'] ?? '');
+                break;
+            }
+        }
+        if ($club_default_nombre === '') {
+            $stNom = $pdo->prepare('SELECT nombre FROM clubes WHERE id = ? LIMIT 1');
+            $stNom->execute([$club_default_id]);
+            $club_default_nombre = (string) ($stNom->fetchColumn() ?: '');
+        }
     }
 
     return [
         'torneo' => $torneo,
-        'usuarios_disponibles' => array_values($usuarios_disponibles),
+        'usuarios_disponibles' => $usuarios_disponibles,
         'usuarios_inscritos' => $usuarios_inscritos,
         'clubes_disponibles' => $clubes_disponibles,
         'inscripcion_operativo_asoc' => $inscripcion_operativo_asoc,
         'club_forzado_id' => $club_forzado_id,
         'club_forzado_nombre' => $club_forzado_nombre,
+        'club_default_id' => $club_default_id,
+        'club_default_nombre' => $club_default_nombre,
+        'org_club_ids' => $org_club_ids,
     ];
 }
 

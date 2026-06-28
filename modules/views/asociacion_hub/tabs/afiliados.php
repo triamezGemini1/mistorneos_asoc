@@ -41,11 +41,11 @@ $pdfHref = static function (int $userId) use ($pdfBase, $org_id): string {
     ]);
 };
 ?>
-<div class="card shadow-sm">
-    <div class="card-header bg-light d-flex flex-wrap align-items-center justify-content-between gap-2">
+<div class="card shadow-sm asoc-report-card">
+    <div class="card-header d-flex flex-wrap align-items-center justify-content-between gap-2">
         <h2 class="h5 mb-0"><i class="fas fa-id-card me-2"></i>Afiliados</h2>
         <?php if ($afiliados !== []): ?>
-            <span class="badge estacion-count-badge"><?= count($afiliados) ?> afiliado(s)</span>
+            <span class="badge asoc-report-count-badge"><?= count($afiliados) ?> afiliado(s)</span>
         <?php endif; ?>
     </div>
     <div class="card-body p-0">
@@ -54,7 +54,7 @@ $pdfHref = static function (int $userId) use ($pdfBase, $org_id): string {
         <?php else: ?>
             <div class="table-responsive">
                 <table class="table table-hover table-striped mb-0 align-middle">
-                    <thead class="table-light">
+                    <thead>
                         <tr>
                             <th>Nombre</th>
                             <th>Club Asociado</th>

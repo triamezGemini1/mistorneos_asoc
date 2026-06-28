@@ -128,6 +128,12 @@ final class RegistrationHandler
             $id_club,
             $user_club_id
         );
+        self::normalizarIdClubTorneo($pdo, $torneo_id, $id_club, $id_usuario, $user_club_id !== null ? (int) $user_club_id : null);
+
+        $errClubOrg = self::exigirClubOrganizacionTorneo($pdo, $torneo_id, $id_club);
+        if ($errClubOrg !== null) {
+            return $errClubOrg;
+        }
 
         if ($id_usuario <= 0) {
             return ['ok' => false, 'error' => 'ID de usuario inválido'];
@@ -187,12 +193,15 @@ final class RegistrationHandler
         $id_club = !empty($post['id_club']) ? (int) $post['id_club'] : null;
         $current_user = Auth::user();
         $user_club_id = $current_user['club_id'] ?? null;
-        if ($id_club === null || $id_club <= 0) {
-            $id_club = $user_club_id;
-        }
         $errAlcance = self::aplicarAlcanceOperativo($pdo, $id_club, 0);
         if ($errAlcance !== null) {
             return ['success' => false, 'error' => $errAlcance['error'] ?? 'Sin permiso'];
+        }
+        self::normalizarIdClubTorneo($pdo, $torneoId, $id_club, 0, $user_club_id !== null ? (int) $user_club_id : null);
+
+        $errClubOrg = self::exigirClubOrganizacionTorneo($pdo, $torneoId, $id_club);
+        if ($errClubOrg !== null) {
+            return ['success' => false, 'error' => $errClubOrg['error'] ?? 'Club inválido'];
         }
 
         if (strlen($cedula) < 4) {
@@ -347,6 +356,11 @@ final class RegistrationHandler
             if ($errRe !== null) {
                 return ['success' => false, 'error' => $errRe['error'] ?? 'Sin permiso'];
             }
+            self::normalizarIdClubTorneo($pdo, $torneoId, $idClubRe, $idUsuario, $userClubIdActor);
+            $errClubRe = self::exigirClubOrganizacionTorneo($pdo, $torneoId, $idClubRe);
+            if ($errClubRe !== null) {
+                return ['success' => false, 'error' => $errClubRe['error'] ?? 'Club inválido'];
+            }
             $estatusRe = $estatus > 0 ? $estatus : InscritosHelper::ESTATUS_PENDIENTE_NUM;
             $sqlUp = 'UPDATE inscritos SET estatus = ?' . ($idClubRe ? ', id_club = ?' : '') . ' WHERE id = ?';
             $stmt = $pdo->prepare($sqlUp);
@@ -402,6 +416,12 @@ final class RegistrationHandler
             $idClubPost,
             $userClubIdActor
         );
+        self::normalizarIdClubTorneo($pdo, $torneoId, $id_club, $idUsuario, $userClubIdActor);
+
+        $errClubOrg = self::exigirClubOrganizacionTorneo($pdo, $torneoId, $id_club);
+        if ($errClubOrg !== null) {
+            return ['success' => false, 'error' => $errClubOrg['error'] ?? 'Club inválido'];
+        }
 
         $nac_inscrito = isset($usuario_datos['nacionalidad']) && in_array(strtoupper(trim((string) $usuario_datos['nacionalidad'])), ['V', 'E', 'J', 'P'], true)
             ? strtoupper(trim((string) $usuario_datos['nacionalidad'])) : 'V';
@@ -446,10 +466,56 @@ final class RegistrationHandler
         if ($forzado === null) {
             return null;
         }
-        if ($idUsuario > 0 && !\AsociacionAdminHelper::usuarioEnAmbitoAsociacion($pdo, $idUsuario)) {
-            return ['ok' => false, 'error' => 'El atleta no pertenece a su asociación.'];
-        }
         $idClub = $forzado;
+
+        return null;
+    }
+
+    private static function normalizarIdClubTorneo(
+        PDO $pdo,
+        int $torneoId,
+        ?int &$idClub,
+        int $idUsuarioInscrito = 0,
+        ?int $actorClubId = null
+    ): void {
+        require_once __DIR__ . '/../../AsociacionAdminHelper.php';
+        if (\AsociacionAdminHelper::idClubForzadoInscripcion($pdo) !== null) {
+            return;
+        }
+        require_once __DIR__ . '/../../ClubHelper.php';
+        $jugadorClubId = null;
+        if ($idUsuarioInscrito > 0) {
+            $st = $pdo->prepare('SELECT club_id FROM usuarios WHERE id = ? LIMIT 1');
+            $st->execute([$idUsuarioInscrito]);
+            $uc = (int) ($st->fetchColumn() ?: 0);
+            if ($uc > 0) {
+                $jugadorClubId = $uc;
+            }
+        }
+        $resolved = \ClubHelper::resolverClubInscripcionTorneo($torneoId, $idClub, $jugadorClubId, $actorClubId);
+        if ($resolved !== null && $resolved > 0) {
+            $idClub = $resolved;
+        }
+    }
+
+    /**
+     * Inscripción en torneo de asociación: id_club debe ser un club de esa organización.
+     *
+     * @return array{ok: false, error: string}|null
+     */
+    private static function exigirClubOrganizacionTorneo(PDO $pdo, int $torneoId, ?int $idClub): ?array
+    {
+        require_once __DIR__ . '/../../ClubHelper.php';
+        $scope = \ClubHelper::getTorneoOrganizacionClubesScope($torneoId);
+        if ($scope['club_ids'] === []) {
+            return null;
+        }
+        if ($idClub === null || $idClub <= 0 || !in_array((int) $idClub, $scope['club_ids'], true)) {
+            return [
+                'ok' => false,
+                'error' => 'No se pudo determinar un club de la asociación del torneo. Seleccione un club de la lista.',
+            ];
+        }
 
         return null;
     }
